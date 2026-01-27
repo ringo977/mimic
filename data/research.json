@@ -1,0 +1,89 @@
+{
+  "projects": [
+    {
+      "id": 1,
+      "title": "Cardiac Tissue Modeling",
+      "description": "Development of heart-on-chip systems with integrated electrical and mechanical sensors for studying cardiac physiology, drug cardiotoxicity, and disease mechanisms. Our platforms incorporate human iPSC-derived cardiomyocytes in 3D microenvironments.",
+      "tags": ["Heart-on-Chip", "Cardiology", "Drug Testing"],
+      "image": "/images/research/cardiac.jpg"
+    },
+    {
+      "id": 2,
+      "title": "Liver Toxicity Platforms",
+      "description": "Advanced liver-on-chip models combining hepatocytes, endothelial cells, and Kupffer cells to predict drug-induced liver injury. Our systems enable long-term culture and metabolic profiling for pharmaceutical applications.",
+      "tags": ["Liver-on-Chip", "Toxicology", "Drug Metabolism"],
+      "image": "/images/research/liver.jpg"
+    },
+    {
+      "id": 3,
+      "title": "Gut Microbiome Systems",
+      "description": "Microfluidic platforms that co-culture intestinal epithelium with complex microbial communities under physiological oxygen gradients. Applications include studying inflammatory bowel disease and host-microbe interactions.",
+      "tags": ["Gut-on-Chip", "Microbiome", "IBD"],
+      "image": "/images/research/gut.jpg"
+    },
+    {
+      "id": 4,
+      "title": "Lung Models for Infection Studies",
+      "description": "Air-liquid interface lung-on-chip systems that replicate breathing mechanics and enable infection studies with respiratory pathogens. Relevant for COVID-19 research and inhalation toxicology.",
+      "tags": ["Lung-on-Chip", "Respiratory", "Infection"],
+      "image": "/images/research/lung.jpg"
+    },
+    {
+      "id": 5,
+      "title": "Vascularized Tissue Engineering",
+      "description": "Creating perfusable vascular networks in organ-on-chip devices using 3D bioprinting and microfabrication. Essential for improving nutrient delivery and tissue viability in complex organ models.",
+      "tags": ["Vascularization", "3D Bioprinting", "Tissue Engineering"],
+      "image": "/images/research/vasculature.jpg"
+    },
+    {
+      "id": 6,
+      "title": "Biosensor Integration",
+      "description": "Development of electrochemical and optical biosensors for real-time monitoring of tissue function, metabolism, and barrier integrity in organ-on-chip systems. Non-invasive and label-free detection methods.",
+      "tags": ["Biosensors", "Real-time Monitoring", "Electrochemistry"],
+      "image": "/images/research/biosensors.jpg"
+    },
+    {
+      "id": 7,
+      "title": "Tumor Microenvironment Models",
+      "description": "Cancer-on-chip platforms that recapitulate the tumor microenvironment including immune cells, vasculature, and extracellular matrix. Used for studying metastasis and immunotherapy responses.",
+      "tags": ["Cancer", "Tumor Models", "Immunotherapy"],
+      "image": "/images/research/cancer.jpg"
+    },
+    {
+      "id": 8,
+      "title": "Blood-Brain Barrier Platforms",
+      "description": "Microfluidic models of the blood-brain barrier for studying neurodegenerative diseases and evaluating drug permeability. Incorporates brain endothelial cells, pericytes, and astrocytes.",
+      "tags": ["BBB", "Neuroscience", "Drug Delivery"],
+      "image": "/images/research/bbb.jpg"
+    },
+    {
+      "id": 9,
+      "title": "Multi-Organ Platforms",
+      "description": "Body-on-chip systems connecting multiple organ modules to study inter-organ communication, systemic drug effects, and pharmacokinetics. Enables more predictive preclinical testing.",
+      "tags": ["Multi-Organ", "Systems Biology", "PBPK"],
+      "image": "/images/research/multi-organ.jpg"
+    }
+  ],
+  "keywords": [
+    "Microfluidics",
+    "Organ-on-Chip",
+    "Lab-on-Chip",
+    "Tissue Engineering",
+    "Drug Discovery",
+    "Disease Modeling",
+    "Biosensors",
+    "3D Cell Culture",
+    "Microfabrication",
+    "PDMS",
+    "Soft Lithography",
+    "iPSC Technology",
+    "Bioprinting",
+    "Biomaterials",
+    "Microphysiological Systems",
+    "Organoids",
+    "High-throughput Screening",
+    "Personalized Medicine",
+    "In Vitro Models",
+    "Pharmaceutical Testing"
+  ]
+}

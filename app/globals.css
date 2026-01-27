@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* PoliMi Brand Colors */
+  --polimi-blue-heritage: #102C53;
+  --polimi-black: #000000;
+  --polimi-white: #FFFFFF;
+  --polimi-gray: #E0DCDC;
+  --polimi-bright-blue: #4DC9FF;
+  --polimi-alpha-blue: #2CB7FF;
+  --polimi-beta-blue: #0BA4FF;
+  --polimi-binary-cyan: #73A2D1;
+  --polimi-space-blue: #6698FF;
+  --polimi-photonic-azure: #73A1F7;
+}
+
+@layer base {
+  body {
+    @apply font-manrope text-polimi-black bg-white;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-frank font-bold;
+  }
+  
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl;
+  }
+  
+  h2 {
+    @apply text-3xl md:text-4xl lg:text-5xl;
+  }
+  
+  h3 {
+    @apply text-2xl md:text-3xl lg:text-4xl;
+  }
+  
+  a {
+    @apply text-polimi-bright-blue hover:text-polimi-alpha-blue transition-colors duration-200;
+  }
+}
+
+@layer utilities {
+  .container-polimi {
+    @apply max-w-7xl mx-auto px-4 md:px-78;
+  }
+  
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection colors */
+::selection {
+  background-color: var(--polimi-bright-blue);
+  color: white;
+}

@@ -1,0 +1,92 @@
+{
+  "news": [
+    {
+      "id": 1,
+      "date": "2024-01-15",
+      "title": "New Publication in Lab on a Chip",
+      "excerpt": "Our latest research on advanced microfluidic systems for organ-on-chip applications has been published in the prestigious Lab on a Chip journal. The paper presents novel design principles for creating more physiologically relevant tissue models.",
+      "tag": "News",
+      "image": "/images/news/publication.jpg"
+    },
+    {
+      "id": 2,
+      "date": "2024-01-10",
+      "title": "Dr. Bianchi Wins Best Poster Award at MicroTAS 2024",
+      "excerpt": "Congratulations to Dr. Maria Bianchi for receiving the Best Poster Award at the 28th International Conference on Miniaturized Systems for Chemistry and Life Sciences. Her work on heart-on-chip biosensors was recognized for its innovation and impact.",
+      "tag": "Award"
+    },
+    {
+      "id": 3,
+      "date": "2024-01-05",
+      "title": "Workshop: Microfluidic Device Fabrication",
+      "excerpt": "Join us for a hands-on workshop on microfluidic device fabrication and characterization. The two-day event will cover soft lithography, PDMS molding, and device validation techniques. Registration now open for graduate students and researchers.",
+      "tag": "Event",
+      "image": "/images/news/workshop.jpg"
+    },
+    {
+      "id": 4,
+      "date": "2023-12-20",
+      "title": "Lab Featured in Nature Reviews Bioengineering",
+      "excerpt": "Our research on multi-organ platforms has been highlighted in a comprehensive review article in Nature Reviews Bioengineering. The article discusses the future of microphysiological systems in drug development.",
+      "tag": "News"
+    },
+    {
+      "id": 5,
+      "date": "2023-12-15",
+      "title": "New ERC Starting Grant Awarded",
+      "excerpt": "Prof. Rossi has been awarded a prestigious ERC Starting Grant totaling €1.5M for the project 'Advanced Organ-on-Chip Systems with Multi-Modal Sensing'. The five-year project will push the boundaries of microfluidic biosensor integration.",
+      "tag": "Award",
+      "image": "/images/news/erc-grant.jpg"
+    },
+    {
+      "id": 6,
+      "date": "2023-12-01",
+      "title": "International Collaboration Announced with MIT",
+      "excerpt": "We are excited to announce a new research collaboration with Professor Linda Griffith's laboratory at MIT. The partnership will focus on developing multi-organ chips for studying liver-immune system interactions.",
+      "tag": "News"
+    },
+    {
+      "id": 7,
+      "date": "2023-11-20",
+      "title": "PhD Defense: Congratulations to Dr. Alessandro Ferrari",
+      "excerpt": "Alessandro Ferrari successfully defended his PhD thesis titled 'Gut-on-Chip Systems with Integrated Microbiome for Host-Microbe Interaction Studies'. Congratulations Dr. Ferrari on this outstanding achievement!",
+      "tag": "News"
+    },
+    {
+      "id": 8,
+      "date": "2023-11-10",
+      "title": "Seminar: Dr. Jennifer Lewis (Harvard University)",
+      "excerpt": "We are hosting Dr. Jennifer Lewis from Harvard University for a seminar on 3D bioprinting of vascularized tissues. The talk will be held on November 25th at 3:00 PM in DEIB Auditorium. All are welcome to attend.",
+      "tag": "Event"
+    },
+    {
+      "id": 9,
+      "date": "2023-11-01",
+      "title": "Lab Welcomes Three New PhD Students",
+      "excerpt": "We are delighted to welcome three new PhD students to our team: Laura Galli (working on kidney-on-chip), Davide Costa (blood-brain barrier models), and Chiara Martini (cancer metastasis platforms). Welcome aboard!",
+      "tag": "News"
+    },
+    {
+      "id": 10,
+      "date": "2023-10-25",
+      "title": "Presenting at Organ-on-Chip World Summit 2023",
+      "excerpt": "Our lab will present four talks and three posters at the Organ-on-Chip World Summit in Boston next month. Topics include cardiac modeling, liver toxicity platforms, and biosensor integration.",
+      "tag": "Conference",
+      "image": "/images/news/conference.jpg"
+    },
+    {
+      "id": 11,
+      "date": "2023-10-15",
+      "title": "New Industry Partnership with Roche Pharmaceuticals",
+      "excerpt": "We have established a strategic partnership with Roche Pharmaceuticals to develop organ-on-chip platforms for early-stage drug toxicity screening. The collaboration includes funding for two postdoctoral researchers.",
+      "tag": "News"
+    },
+    {
+      "id": 12,
+      "date": "2023-10-01",
+      "title": "Open PhD Positions Available",
+      "excerpt": "We have two fully-funded PhD positions available starting in Spring 2024. Topics include multi-organ platforms and biosensor development. Application deadline: December 15, 2023. See our Join Us page for details.",
+      "tag": "News"
+    }
+  ]
+}

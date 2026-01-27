@@ -1,0 +1,113 @@
+{
+  "academic": [
+    {
+      "id": 1,
+      "name": "Massachusetts Institute of Technology",
+      "location": "Cambridge, MA, USA",
+      "description": "Collaboration on microfluidic device design and multi-organ platforms with Prof. Linda Griffith's lab.",
+      "logo": "/images/partners/mit.png"
+    },
+    {
+      "id": 2,
+      "name": "ETH Zurich",
+      "location": "Zurich, Switzerland",
+      "description": "Joint research on biosensor integration and real-time monitoring in organ-on-chip systems.",
+      "logo": "/images/partners/eth.png"
+    },
+    {
+      "id": 3,
+      "name": "University of Cambridge",
+      "location": "Cambridge, UK",
+      "description": "Partnership on iPSC-derived tissue models and cardiac electrophysiology studies.",
+      "logo": "/images/partners/cambridge.png"
+    },
+    {
+      "id": 4,
+      "name": "Harvard Medical School",
+      "location": "Boston, MA, USA",
+      "description": "Collaborative projects on disease modeling and drug discovery using organ-on-chip technology.",
+      "logo": "/images/partners/harvard.png"
+    },
+    {
+      "id": 5,
+      "name": "Imperial College London",
+      "location": "London, UK",
+      "description": "Joint research on lung-on-chip models for respiratory disease and infection studies.",
+      "logo": "/images/partners/imperial.png"
+    },
+    {
+      "id": 6,
+      "name": "National University of Singapore",
+      "location": "Singapore",
+      "description": "Collaboration on liver-on-chip platforms and drug metabolism studies.",
+      "logo": "/images/partners/nus.png"
+    }
+  ],
+  "industry": [
+    {
+      "id": 1,
+      "name": "Emulate Bio",
+      "sector": "Biotechnology",
+      "description": "Partnership on commercialization of organ-on-chip platforms and validation studies.",
+      "logo": "/images/partners/emulate.png"
+    },
+    {
+      "id": 2,
+      "name": "Roche Pharmaceuticals",
+      "sector": "Pharmaceuticals",
+      "description": "Collaborative drug testing and toxicity screening using our organ-on-chip models.",
+      "logo": "/images/partners/roche.png"
+    },
+    {
+      "id": 3,
+      "name": "AstraZeneca",
+      "sector": "Pharmaceuticals",
+      "description": "Joint projects on cardiac safety testing and liver toxicity assessment platforms.",
+      "logo": "/images/partners/astrazeneca.png"
+    },
+    {
+      "id": 4,
+      "name": "TissUse GmbH",
+      "sector": "Biotechnology",
+      "description": "Technology exchange on multi-organ chips and microfluidic pump systems.",
+      "logo": "/images/partners/tissuse.png"
+    },
+    {
+      "id": 5,
+      "name": "Pfizer",
+      "sector": "Pharmaceuticals",
+      "description": "Research partnership on organ-on-chip models for early-stage drug development.",
+      "logo": "/images/partners/pfizer.png"
+    }
+  ],
+  "projects": [
+    {
+      "id": 1,
+      "title": "ERC Starting Grant: Advanced Organ-on-Chip Systems",
+      "description": "Five-year project funded by the European Research Council to develop next-generation organ-on-chip platforms with integrated multi-modal sensing capabilities.",
+      "period": "2023-2028",
+      "partners": ["ETH Zurich", "University of Cambridge"]
+    },
+    {
+      "id": 2,
+      "title": "Horizon Europe: Multi-Organ Disease Modeling",
+      "description": "International consortium developing interconnected organ-on-chip systems for studying systemic diseases and drug effects.",
+      "period": "2022-2026",
+      "partners": ["MIT", "Harvard Medical School", "Imperial College London"]
+    },
+    {
+      "id": 3,
+      "title": "Industry Partnership: Cardiac Safety Testing Platform",
+      "description": "Collaborative project with pharmaceutical companies to establish standardized heart-on-chip assays for drug cardiotoxicity screening.",
+      "period": "2023-2025",
+      "partners": ["Roche", "AstraZeneca", "Emulate Bio"]
+    },
+    {
+      "id": 4,
+      "title": "NIH NCATS Tissue Chip Program",
+      "description": "US-EU collaboration on developing microphysiological systems for translational research and drug development.",
+      "period": "2021-2025",
+      "partners": ["MIT", "TissUse GmbH", "National University of Singapore"]
+    }
+  ]
+}

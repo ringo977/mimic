@@ -1,0 +1,143 @@
+{
+  "publications": [
+    {
+      "id": 1,
+      "authors": ["Rossi, M.", "Bianchi, M.", "Verdi, L.", "Romano, S."],
+      "title": "Advanced microfluidic systems for organ-on-chip applications: From design to clinical translation",
+      "journal": "Lab on a Chip",
+      "year": 2024,
+      "doi": "10.1039/D4LC00123K",
+      "type": "Journal Article",
+      "pdf": "/publications/rossi-2024-loc.pdf"
+    },
+    {
+      "id": 2,
+      "authors": ["Bianchi, M.", "Ferrari, A.", "Rossi, M."],
+      "title": "Real-time monitoring of cardiac tissue function in heart-on-chip devices using integrated biosensors",
+      "journal": "Biosensors and Bioelectronics",
+      "year": 2024,
+      "doi": "10.1016/j.bios.2024.115234",
+      "type": "Journal Article",
+      "pdf": "/publications/bianchi-2024-biosens.pdf"
+    },
+    {
+      "id": 3,
+      "authors": ["Romano, S.", "Conti, G.", "Esposito, M.", "Rossi, M."],
+      "title": "Liver-on-chip platforms for drug toxicity assessment: Current state and future perspectives",
+      "journal": "Advanced Healthcare Materials",
+      "year": 2024,
+      "doi": "10.1002/adhm.202301234",
+      "type": "Journal Article"
+    },
+    {
+      "id": 4,
+      "authors": ["Ferrari, A.", "Marino, E.", "Rossi, M."],
+      "title": "Gut-on-chip systems with integrated microbiome for studying host-microbe interactions",
+      "journal": "Microbiome",
+      "year": 2023,
+      "doi": "10.1186/s40168-023-01234-x",
+      "type": "Journal Article",
+      "pdf": "/publications/ferrari-2023-microbiome.pdf"
+    },
+    {
+      "id": 5,
+      "authors": ["Verdi, L.", "Ricci, F.", "Rossi, M."],
+      "title": "Electrochemical biosensors for metabolite detection in organ-on-chip devices",
+      "journal": "Analytical Chemistry",
+      "year": 2023,
+      "doi": "10.1021/acs.analchem.3c00567",
+      "type": "Journal Article"
+    },
+    {
+      "id": 6,
+      "authors": ["Conti, G.", "Bianchi, M.", "Rossi, M."],
+      "title": "3D bioprinted vascularized tissue constructs for organ-on-chip applications",
+      "journal": "Biofabrication",
+      "year": 2023,
+      "doi": "10.1088/1758-5090/ace789",
+      "type": "Journal Article",
+      "pdf": "/publications/conti-2023-biofab.pdf"
+    },
+    {
+      "id": 7,
+      "authors": ["Esposito, M.", "Romano, S.", "Rossi, M."],
+      "title": "Lung-on-chip models for studying respiratory infections and drug efficacy",
+      "journal": "Proceedings of the 26th International Conference on Miniaturized Systems for Chemistry and Life Sciences (MicroTAS)",
+      "year": 2023,
+      "type": "Conference"
+    },
+    {
+      "id": 8,
+      "authors": ["Rossi, M.", "Bianchi, M.", "Verdi, L."],
+      "title": "Organ-on-chip technology: Principles, applications, and future directions",
+      "journal": "Microfluidics and Organ-on-Chip Systems",
+      "year": 2023,
+      "type": "Book Chapter"
+    },
+    {
+      "id": 9,
+      "authors": ["Marino, E.", "Ferrari, A.", "Rossi, M."],
+      "title": "Microfluidic gradient generators for chemotaxis studies in 3D matrices",
+      "journal": "Proceedings of the IEEE EMBS Conference on Micro and Nanotechnology in Medicine",
+      "year": 2023,
+      "doi": "10.1109/MNMED.2023.10123456",
+      "type": "Conference"
+    },
+    {
+      "id": 10,
+      "authors": ["Bianchi, M.", "Conti, G.", "Rossi, M."],
+      "title": "Human iPSC-derived cardiomyocytes in organ-on-chip platforms for cardiotoxicity screening",
+      "journal": "Stem Cell Reports",
+      "year": 2022,
+      "doi": "10.1016/j.stemcr.2022.08.012",
+      "type": "Journal Article",
+      "pdf": "/publications/bianchi-2022-stemcell.pdf"
+    },
+    {
+      "id": 11,
+      "authors": ["Verdi, L.", "Romano, S.", "Esposito, M.", "Rossi, M."],
+      "title": "Non-invasive monitoring of tissue barrier function in organ-on-chip devices using impedance spectroscopy",
+      "journal": "Lab on a Chip",
+      "year": 2022,
+      "doi": "10.1039/D2LC00456A",
+      "type": "Journal Article"
+    },
+    {
+      "id": 12,
+      "authors": ["Ferrari, A.", "Bianchi, M.", "Rossi, M."],
+      "title": "Microfluidic platforms for co-culturing intestinal epithelium with anaerobic bacteria",
+      "journal": "Nature Protocols",
+      "year": 2022,
+      "doi": "10.1038/s41596-022-00789-1",
+      "type": "Journal Article",
+      "pdf": "/publications/ferrari-2022-natprot.pdf"
+    },
+    {
+      "id": 13,
+      "authors": ["Romano, S.", "Verdi, L.", "Rossi, M."],
+      "title": "Liver zonation in a chip: Spatially organized hepatocyte cultures in microfluidic devices",
+      "journal": "Hepatology",
+      "year": 2022,
+      "doi": "10.1002/hep.32345",
+      "type": "Journal Article"
+    },
+    {
+      "id": 14,
+      "authors": ["Conti, G.", "Esposito, M.", "Rossi, M."],
+      "title": "Biomaterials for organ-on-chip applications: From PDMS to bioprinted hydrogels",
+      "journal": "Proceedings of the 25th MicroTAS Conference",
+      "year": 2022,
+      "type": "Conference"
+    },
+    {
+      "id": 15,
+      "authors": ["Rossi, M.", "Ferrari, A.", "Bianchi, M."],
+      "title": "Multi-organ-on-chip systems for drug development and personalized medicine",
+      "journal": "Advanced Drug Delivery Reviews",
+      "year": 2021,
+      "doi": "10.1016/j.addr.2021.05.012",
+      "type": "Journal Article",
+      "pdf": "/publications/rossi-2021-addr.pdf"
+    }
+  ]
+}
