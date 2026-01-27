@@ -12,14 +12,14 @@ interface Publication {
   year: number;
   doi?: string;
   pdf?: string;
-  type: 'Journal Article' | 'Conference' | 'Book Chapter';
+  type: string;
 }
 
 interface PublicationCardProps {
   publication: Publication;
 }
 
-const typeBadgeColors = {
+const typeBadgeColors: Record<string, string> = {
   'Journal Article': 'bg-blue-100 text-blue-800',
   'Conference': 'bg-green-100 text-green-800',
   'Book Chapter': 'bg-purple-100 text-purple-800',
@@ -35,7 +35,7 @@ export default function PublicationCard({ publication }: PublicationCardProps) {
     >
       <Card>
         <div className="flex items-start justify-between mb-3">
-          <span className={`text-xs px-3 py-1 rounded-full font-medium ${typeBadgeColors[publication.type]}`}>
+          <span className={`text-xs px-3 py-1 rounded-full font-medium ${typeBadgeColors[publication.type] || 'bg-gray-100 text-gray-800'}`}>
             {publication.type}
           </span>
           <span className="text-polimi-blue-heritage font-frank font-bold text-lg">

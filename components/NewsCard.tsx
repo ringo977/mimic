@@ -10,14 +10,14 @@ interface NewsItem {
   title: string;
   excerpt: string;
   image?: string;
-  tag: 'News' | 'Event' | 'Conference' | 'Award';
+  tag: string;
 }
 
 interface NewsCardProps {
   news: NewsItem;
 }
 
-const tagColors = {
+const tagColors: Record<string, string> = {
   'News': 'bg-blue-100 text-blue-800',
   'Event': 'bg-green-100 text-green-800',
   'Conference': 'bg-purple-100 text-purple-800',
@@ -46,7 +46,7 @@ export default function NewsCard({ news }: NewsCardProps) {
         )}
 
         <div className="flex items-center justify-between mb-3">
-          <span className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[news.tag]}`}>
+          <span className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[news.tag] || 'bg-gray-100 text-gray-800'}`}>
             {news.tag}
           </span>
           <div className="flex items-center text-gray-500 text-sm">
