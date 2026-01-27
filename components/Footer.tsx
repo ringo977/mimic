@@ -13,9 +13,9 @@ export default function Footer() {
             <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mb-4">
               <span className="text-polimi-blue-heritage font-frank font-bold text-xl">P</span>
             </div>
-            <h3 className="font-frank font-bold text-xl mb-4">Organ-on-Chip Lab</h3>
+            <h3 className="font-frank font-bold text-xl mb-4">MiMic Lab</h3>
             <p className="text-polimi-gray text-sm leading-relaxed">
-              Advanced microfluidic systems and organ-on-chip research at the Department of Electronics, 
+              Advanced microfluidic systems and MiMic research at the Department of Electronics, 
               Information and Bioengineering (DEIB).
             </p>
           </div>
@@ -83,7 +83,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-white/10 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
           <p className="text-polimi-gray text-sm">
-            © {currentYear} Organ-on-Chip Lab, Politecnico di Milano. All rights reserved.
+            © {currentYear} MiMic Lab, Politecnico di Milano. All rights reserved.
           </p>
           <div className="flex items-center space-x-6 text-sm">
             <Link href="/privacy" className="text-polimi-gray hover:text-polimi-bright-blue transition-colors">

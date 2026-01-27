@@ -23,12 +23,12 @@ export default function Hero() {
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
           <h1 className="font-frank font-bold text-5xl md:text-6xl lg:text-7xl mb-6 leading-tight">
-            Organ-on-Chip<br />
+            MiMic<br />
             <span className="text-polimi-bright-blue">Innovation Lab</span>
           </h1>
           
           <p className="text-xl md:text-2xl text-polimi-gray max-w-3xl mx-auto mb-8 leading-relaxed font-light">
-            Advancing microfluidic technologies and organ-on-chip systems for the future of biomedical research 
+            Advancing microfluidic technologies and MiMic systems for the future of biomedical research 
             at Politecnico di Milano
           </p>
 

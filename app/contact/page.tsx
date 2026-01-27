@@ -3,8 +3,8 @@ import Card from '@/components/ui/Card';
 import { MapPin, Mail, Phone, Clock } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Contact | Organ-on-Chip Lab',
-  description: 'Get in touch with the Organ-on-Chip Lab at Politecnico di Milano.',
+  title: 'Contact | MiMic Lab',
+  description: 'Get in touch with the MiMic Lab at Politecnico di Milano.',
 };
 
 export default function ContactPage() {

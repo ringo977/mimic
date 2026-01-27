@@ -4,14 +4,14 @@
       "id": 1,
       "name": "Massachusetts Institute of Technology",
       "location": "Cambridge, MA, USA",
-      "description": "Collaboration on microfluidic device design and multi-organ platforms with Prof. Linda Griffith's lab.",
+      "description": "Collaboration on microfluidic device design and multi-MiMic platforms with Prof. Linda Griffith's lab.",
       "logo": "/images/partners/mit.png"
     },
     {
       "id": 2,
       "name": "ETH Zurich",
       "location": "Zurich, Switzerland",
-      "description": "Joint research on biosensor integration and real-time monitoring in organ-on-chip systems.",
+      "description": "Joint research on biosensor integration and real-time monitoring in MiMic systems.",
       "logo": "/images/partners/eth.png"
     },
     {
@@ -25,14 +25,14 @@
       "id": 4,
       "name": "Harvard Medical School",
       "location": "Boston, MA, USA",
-      "description": "Collaborative projects on disease modeling and drug discovery using organ-on-chip technology.",
+      "description": "Collaborative projects on disease modeling and drug discovery using MiMic technology.",
       "logo": "/images/partners/harvard.png"
     },
     {
       "id": 5,
       "name": "Imperial College London",
       "location": "London, UK",
-      "description": "Joint research on lung-on-chip models for respiratory disease and infection studies.",
+      "description": "Joint research on lung MiMic models for respiratory disease and infection studies.",
       "logo": "/images/partners/imperial.png"
     },
     {
@@ -48,14 +48,14 @@
       "id": 1,
       "name": "Emulate Bio",
       "sector": "Biotechnology",
-      "description": "Partnership on commercialization of organ-on-chip platforms and validation studies.",
+      "description": "Partnership on commercialization of MiMic platforms and validation studies.",
       "logo": "/images/partners/emulate.png"
     },
     {
       "id": 2,
       "name": "Roche Pharmaceuticals",
       "sector": "Pharmaceuticals",
-      "description": "Collaborative drug testing and toxicity screening using our organ-on-chip models.",
+      "description": "Collaborative drug testing and toxicity screening using our MiMic models.",
       "logo": "/images/partners/roche.png"
     },
     {
@@ -76,29 +76,29 @@
       "id": 5,
       "name": "Pfizer",
       "sector": "Pharmaceuticals",
-      "description": "Research partnership on organ-on-chip models for early-stage drug development.",
+      "description": "Research partnership on MiMic models for early-stage drug development.",
       "logo": "/images/partners/pfizer.png"
     }
   ],
   "projects": [
     {
       "id": 1,
-      "title": "ERC Starting Grant: Advanced Organ-on-Chip Systems",
-      "description": "Five-year project funded by the European Research Council to develop next-generation organ-on-chip platforms with integrated multi-modal sensing capabilities.",
+      "title": "ERC Starting Grant: Advanced MiMic Systems",
+      "description": "Five-year project funded by the European Research Council to develop next-generation MiMic platforms with integrated multi-modal sensing capabilities.",
       "period": "2023-2028",
       "partners": ["ETH Zurich", "University of Cambridge"]
     },
     {
       "id": 2,
-      "title": "Horizon Europe: Multi-Organ Disease Modeling",
-      "description": "International consortium developing interconnected organ-on-chip systems for studying systemic diseases and drug effects.",
+      "title": "Horizon Europe: Multi-MiMic Disease Modeling",
+      "description": "International consortium developing interconnected MiMic systems for studying systemic diseases and drug effects.",
       "period": "2022-2026",
       "partners": ["MIT", "Harvard Medical School", "Imperial College London"]
     },
     {
       "id": 3,
       "title": "Industry Partnership: Cardiac Safety Testing Platform",
-      "description": "Collaborative project with pharmaceutical companies to establish standardized heart-on-chip assays for drug cardiotoxicity screening.",
+      "description": "Collaborative project with pharmaceutical companies to establish standardized heart MiMic assays for drug cardiotoxicity screening.",
       "period": "2023-2025",
       "partners": ["Roche", "AstraZeneca", "Emulate Bio"]
     },

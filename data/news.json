@@ -4,7 +4,7 @@
       "id": 1,
       "date": "2024-01-15",
       "title": "New Publication in Lab on a Chip",
-      "excerpt": "Our latest research on advanced microfluidic systems for organ-on-chip applications has been published in the prestigious Lab on a Chip journal. The paper presents novel design principles for creating more physiologically relevant tissue models.",
+      "excerpt": "Our latest research on advanced microfluidic systems for MiMic applications has been published in the prestigious Lab on a Chip journal. The paper presents novel design principles for creating more physiologically relevant tissue models.",
       "tag": "News",
       "image": "/images/news/publication.jpg"
     },
@@ -12,7 +12,7 @@
       "id": 2,
       "date": "2024-01-10",
       "title": "Dr. Bianchi Wins Best Poster Award at MicroTAS 2024",
-      "excerpt": "Congratulations to Dr. Maria Bianchi for receiving the Best Poster Award at the 28th International Conference on Miniaturized Systems for Chemistry and Life Sciences. Her work on heart-on-chip biosensors was recognized for its innovation and impact.",
+      "excerpt": "Congratulations to Dr. Maria Bianchi for receiving the Best Poster Award at the 28th International Conference on Miniaturized Systems for Chemistry and Life Sciences. Her work on heart MiMic biosensors was recognized for its innovation and impact.",
       "tag": "Award"
     },
     {
@@ -34,7 +34,7 @@
       "id": 5,
       "date": "2023-12-15",
       "title": "New ERC Starting Grant Awarded",
-      "excerpt": "Prof. Rossi has been awarded a prestigious ERC Starting Grant totaling €1.5M for the project 'Advanced Organ-on-Chip Systems with Multi-Modal Sensing'. The five-year project will push the boundaries of microfluidic biosensor integration.",
+      "excerpt": "Prof. Rossi has been awarded a prestigious ERC Starting Grant totaling €1.5M for the project 'Advanced MiMic Systems with Multi-Modal Sensing'. The five-year project will push the boundaries of microfluidic biosensor integration.",
       "tag": "Award",
       "image": "/images/news/erc-grant.jpg"
     },
@@ -42,14 +42,14 @@
       "id": 6,
       "date": "2023-12-01",
       "title": "International Collaboration Announced with MIT",
-      "excerpt": "We are excited to announce a new research collaboration with Professor Linda Griffith's laboratory at MIT. The partnership will focus on developing multi-organ chips for studying liver-immune system interactions.",
+      "excerpt": "We are excited to announce a new research collaboration with Professor Linda Griffith's laboratory at MIT. The partnership will focus on developing multi-MiMic systems for studying liver-immune system interactions.",
       "tag": "News"
     },
     {
       "id": 7,
       "date": "2023-11-20",
       "title": "PhD Defense: Congratulations to Dr. Alessandro Ferrari",
-      "excerpt": "Alessandro Ferrari successfully defended his PhD thesis titled 'Gut-on-Chip Systems with Integrated Microbiome for Host-Microbe Interaction Studies'. Congratulations Dr. Ferrari on this outstanding achievement!",
+      "excerpt": "Alessandro Ferrari successfully defended his PhD thesis titled 'Gut MiMic Systems with Integrated Microbiome for Host-Microbe Interaction Studies'. Congratulations Dr. Ferrari on this outstanding achievement!",
       "tag": "News"
     },
     {
@@ -70,7 +70,7 @@
       "id": 10,
       "date": "2023-10-25",
       "title": "Presenting at Organ-on-Chip World Summit 2023",
-      "excerpt": "Our lab will present four talks and three posters at the Organ-on-Chip World Summit in Boston next month. Topics include cardiac modeling, liver toxicity platforms, and biosensor integration.",
+      "excerpt": "Our lab will present four talks and three posters at the MiMic World Summit in Boston next month. Topics include cardiac modeling, liver toxicity platforms, and biosensor integration.",
       "tag": "Conference",
       "image": "/images/news/conference.jpg"
     },
@@ -78,7 +78,7 @@
       "id": 11,
       "date": "2023-10-15",
       "title": "New Industry Partnership with Roche Pharmaceuticals",
-      "excerpt": "We have established a strategic partnership with Roche Pharmaceuticals to develop organ-on-chip platforms for early-stage drug toxicity screening. The collaboration includes funding for two postdoctoral researchers.",
+      "excerpt": "We have established a strategic partnership with Roche Pharmaceuticals to develop MiMic platforms for early-stage drug toxicity screening. The collaboration includes funding for two postdoctoral researchers.",
       "tag": "News"
     },
     {

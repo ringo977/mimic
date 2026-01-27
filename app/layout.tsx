@@ -20,13 +20,13 @@ const frankRuhl = Frank_Ruhl_Libre({
 });
 
 export const metadata: Metadata = {
-  title: "Organ-on-Chip Lab | Politecnico di Milano",
-  description: "Advanced microfluidic systems and organ-on-chip research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
-  keywords: ["organ-on-chip", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],
-  authors: [{ name: "Organ-on-Chip Lab, PoliMi" }],
+  title: "MiMic Lab | Politecnico di Milano",
+  description: "Advanced microfluidic systems and MiMic research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
+  keywords: ["MiMic", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],
+  authors: [{ name: "MiMic Lab, PoliMi" }],
   openGraph: {
-    title: "Organ-on-Chip Lab | Politecnico di Milano",
-    description: "Advanced microfluidic systems and organ-on-chip research",
+    title: "MiMic Lab | Politecnico di Milano",
+    description: "Advanced microfluidic systems and MiMic research",
     type: "website",
     locale: "en_US",
   },

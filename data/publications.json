@@ -3,7 +3,7 @@
     {
       "id": 1,
       "authors": ["Rossi, M.", "Bianchi, M.", "Verdi, L.", "Romano, S."],
-      "title": "Advanced microfluidic systems for organ-on-chip applications: From design to clinical translation",
+      "title": "Advanced microfluidic systems for MiMic applications: From design to clinical translation",
       "journal": "Lab on a Chip",
       "year": 2024,
       "doi": "10.1039/D4LC00123K",
@@ -13,7 +13,7 @@
     {
       "id": 2,
       "authors": ["Bianchi, M.", "Ferrari, A.", "Rossi, M."],
-      "title": "Real-time monitoring of cardiac tissue function in heart-on-chip devices using integrated biosensors",
+      "title": "Real-time monitoring of cardiac tissue function in heart MiMic devices using integrated biosensors",
       "journal": "Biosensors and Bioelectronics",
       "year": 2024,
       "doi": "10.1016/j.bios.2024.115234",
@@ -23,7 +23,7 @@
     {
       "id": 3,
       "authors": ["Romano, S.", "Conti, G.", "Esposito, M.", "Rossi, M."],
-      "title": "Liver-on-chip platforms for drug toxicity assessment: Current state and future perspectives",
+      "title": "Liver MiMic platforms for drug toxicity assessment: Current state and future perspectives",
       "journal": "Advanced Healthcare Materials",
       "year": 2024,
       "doi": "10.1002/adhm.202301234",
@@ -32,7 +32,7 @@
     {
       "id": 4,
       "authors": ["Ferrari, A.", "Marino, E.", "Rossi, M."],
-      "title": "Gut-on-chip systems with integrated microbiome for studying host-microbe interactions",
+      "title": "Gut MiMic systems with integrated microbiome for studying host-microbe interactions",
       "journal": "Microbiome",
       "year": 2023,
       "doi": "10.1186/s40168-023-01234-x",
@@ -42,7 +42,7 @@
     {
       "id": 5,
       "authors": ["Verdi, L.", "Ricci, F.", "Rossi, M."],
-      "title": "Electrochemical biosensors for metabolite detection in organ-on-chip devices",
+      "title": "Electrochemical biosensors for metabolite detection in MiMic devices",
       "journal": "Analytical Chemistry",
       "year": 2023,
       "doi": "10.1021/acs.analchem.3c00567",
@@ -51,7 +51,7 @@
     {
       "id": 6,
       "authors": ["Conti, G.", "Bianchi, M.", "Rossi, M."],
-      "title": "3D bioprinted vascularized tissue constructs for organ-on-chip applications",
+      "title": "3D bioprinted vascularized tissue constructs for MiMic applications",
       "journal": "Biofabrication",
       "year": 2023,
       "doi": "10.1088/1758-5090/ace789",
@@ -61,7 +61,7 @@
     {
       "id": 7,
       "authors": ["Esposito, M.", "Romano, S.", "Rossi, M."],
-      "title": "Lung-on-chip models for studying respiratory infections and drug efficacy",
+      "title": "Lung MiMic models for studying respiratory infections and drug efficacy",
       "journal": "Proceedings of the 26th International Conference on Miniaturized Systems for Chemistry and Life Sciences (MicroTAS)",
       "year": 2023,
       "type": "Conference"
@@ -69,8 +69,8 @@
     {
       "id": 8,
       "authors": ["Rossi, M.", "Bianchi, M.", "Verdi, L."],
-      "title": "Organ-on-chip technology: Principles, applications, and future directions",
-      "journal": "Microfluidics and Organ-on-Chip Systems",
+      "title": "MiMic technology: Principles, applications, and future directions",
+      "journal": "Microfluidics and MiMic Systems",
       "year": 2023,
       "type": "Book Chapter"
     },
@@ -86,7 +86,7 @@
     {
       "id": 10,
       "authors": ["Bianchi, M.", "Conti, G.", "Rossi, M."],
-      "title": "Human iPSC-derived cardiomyocytes in organ-on-chip platforms for cardiotoxicity screening",
+      "title": "Human iPSC-derived cardiomyocytes in MiMic platforms for cardiotoxicity screening",
       "journal": "Stem Cell Reports",
       "year": 2022,
       "doi": "10.1016/j.stemcr.2022.08.012",
@@ -96,7 +96,7 @@
     {
       "id": 11,
       "authors": ["Verdi, L.", "Romano, S.", "Esposito, M.", "Rossi, M."],
-      "title": "Non-invasive monitoring of tissue barrier function in organ-on-chip devices using impedance spectroscopy",
+      "title": "Non-invasive monitoring of tissue barrier function in MiMic devices using impedance spectroscopy",
       "journal": "Lab on a Chip",
       "year": 2022,
       "doi": "10.1039/D2LC00456A",
@@ -124,7 +124,7 @@
     {
       "id": 14,
       "authors": ["Conti, G.", "Esposito, M.", "Rossi, M."],
-      "title": "Biomaterials for organ-on-chip applications: From PDMS to bioprinted hydrogels",
+      "title": "Biomaterials for MiMic applications: From PDMS to bioprinted hydrogels",
       "journal": "Proceedings of the 25th MicroTAS Conference",
       "year": 2022,
       "type": "Conference"
@@ -132,7 +132,7 @@
     {
       "id": 15,
       "authors": ["Rossi, M.", "Ferrari, A.", "Bianchi, M."],
-      "title": "Multi-organ-on-chip systems for drug development and personalized medicine",
+      "title": "Multi-MiMic systems for drug development and personalized medicine",
       "journal": "Advanced Drug Delivery Reviews",
       "year": 2021,
       "doi": "10.1016/j.addr.2021.05.012",

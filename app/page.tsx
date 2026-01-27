@@ -67,9 +67,9 @@ export default function HomePage() {
               About Our Lab
             </h2>
             <p className="text-lg text-gray-700 leading-relaxed mb-4">
-              The Organ-on-Chip Lab at the Department of Electronics, Information and Bioengineering (DEIB) 
+              The MiMic Lab at the Department of Electronics, Information and Bioengineering (DEIB) 
               of Politecnico di Milano focuses on developing cutting-edge microfluidic technologies and 
-              organ-on-chip systems.
+              MiMic systems.
             </p>
             <p className="text-lg text-gray-700 leading-relaxed">
               Our interdisciplinary team combines expertise in bioengineering, microfabrication, and cell biology 

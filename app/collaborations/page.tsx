@@ -3,8 +3,8 @@ import Card from '@/components/ui/Card';
 import collaborationsData from '@/data/collaborations.json';
 
 export const metadata: Metadata = {
-  title: 'Collaborations | Organ-on-Chip Lab',
-  description: 'Our network of international collaborations and partnerships in organ-on-chip research.',
+  title: 'Collaborations | MiMic Lab',
+  description: 'Our network of international collaborations and partnerships in MiMic research.',
 };
 
 export default function CollaborationsPage() {
@@ -17,7 +17,7 @@ export default function CollaborationsPage() {
             Collaborations
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            Building bridges across continents to advance organ-on-chip technology through 
+            Building bridges across continents to advance MiMic technology through 
             international partnerships and collaborative research.
           </p>
         </div>
@@ -33,7 +33,7 @@ export default function CollaborationsPage() {
             <p className="text-lg text-gray-700 leading-relaxed">
               Our lab collaborates with leading research institutions, universities, and industry partners 
               worldwide. These partnerships enable knowledge exchange, resource sharing, and joint research 
-              initiatives that drive innovation in microfluidics and organ-on-chip technologies.
+              initiatives that drive innovation in microfluidics and MiMic technologies.
             </p>
           </div>
         </div>

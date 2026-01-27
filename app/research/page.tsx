@@ -3,8 +3,8 @@ import ResearchCard from '@/components/ResearchCard';
 import researchData from '@/data/research.json';
 
 export const metadata: Metadata = {
-  title: 'Research | Organ-on-Chip Lab',
-  description: 'Explore our research projects in microfluidics, organ-on-chip systems, and biomedical engineering.',
+  title: 'Research | MiMic Lab',
+  description: 'Explore our research projects in microfluidics, MiMic systems, and biomedical engineering.',
 };
 
 export default function ResearchPage() {
@@ -17,7 +17,7 @@ export default function ResearchPage() {
             Our Research
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            Pioneering innovations in microfluidic technologies and organ-on-chip systems 
+            Pioneering innovations in microfluidic technologies and MiMic systems 
             to advance biomedical research and drug discovery.
           </p>
         </div>
@@ -32,7 +32,7 @@ export default function ResearchPage() {
             </h2>
             <p className="text-lg text-gray-700 leading-relaxed">
               Our laboratory conducts cutting-edge research at the intersection of bioengineering, 
-              microfabrication, and cell biology. We develop innovative organ-on-chip platforms 
+              microfabrication, and cell biology. We develop innovative MiMic platforms 
               that replicate human physiology for applications in drug testing, disease modeling, 
               and personalized medicine.
             </p>

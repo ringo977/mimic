@@ -3,8 +3,8 @@ import TeamCard from '@/components/TeamCard';
 import teamData from '@/data/team.json';
 
 export const metadata: Metadata = {
-  title: 'Team | Organ-on-Chip Lab',
-  description: 'Meet our team of researchers and scientists at the Organ-on-Chip Lab, Politecnico di Milano.',
+  title: 'Team | MiMic Lab',
+  description: 'Meet our team of researchers and scientists at the MiMic Lab, Politecnico di Milano.',
 };
 
 export default function TeamPage() {
@@ -17,7 +17,7 @@ export default function TeamPage() {
             Our Team
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            Meet the brilliant minds driving innovation in organ-on-chip technology and microfluidic systems research.
+            Meet the brilliant minds driving innovation in MiMic technology and microfluidic systems research.
           </p>
         </div>
       </section>

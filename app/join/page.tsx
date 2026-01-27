@@ -4,8 +4,8 @@ import Button from '@/components/ui/Button';
 import { GraduationCap, Briefcase, FileText, Users } from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'Join Us | Organ-on-Chip Lab',
-  description: 'Career opportunities and open positions at the Organ-on-Chip Lab, Politecnico di Milano.',
+  title: 'Join Us | MiMic Lab',
+  description: 'Career opportunities and open positions at the MiMic Lab, Politecnico di Milano.',
 };
 
 export default function JoinPage() {
@@ -13,7 +13,7 @@ export default function JoinPage() {
     {
       icon: <GraduationCap size={32} />,
       title: 'PhD Positions',
-      description: 'We offer fully-funded PhD positions for talented students interested in microfluidics, organ-on-chip systems, and biomedical engineering.',
+      description: 'We offer fully-funded PhD positions for talented students interested in microfluidics, MiMic systems, and biomedical engineering.',
       requirements: [
         "Master's degree in Bioengineering, Mechanical Engineering, or related field",
         'Strong background in microfabrication or cell biology',
@@ -65,7 +65,7 @@ export default function JoinPage() {
             Join Our Team
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            Be part of a dynamic research environment at the forefront of organ-on-chip technology 
+            Be part of a dynamic research environment at the forefront of MiMic technology 
             and microfluidic innovation.
           </p>
         </div>

@@ -43,7 +43,7 @@ export default function Navbar() {
               </div>
               <div className="ml-3">
                 <div className="text-white font-frank font-bold text-lg leading-tight">
-                  Organ-on-Chip Lab
+                  MiMic Lab
                 </div>
                 <div className="text-polimi-bright-blue text-xs font-manrope">
                   Politecnico di Milano
