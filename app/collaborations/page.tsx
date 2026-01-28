@@ -1,13 +1,31 @@
-import { Metadata } from 'next';
+'use client';
+
+import { useState } from 'react';
+import { ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import Card from '@/components/ui/Card';
 import collaborationsData from '@/data/collaborations.json';
 
-export const metadata: Metadata = {
-  title: 'Collaborations | MiMic Lab',
-  description: 'Our network of international collaborations and partnerships in MiMic research.',
-};
+interface Project {
+  id: number;
+  acronym: string;
+  title: string;
+  program: string;
+  call: string;
+  role: string;
+  period: string;
+  website: string | null;
+  abstract: string;
+}
 
 export default function CollaborationsPage() {
+  const [expandedProjects, setExpandedProjects] = useState<number[]>([]);
+
+  const toggleProject = (id: number) => {
+    setExpandedProjects(prev =>
+      prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
+    );
+  };
+
   return (
     <div className="relative z-10 pt-32 pb-20">
       {/* Header */}
@@ -122,33 +140,83 @@ export default function CollaborationsPage() {
             Major Collaborative Projects
           </h2>
 
-          <div className="max-w-4xl mx-auto space-y-6">
-            {collaborationsData.projects.map((project) => (
-              <Card key={project.id}>
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage">
-                    {project.title}
-                  </h3>
-                  <span className="text-polimi-bright-blue font-semibold text-sm whitespace-nowrap ml-4">
-                    {project.period}
-                  </span>
-                </div>
-                <p className="text-gray-700 mb-4">
-                  {project.description}
-                </p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm text-gray-600 font-medium">Partners:</span>
-                  {project.partners.map((partner, idx) => (
-                    <span 
-                      key={idx}
-                      className="text-xs px-3 py-1 bg-polimi-bright-blue/10 text-polimi-blue-heritage rounded-full"
-                    >
-                      {partner}
+          <div className="max-w-5xl mx-auto space-y-6">
+            {(collaborationsData.projects as Project[]).map((project) => {
+              const isExpanded = expandedProjects.includes(project.id);
+              
+              return (
+                <Card key={project.id} className="hover:shadow-xl transition-shadow duration-300">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="font-frank font-bold text-3xl text-polimi-bright-blue mb-2">
+                        {project.acronym}
+                      </h3>
+                      <p className="text-lg text-polimi-blue-heritage font-medium leading-relaxed">
+                        {project.title}
+                      </p>
+                    </div>
+                    <span className="text-polimi-bright-blue font-semibold text-sm whitespace-nowrap ml-4 mt-1">
+                      {project.period}
                     </span>
-                  ))}
-                </div>
-              </Card>
-            ))}
+                  </div>
+
+                  {/* Metadata */}
+                  <div className="flex flex-wrap gap-3 mb-4 pb-4 border-b border-gray-200">
+                    <span className="text-sm px-3 py-1 bg-polimi-blue-heritage/10 text-polimi-blue-heritage rounded-full font-medium">
+                      {project.program}
+                    </span>
+                    <span className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full">
+                      {project.call}
+                    </span>
+                    <span className="text-sm px-3 py-1 bg-polimi-bright-blue/10 text-polimi-bright-blue rounded-full font-semibold">
+                      Role: {project.role}
+                    </span>
+                  </div>
+
+                  {/* Website */}
+                  {project.website && (
+                    <a
+                      href={`https://${project.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm mb-4"
+                    >
+                      <ExternalLink size={16} />
+                      {project.website}
+                    </a>
+                  )}
+
+                  {/* Abstract */}
+                  <div className="mt-4">
+                    <button
+                      onClick={() => toggleProject(project.id)}
+                      className="flex items-center gap-2 text-polimi-blue-heritage hover:text-polimi-bright-blue font-semibold text-sm mb-3 transition-colors"
+                    >
+                      {isExpanded ? (
+                        <>
+                          <ChevronUp size={18} />
+                          Hide Abstract
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown size={18} />
+                          Show Abstract
+                        </>
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="bg-gray-50 rounded-lg p-6 border-l-4 border-polimi-bright-blue">
+                        <p className="text-gray-700 leading-relaxed text-justify">
+                          {project.abstract}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
