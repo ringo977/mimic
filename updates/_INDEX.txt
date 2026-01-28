@@ -1,0 +1,228 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║   🎓 TEMPLATE SITO ORGAN-ON-CHIP LAB - POLITECNICO DI MILANO            ║
+║                                                                           ║
+║   Pacchetto completo Next.js 14 con Brand Identity PoliMi integrata     ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+📦 CONTENUTO PACCHETTO - 12 FILES
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📖 DOCUMENTAZIONE (Leggi per primi!)                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ 1. 00-START-HERE.md          ⭐⭐⭐⭐⭐ INIZIA DA QUI!               │
+│    → Overview completa di tutto il progetto                            │
+│    → Guida rapida alle 3 opzioni di setup                              │
+│    → Quick reference di tutti i file                                    │
+│                                                                          │
+│ 2. VISUAL-GUIDE.md            ⭐⭐⭐⭐ Visual workflow                 │
+│    → Flowchart illustrati                                               │
+│    → Timeline sviluppo                                                  │
+│    → Checklist visive                                                   │
+│                                                                          │
+│ 3. README.md                  ⭐⭐⭐⭐⭐ Documentazione completa       │
+│    → Setup manuale dettagliato                                          │
+│    → Roadmap sviluppo                                                   │
+│    → Deploy instructions                                                │
+│    → Troubleshooting                                                    │
+│                                                                          │
+│ 4. vincoli_brand_polimi.md   ⭐⭐⭐⭐ Brand Guidelines               │
+│    → Palette colori completa                                            │
+│    → Tipografia Manrope & Frank Ruhl Libre                             │
+│    → Regole layout e griglia                                            │
+│    → Do's and Don'ts                                                    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🚀 SETUP & GENERAZIONE                                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ 5. CURSOR_PROMPT.md           ⭐⭐⭐⭐⭐ Genera tutto in 10 min!      │
+│    → Copia nel Cursor Composer                                          │
+│    → Genera progetto completo Next.js                                   │
+│    → Include tutte le pagine e componenti                               │
+│                                                                          │
+│ 6. package.json               ⭐⭐⭐⭐ Dipendenze                       │
+│    → Next.js 14                                                         │
+│    → Tailwind CSS                                                       │
+│    → Framer Motion                                                      │
+│    → Lucide Icons                                                       │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ ⚙️ CONFIGURAZIONE                                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ 7. tailwind.config.ts         ⭐⭐⭐⭐⭐ Config Tailwind             │
+│    → Colori PoliMi custom                                               │
+│    → Font Manrope & Frank Ruhl Libre                                   │
+│    → Spacing system (78px margini)                                      │
+│    → Shadows e border-radius                                            │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 🎨 COMPONENTI REACT                                                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ 8. GridBackground.tsx         ⭐⭐⭐ Griglia decorativa                │
+│    → Background pattern PoliMi                                          │
+│    → Non interferisce con testo                                         │
+│    → Opacità configurabile                                              │
+│                                                                          │
+│ 9. Navbar.tsx                 ⭐⭐⭐⭐ Navbar completa                 │
+│    → Sticky on scroll                                                   │
+│    → Mobile responsive                                                  │
+│    → Brand PoliMi integrata                                             │
+│    → Effetto trasparenza                                                │
+│                                                                          │
+│ 10. HomePage-example.tsx      ⭐⭐⭐⭐ Homepage completa              │
+│     → Hero section                                                      │
+│     → Research areas cards                                              │
+│     → Latest news                                                       │
+│     → CTA section                                                       │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ 📊 DATI DI ESEMPIO                                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│ 11. data-team.json            ⭐⭐⭐⭐ Dati Team                       │
+│     → PI, PostDoc, PhD, Master                                          │
+│     → Struttura completa con bio                                        │
+│     → Alumni section                                                    │
+│                                                                          │
+│ 12. data-publications.json    ⭐⭐⭐⭐ Dati Pubblicazioni             │
+│     → Journal articles                                                  │
+│     → Conference papers                                                 │
+│     → Book chapters                                                     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 🎯 QUICK START                                                            ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+OPZIONE A - VELOCE (Raccomandato) ⚡ 10 minuti
+───────────────────────────────────────────────
+1. mkdir organ-on-chip-polimi && cd organ-on-chip-polimi
+2. cursor .
+3. Apri Composer (Cmd/Ctrl + I)
+4. Copia TUTTO il contenuto di CURSOR_PROMPT.md
+5. Incolla nel Composer
+6. Aspetta generazione (2-3 min)
+7. npm install && npm run dev
+8. Apri http://localhost:3000
+✅ FUNZIONA!
+
+OPZIONE B - MANUALE 🔧 2-4 ore
+───────────────────────────────
+Segui il README.md step-by-step per setup manuale completo
+
+OPZIONE C - IBRIDA 🔀 1-2 ore
+──────────────────────────────
+Usa Cursor per struttura base + personalizza con componenti forniti
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 📋 ORDINE DI LETTURA CONSIGLIATO                                         ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Se è la tua prima volta:
+1. 00-START-HERE.md           (10 min) - Overview generale
+2. VISUAL-GUIDE.md            (5 min)  - Capire workflow
+3. CURSOR_PROMPT.md           (2 min)  - Copia e incolla
+4. → Genera il progetto con Cursor
+5. vincoli_brand_polimi.md    (15 min) - Capire brand guidelines
+6. README.md                  (quando serve) - Reference completa
+
+Se hai esperienza:
+1. CURSOR_PROMPT.md → Genera tutto
+2. vincoli_brand_polimi.md → Riferimento colori/font
+3. README.md → Solo per deploy e personalizzazioni avanzate
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 🎨 COSA PUOI FARE CON QUESTO TEMPLATE                                    ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+✅ Sito completo per laboratorio di ricerca
+✅ 8 pagine già strutturate (Home, Team, Research, Publications, etc.)
+✅ Brand Identity PoliMi 100% rispettata
+✅ Responsive design perfetto
+✅ Componenti riutilizzabili
+✅ Sistema di dati JSON per facile aggiornamento
+✅ Pronto per deploy su Vercel/Netlify
+✅ SEO-ready
+✅ Accessibile (WCAG 2.1 AA)
+✅ Performance ottimizzate
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 📦 TECNOLOGIE INCLUSE                                                     ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+• Next.js 14 (App Router)
+• React 18
+• TypeScript
+• Tailwind CSS
+• Framer Motion (animations)
+• Lucide React (icons)
+• Google Fonts (Manrope, Frank Ruhl Libre)
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 🎓 PER CHI È QUESTO TEMPLATE                                             ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+✓ Laboratori di ricerca del Politecnico di Milano
+✓ Dipartimenti DEIB che vogliono un sito web professionale
+✓ Gruppi di ricerca che necessitano vetrina online
+✓ Chi vuole rispettare la brand identity PoliMi
+✓ Chi vuole un sito moderno e performante
+✓ Chi ha poco tempo ma vuole risultati professionali
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ ⏱️ TIMELINE REALISTICA                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Setup iniziale:        10 minuti (con Cursor)
+Personalizzazione:     2-3 giorni (contenuti, foto, testi)
+Testing & refining:    2-3 giorni
+Deploy production:     1 giorno
+                       ─────────────
+TOTALE:                ~1 settimana per sito completo e professionale
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 💡 SUGGERIMENTI FINALI                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+1. Non modificare i colori PoliMi (sono vincolanti!)
+2. Usa Cursor AI liberamente per personalizzazioni
+3. Testa sempre su dispositivi mobile reali
+4. Ottimizza le immagini prima di caricarle
+5. Fai backup regolari del codice su GitHub
+6. Chiedi a brandidentity@polimi.it per loghi ufficiali
+7. Deploy su Vercel per massima facilità
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║ 📞 SUPPORTO                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Brand Identity:    brandidentity@polimi.it
+Cursor/Coding:     Chiedi a Cursor AI nel Composer
+Next.js:           nextjs.org/docs
+Deploy:            vercel.com/docs
+
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                                                                           ║
+║   🎉 SEI PRONTO! Inizia con 00-START-HERE.md                            ║
+║                                                                           ║
+║   Buon lavoro! 🚀                                                        ║
+║                                                                           ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+Versione: 1.0
+Data: Gennaio 2025
+Creato per: Organ-on-Chip Lab, DEIB, Politecnico di Milano

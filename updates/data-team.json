@@ -1,0 +1,117 @@
+{
+  "pi": {
+    "id": "pi-1",
+    "name": "Prof. Marco Rossi",
+    "role": "Principal Investigator",
+    "email": "marco.rossi@polimi.it",
+    "phone": "+39 02 2399 xxxx",
+    "bio": "Professor of Bioengineering and Director of the Organ-on-Chip Laboratory at DEIB, Politecnico di Milano.",
+    "bioFull": "Professor Marco Rossi leads the Organ-on-Chip Laboratory at the Department of Electronics, Information and Bioengineering (DEIB) at Politecnico di Milano. His research focuses on developing advanced microfluidic platforms for modeling human organ physiology and disease. With over 15 years of experience in bioengineering and microfabrication, he has published more than 100 peer-reviewed articles and holds several patents in the field of organ-on-chip technology. He is actively involved in numerous national and international research projects and collaborations with leading academic institutions and pharmaceutical companies.",
+    "image": "/images/team/placeholder-pi.jpg",
+    "research": ["Microfluidics", "Organ-on-Chip", "Drug Testing", "Tissue Engineering"],
+    "links": {
+      "scholar": "https://scholar.google.com",
+      "orcid": "https://orcid.org/0000-0000-0000-0000",
+      "researchgate": "https://www.researchgate.net"
+    }
+  },
+  "postdocs": [
+    {
+      "id": "pd-1",
+      "name": "Dr. Elena Bianchi",
+      "role": "PostDoc Researcher",
+      "email": "elena.bianchi@polimi.it",
+      "bio": "PostDoc working on cardiac organ-on-chip models and disease modeling.",
+      "bioFull": "Dr. Elena Bianchi received her PhD in Biomedical Engineering from Politecnico di Milano in 2022. Her research focuses on developing cardiac organ-on-chip platforms for modeling cardiovascular diseases and drug screening. She has expertise in cell culture, microfabrication, and biosensor integration. She is currently leading a project on developing a heart-on-chip with integrated electrical and mechanical stimulation.",
+      "image": "/images/team/placeholder-postdoc-1.jpg",
+      "research": ["Cardiac Models", "Electrophysiology", "Disease Modeling"],
+      "joinedYear": 2022
+    },
+    {
+      "id": "pd-2",
+      "name": "Dr. Giovanni Verdi",
+      "role": "PostDoc Researcher",
+      "email": "giovanni.verdi@polimi.it",
+      "bio": "PostDoc specializing in gut-on-chip systems and microbiome research.",
+      "bioFull": "Dr. Giovanni Verdi completed his PhD at ETH Zurich in 2021, focusing on microfluidic systems for biological applications. At DEIB, he develops gut-on-chip platforms that integrate human intestinal cells with microbiome cultures to study host-microbe interactions. His work aims to understand inflammatory bowel diseases and develop personalized therapeutic approaches.",
+      "image": "/images/team/placeholder-postdoc-2.jpg",
+      "research": ["Gut Models", "Microbiome", "Inflammation"],
+      "joinedYear": 2023
+    }
+  ],
+  "phd": [
+    {
+      "id": "phd-1",
+      "name": "Sofia Lombardi",
+      "role": "PhD Student",
+      "email": "sofia.lombardi@polimi.it",
+      "bio": "PhD candidate working on lung-on-chip platforms for respiratory disease research.",
+      "bioFull": "Sofia is a third-year PhD student working on developing advanced lung-on-chip models that recapitulate the air-liquid interface and mechanical breathing movements. Her research aims to create physiologically relevant models for studying respiratory infections and chronic lung diseases.",
+      "image": "/images/team/placeholder-phd-1.jpg",
+      "research": ["Lung Models", "Respiratory Diseases", "Infection Modeling"],
+      "joinedYear": 2021
+    },
+    {
+      "id": "phd-2",
+      "name": "Alessandro Ferrari",
+      "role": "PhD Student",
+      "email": "alessandro.ferrari@polimi.it",
+      "bio": "PhD candidate developing multi-organ-on-chip systems for systemic drug testing.",
+      "bioFull": "Alessandro's research focuses on integrating multiple organ-on-chip models into a single platform to study systemic drug effects and organ-organ interactions. He combines expertise in microfluidics, automation, and data analytics to create comprehensive drug testing platforms.",
+      "image": "/images/team/placeholder-phd-2.jpg",
+      "research": ["Multi-Organ Systems", "Drug Testing", "Microfluidics"],
+      "joinedYear": 2022
+    },
+    {
+      "id": "phd-3",
+      "name": "Martina Greco",
+      "role": "PhD Student",
+      "email": "martina.greco@polimi.it",
+      "bio": "PhD candidate working on biosensor integration in organ-on-chip devices.",
+      "bioFull": "Martina's research focuses on developing and integrating advanced biosensors into organ-on-chip platforms for real-time monitoring of cellular responses. She works on electrochemical and optical sensors for measuring metabolites, oxygen levels, and cellular biomarkers.",
+      "image": "/images/team/placeholder-phd-3.jpg",
+      "research": ["Biosensors", "Real-time Monitoring", "Electrochemistry"],
+      "joinedYear": 2023
+    }
+  ],
+  "master": [
+    {
+      "id": "ms-1",
+      "name": "Luca Romano",
+      "role": "Master Student",
+      "email": "luca.romano@mail.polimi.it",
+      "bio": "Master thesis on microfabrication techniques for organ-on-chip devices.",
+      "bioFull": "Luca is completing his Master's thesis on developing novel microfabrication protocols for creating more complex and biomimetic organ-on-chip structures. He works on soft lithography and 3D printing techniques.",
+      "image": "/images/team/placeholder-master-1.jpg",
+      "research": ["Microfabrication", "3D Printing", "Soft Lithography"],
+      "joinedYear": 2024
+    },
+    {
+      "id": "ms-2",
+      "name": "Chiara Russo",
+      "role": "Master Student",
+      "email": "chiara.russo@mail.polimi.it",
+      "bio": "Master thesis on image analysis and machine learning for organ-on-chip data.",
+      "bioFull": "Chiara is developing machine learning algorithms for automated analysis of microscopy images from organ-on-chip experiments. Her work aims to extract quantitative metrics of cellular behavior and tissue morphology.",
+      "image": "/images/team/placeholder-master-2.jpg",
+      "research": ["Image Analysis", "Machine Learning", "Data Analytics"],
+      "joinedYear": 2024
+    }
+  ],
+  "alumni": [
+    {
+      "id": "alumni-1",
+      "name": "Dr. Francesca Conti",
+      "role": "Former PostDoc (2018-2022)",
+      "currentPosition": "Assistant Professor, University of Bologna",
+      "email": "francesca.conti@unibo.it"
+    },
+    {
+      "id": "alumni-2",
+      "name": "Dr. Marco Pellegrini",
+      "role": "Former PhD Student (2017-2021)",
+      "currentPosition": "Senior Scientist, Roche Pharmaceuticals",
+      "email": "marco.pellegrini@roche.com"
+    }
+  ]
+}
