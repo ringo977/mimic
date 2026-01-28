@@ -42,7 +42,7 @@ export default function RootLayout({
       <body className="antialiased">
         <GridBackground />
         <Navbar />
-        <main className="min-h-screen pt-20">
+        <main className="min-h-screen pt-32 lg:pt-20">
           {children}
         </main>
         <Footer />
