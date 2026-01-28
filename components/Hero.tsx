@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 
@@ -50,18 +51,18 @@ export default function Hero() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-start gap-4 mb-16">
-              <a 
+              <Link 
                 href="/research" 
                 className="bg-polimi-bright-blue hover:bg-polimi-alpha-blue text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
               >
                 Explore Our Research
-              </a>
-              <a 
+              </Link>
+              <Link 
                 href="/join" 
                 className="border-2 border-white hover:bg-white hover:text-polimi-blue-heritage text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300"
               >
                 Join Our Team
-              </a>
+              </Link>
             </div>
 
             {/* Stats */}
