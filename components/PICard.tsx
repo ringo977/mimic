@@ -33,17 +33,45 @@ interface Publication {
 export default function PICard({ pi }: PICardProps) {
   const [showModal, setShowModal] = useState(false);
 
-  // Extract last name from full name
-  const getLastName = (fullName: string): string => {
-    const parts = fullName.split(' ');
-    return parts[parts.length - 1].replace(/[.,]/g, '');
+  // Extract last name and first initial (e.g., "Prof. Marco Rasponi" -> "Rasponi, M.")
+  const getAuthorPattern = (fullName: string): string => {
+    const parts = fullName.split(' ').filter(part => 
+      !part.match(/^(Dr\.|Prof\.|Ph\.D\.|PhD|MSc|BSc)$/i)
+    );
+    
+    // Find first name (first part that starts with uppercase and is longer than 2 chars)
+    let firstName = '';
+    let lastName = '';
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].replace(/[.,]/g, '');
+      if (part.length > 2 && part[0] === part[0].toUpperCase()) {
+        if (!firstName) {
+          firstName = part;
+        } else {
+          lastName = part;
+        }
+      }
+    }
+    
+    // If only one name found, use it as last name
+    if (!lastName && firstName) {
+      lastName = firstName;
+      firstName = '';
+    }
+    
+    // Return pattern like "Rasponi, M." or just "Rasponi" if no first name
+    if (firstName && lastName) {
+      return `${lastName}, ${firstName[0]}.`;
+    }
+    return lastName;
   };
 
-  // Filter publications by author last name (exclude book chapters)
+  // Filter publications by author pattern (exclude book chapters)
   const piPublications = useMemo(() => {
-    const lastName = getLastName(pi.name);
+    const authorPattern = getAuthorPattern(pi.name);
     return (publicationsData.publications as Publication[]).filter(pub => 
-      pub.type !== "Book Chapter" && pub.authors.some(author => author.includes(lastName))
+      pub.type !== "Book Chapter" && pub.authors.some(author => author.includes(authorPattern))
     );
   }, [pi.name]);
 
@@ -169,7 +197,7 @@ export default function PICard({ pi }: PICardProps) {
                 <div className="flex items-center gap-3 mb-4">
                   <FileText size={24} className="text-polimi-bright-blue" />
                   <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage">
-                    Publications
+                    Publications @MiMic
                   </h3>
                   <span className="bg-polimi-bright-blue text-white px-3 py-1 rounded-full text-sm font-semibold">
                     {piPublications.length}
