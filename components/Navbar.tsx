@@ -26,8 +26,8 @@ export default function Navbar() {
           <img
             src="/mimic/images/logos/Logotipo_POLIMI_Blu.png"
             alt="Politecnico di Milano"
-            className="h-6 w-auto"
-            style={{ maxWidth: '50%' }}
+            className="w-auto h-auto"
+            style={{ maxWidth: '50%', maxHeight: '32px' }}
           />
         </div>
       </div>
