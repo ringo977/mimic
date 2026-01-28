@@ -22,11 +22,12 @@ export default function Navbar() {
     <>
       {/* Mobile Top Bar - Logo Poli (only mobile) */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-center h-12 px-4">
+        <div className="flex items-center h-12 px-4">
           <img
             src="/mimic/images/logos/Logotipo_POLIMI_Blu.png"
             alt="Politecnico di Milano"
-            className="h-8 w-auto"
+            className="h-6 w-auto"
+            style={{ maxWidth: '50%' }}
           />
         </div>
       </div>

@@ -18,17 +18,18 @@ export default function Footer() {
       aria-label="Site footer"
     >
       <div className="max-w-screen-2xl mx-auto px-6 lg:px-78 pt-16 pb-8">
-        {/* Grid 3 colonne */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 mb-12">
+        {/* Grid 4 colonne - Layout secondo brand identity */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-8 lg:gap-12 mb-12">
           
-          {/* Colonna 1: Lab Info */}
-          <div>
-            {/* Logo MiMic per footer */}
-            <div className="mb-4">
+          {/* Colonna 1: Logo (più ampia - 5 colonne su 12) */}
+          <div className="lg:col-span-5">
+            {/* Logo MiMic per footer - mantenere proporzioni originali */}
+            <div className="mb-6">
               <img
                 src="/mimic/images/logos/LogoMiMicLab_trasp_footer.png"
                 alt="MiMic Laboratory - Politecnico di Milano"
-                className="h-16 w-auto"
+                className="max-w-full h-auto"
+                style={{ maxHeight: '80px' }}
               />
             </div>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
@@ -37,8 +38,8 @@ export default function Footer() {
             </p>
           </div>
           
-          {/* Colonna 2: Quick Links */}
-          <div>
+          {/* Colonna 2: Quick Links (3 colonne su 12) */}
+          <div className="lg:col-span-3">
             <h4 className="font-semibold text-sm text-polimi-bright-blue mb-4 font-manrope">
               Quick Links
             </h4>
@@ -56,8 +57,8 @@ export default function Footer() {
             </ul>
           </div>
           
-          {/* Colonna 3: Contatti */}
-          <div>
+          {/* Colonna 3: Contatti (4 colonne su 12) */}
+          <div className="lg:col-span-4">
             <h4 className="font-semibold text-sm text-polimi-bright-blue mb-4 font-manrope">
               Contatti
             </h4>
