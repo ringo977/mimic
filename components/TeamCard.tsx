@@ -41,11 +41,11 @@ export default function TeamCard({ member }: TeamCardProps) {
     return parts[parts.length - 1].replace(/[.,]/g, '');
   };
 
-  // Filter publications by author last name
+  // Filter publications by author last name (exclude book chapters)
   const memberPublications = useMemo(() => {
     const lastName = getLastName(member.name);
     return (publicationsData.publications as Publication[]).filter(pub => 
-      pub.authors.some(author => author.includes(lastName))
+      pub.type !== "Book Chapter" && pub.authors.some(author => author.includes(lastName))
     );
   }, [member.name]);
 

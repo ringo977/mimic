@@ -39,11 +39,11 @@ export default function PICard({ pi }: PICardProps) {
     return parts[parts.length - 1].replace(/[.,]/g, '');
   };
 
-  // Filter publications by author last name
+  // Filter publications by author last name (exclude book chapters)
   const piPublications = useMemo(() => {
     const lastName = getLastName(pi.name);
     return (publicationsData.publications as Publication[]).filter(pub => 
-      pub.authors.some(author => author.includes(lastName))
+      pub.type !== "Book Chapter" && pub.authors.some(author => author.includes(lastName))
     );
   }, [pi.name]);
 
