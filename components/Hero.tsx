@@ -30,62 +30,70 @@ export default function Hero() {
         }}
       />
 
-      <div className="container-polimi relative z-10 text-center pt-32 pb-20">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-        >
-          <h1 className="font-frank font-bold text-5xl md:text-6xl lg:text-7xl mb-6 leading-tight text-white drop-shadow-lg">
-            MiMic<br />
-            <span className="text-polimi-bright-blue">Innovation Lab</span>
-          </h1>
-          
-          <p className="text-xl md:text-2xl text-white max-w-3xl mx-auto mb-8 leading-relaxed font-light drop-shadow-md">
-            Advancing microfluidic technologies and MiMic systems for the future of biomedical research 
-            at Politecnico di Milano
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-            <a 
-              href="/research" 
-              className="bg-polimi-bright-blue hover:bg-polimi-alpha-blue text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-            >
-              Explore Our Research
-            </a>
-            <a 
-              href="/join" 
-              className="border-2 border-white hover:bg-white hover:text-polimi-blue-heritage text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300"
-            >
-              Join Our Team
-            </a>
-          </div>
-
-          {/* Stats */}
-          <motion.div 
-            className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg"
-            initial={{ opacity: 0, y: 20 }}
+      <div className="container-polimi relative z-10 pt-32 pb-20">
+        <div className="max-w-7xl">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
           >
-            <div className="text-center">
-              <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">15+</div>
-              <div className="text-sm text-gray-600">Research Projects</div>
+            {/* Main Heading - Frank Ruhl Libre as per brand identity */}
+            <h1 className="font-frank font-bold text-5xl md:text-6xl lg:text-7xl mb-6 leading-tight text-white drop-shadow-lg">
+              MiMic Laboratory
+            </h1>
+            
+            {/* Subtitle - Manrope */}
+            <p className="font-manrope text-lg md:text-xl text-polimi-bright-blue mb-8 font-semibold drop-shadow-md">
+              Microfluidics and Biomimetic Microsystems Laboratory
+            </p>
+
+            {/* Description - Manrope Light as per brand identity */}
+            <p className="font-manrope text-lg md:text-xl text-white max-w-2xl mb-10 leading-relaxed font-light drop-shadow-md">
+              Advancing microfluidic technologies and organ-on-chip systems for the future of biomedical research 
+              at Politecnico di Milano
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-start gap-4 mb-16">
+              <a 
+                href="/research" 
+                className="bg-polimi-bright-blue hover:bg-polimi-alpha-blue text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+              >
+                Explore Our Research
+              </a>
+              <a 
+                href="/join" 
+                className="border-2 border-white hover:bg-white hover:text-polimi-blue-heritage text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300"
+              >
+                Join Our Team
+              </a>
             </div>
-            <div className="text-center">
-              <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">50+</div>
-              <div className="text-sm text-gray-600">Publications</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">20+</div>
-              <div className="text-sm text-gray-600">Team Members</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">10+</div>
-              <div className="text-sm text-gray-600">International Partners</div>
-            </div>
+
+            {/* Stats - Left aligned */}
+            <motion.div 
+              className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+            >
+              <div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">15+</div>
+                <div className="text-sm font-manrope text-gray-600">Research Projects</div>
+              </div>
+              <div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">80+</div>
+                <div className="text-sm font-manrope text-gray-600">Publications</div>
+              </div>
+              <div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">20+</div>
+                <div className="text-sm font-manrope text-gray-600">Team Members</div>
+              </div>
+              <div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">10+</div>
+                <div className="text-sm font-manrope text-gray-600">International Partners</div>
+              </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
+        </div>
 
         {/* Scroll indicator */}
         <motion.div

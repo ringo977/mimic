@@ -62,16 +62,16 @@ export default function HomePage() {
       {/* About Section */}
       <section className="py-20 bg-white">
         <div className="container-polimi">
-          <div className="max-w-4xl mx-auto text-center">
+          <div className="max-w-5xl">
             <h2 className="font-frank font-bold text-4xl md:text-5xl text-polimi-blue-heritage mb-6">
               About Our Lab
             </h2>
-            <p className="text-lg text-gray-700 leading-relaxed mb-4">
+            <p className="font-manrope text-lg text-gray-700 leading-relaxed mb-4 max-w-3xl">
               The MiMic Lab at the Department of Electronics, Information and Bioengineering (DEIB) 
               of Politecnico di Milano focuses on developing cutting-edge microfluidic technologies and 
-              MiMic systems.
+              organ-on-chip systems.
             </p>
-            <p className="text-lg text-gray-700 leading-relaxed">
+            <p className="font-manrope text-lg text-gray-700 leading-relaxed max-w-3xl">
               Our interdisciplinary team combines expertise in bioengineering, microfabrication, and cell biology 
               to create innovative platforms for drug discovery, disease modeling, and personalized medicine.
             </p>
@@ -82,11 +82,11 @@ export default function HomePage() {
       {/* Research Areas */}
       <section className="py-20 bg-gray-50">
         <div className="container-polimi">
-          <div className="text-center mb-12">
+          <div className="mb-12 max-w-5xl">
             <h2 className="font-frank font-bold text-4xl md:text-5xl text-polimi-blue-heritage mb-4">
               Research Areas
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            <p className="font-manrope text-lg text-gray-600 max-w-2xl">
               Explore our main research focus areas and ongoing projects
             </p>
           </div>
@@ -104,7 +104,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="text-center mt-12">
+          <div className="mt-12">
             <Button href="/research" variant="primary">
               View All Research Projects
             </Button>
@@ -115,11 +115,11 @@ export default function HomePage() {
       {/* Latest News */}
       <section className="py-20 bg-white">
         <div className="container-polimi">
-          <div className="text-center mb-12">
+          <div className="mb-12 max-w-5xl">
             <h2 className="font-frank font-bold text-4xl md:text-5xl text-polimi-blue-heritage mb-4">
               Latest News
             </h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            <p className="font-manrope text-lg text-gray-600 max-w-2xl">
               Stay updated with our latest achievements and upcoming events
             </p>
           </div>
@@ -130,7 +130,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          <div className="text-center mt-12">
+          <div className="mt-12">
             <Button href="/news" variant="secondary">
               View All News
             </Button>
@@ -140,17 +140,19 @@ export default function HomePage() {
 
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white">
-        <div className="container-polimi text-center">
-          <h2 className="font-frank font-bold text-4xl md:text-5xl mb-6">
-            Join Our Team
-          </h2>
-          <p className="text-xl text-polimi-gray mb-8 max-w-2xl mx-auto">
-            We are always looking for talented and motivated researchers to join our lab. 
-            Explore current opportunities in PhD positions, postdoctoral research, and thesis projects.
-          </p>
-          <Button href="/join" variant="primary">
-            View Open Positions
-          </Button>
+        <div className="container-polimi">
+          <div className="max-w-3xl">
+            <h2 className="font-frank font-bold text-4xl md:text-5xl mb-6">
+              Join Our Team
+            </h2>
+            <p className="font-manrope text-xl text-white/90 mb-8 leading-relaxed">
+              We are always looking for talented and motivated researchers to join our lab. 
+              Explore current opportunities in PhD positions, postdoctoral research, and thesis projects.
+            </p>
+            <Button href="/join" variant="primary">
+              View Open Positions
+            </Button>
+          </div>
         </div>
       </section>
     </div>
