@@ -77,23 +77,47 @@ export default function Footer() {
           </div>
         </div>
         
-        {/* Copyright Bar */}
+        {/* Copyright Bar - Stringa funzionale */}
         <div className="border-t border-white/10 pt-6">
-          <div className="flex flex-col md:flex-row justify-between items-center text-xs text-white/70 space-y-2 md:space-y-0 font-manrope">
-            <p>© {currentYear} Politecnico di Milano</p>
-            <div className="flex space-x-4">
+          <div className="flex flex-col space-y-3">
+            {/* Dati fiscali */}
+            <div className="text-xs text-white/70 font-manrope">
+              <p>
+                © {currentYear} Politecnico di Milano · Via Ampère, 2 - 20133 Milano · 
+                Tel. +39 02 2399 2111 · C.F. 80057930150 · P.IVA 04376620151
+              </p>
+            </div>
+            
+            {/* Link funzionali */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-white/70 font-manrope">
+              <Link 
+                href="/accessibilita" 
+                className="hover:text-white transition-colors"
+              >
+                Accessibilità
+              </Link>
+              <span className="text-white/30">|</span>
               <Link 
                 href="/privacy" 
                 className="hover:text-white transition-colors"
               >
                 Privacy Policy
               </Link>
-              <span>|</span>
+              <span className="text-white/30">|</span>
               <Link 
                 href="/cookies" 
                 className="hover:text-white transition-colors"
               >
                 Cookie Policy
+              </Link>
+              <span className="text-white/30">|</span>
+              <Link 
+                href="https://www.polimi.it/amministrazione-trasparente" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-white transition-colors"
+              >
+                Amministrazione Trasparente
               </Link>
             </div>
           </div>
