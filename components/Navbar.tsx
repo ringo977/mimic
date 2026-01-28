@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 
@@ -24,13 +23,10 @@ export default function Navbar() {
       {/* Mobile Top Bar - Logo Poli (only mobile) */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center justify-center h-12 px-4">
-          <Image
-            src="/images/logos/Logotipo_POLIMI_Blu.png"
+          <img
+            src="/mimic/images/logos/Logotipo_POLIMI_Blu.png"
             alt="Politecnico di Milano"
-            width={120}
-            height={32}
             className="h-8 w-auto"
-            priority
           />
         </div>
       </div>
@@ -54,32 +50,26 @@ export default function Navbar() {
               {/* Desktop: Logo combo PoliMi + MiMic */}
               <Link 
                 href="/" 
-                className="hidden lg:block hover:opacity-80 transition-opacity"
+                className="hidden lg:flex items-center hover:opacity-80 transition-opacity"
                 aria-label="Homepage MiMic Laboratory"
               >
-                <Image
-                  src="/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png"
+                <img
+                  src="/mimic/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png"
                   alt="MiMic Laboratory - Politecnico di Milano"
-                  width={280}
-                  height={60}
                   className="h-14 w-auto"
-                  priority
                 />
               </Link>
 
               {/* Mobile: Logo MiMic solo */}
               <Link 
                 href="/" 
-                className="lg:hidden hover:opacity-80 transition-opacity"
+                className="lg:hidden flex items-center hover:opacity-80 transition-opacity"
                 aria-label="Homepage MiMic Laboratory"
               >
-                <Image
-                  src="/images/logos/LogoMiMicLab_solo_blu_trasp.png"
+                <img
+                  src="/mimic/images/logos/LogoMiMicLab_solo_blu_trasp.png"
                   alt="MiMic Lab"
-                  width={120}
-                  height={40}
                   className="h-10 w-auto"
-                  priority
                 />
               </Link>
             </div>

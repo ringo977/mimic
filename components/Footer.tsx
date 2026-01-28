@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Image from 'next/image';
 
 const quickLinks = [
   { href: '/', label: 'Home' },
@@ -24,14 +23,12 @@ export default function Footer() {
           
           {/* Colonna 1: Lab Info */}
           <div>
-            {/* Logo MiMic + PoliMi */}
+            {/* Logo MiMic per footer */}
             <div className="mb-4">
-              <Image
-                src="/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png"
+              <img
+                src="/mimic/images/logos/LogoMiMicLab_trasp_footer.png"
                 alt="MiMic Laboratory - Politecnico di Milano"
-                width={200}
-                height={50}
-                className="h-12 w-auto brightness-0 invert"
+                className="h-16 w-auto"
               />
             </div>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
