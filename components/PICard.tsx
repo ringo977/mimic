@@ -3,11 +3,9 @@
 import { motion } from 'framer-motion';
 import { Mail, X, FileText } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import Card from './ui/Card';
 import publicationsData from '@/data/publications.json';
 
-interface TeamMember {
-  id: number;
+interface PI {
   name: string;
   role: string;
   email: string;
@@ -16,8 +14,8 @@ interface TeamMember {
   image: string;
 }
 
-interface TeamCardProps {
-  member: TeamMember;
+interface PICardProps {
+  pi: PI;
 }
 
 interface Publication {
@@ -32,22 +30,22 @@ interface Publication {
   type: string;
 }
 
-export default function TeamCard({ member }: TeamCardProps) {
+export default function PICard({ pi }: PICardProps) {
   const [showModal, setShowModal] = useState(false);
 
-  // Extract last name from full name (e.g., "Dr. Cecilia Palma" -> "Palma")
+  // Extract last name from full name
   const getLastName = (fullName: string): string => {
     const parts = fullName.split(' ');
     return parts[parts.length - 1].replace(/[.,]/g, '');
   };
 
   // Filter publications by author last name
-  const memberPublications = useMemo(() => {
-    const lastName = getLastName(member.name);
+  const piPublications = useMemo(() => {
+    const lastName = getLastName(pi.name);
     return (publicationsData.publications as Publication[]).filter(pub => 
       pub.authors.some(author => author.includes(lastName))
     );
-  }, [member.name]);
+  }, [pi.name]);
 
   return (
     <>
@@ -56,50 +54,53 @@ export default function TeamCard({ member }: TeamCardProps) {
         whileInView={{ opacity: 1, scale: 1 }}
         viewport={{ once: true }}
         transition={{ duration: 0.4 }}
+        className="bg-white rounded-xl shadow-xl p-8"
       >
-        <Card className="text-center h-full flex flex-col">
-          <div className="w-32 h-32 mx-auto mb-4 rounded-full overflow-hidden bg-polimi-gray">
+        <div className="flex flex-col items-center text-center gap-6">
+          <div className="w-40 h-40 rounded-full overflow-hidden bg-polimi-gray flex-shrink-0">
             <div 
               className="w-full h-full bg-cover bg-center"
               style={{ 
-                backgroundImage: `url(${member.image})`,
-                backgroundColor: '#E0DCDC'
+                backgroundImage: `url(${pi.image})`,
+                backgroundColor: '#E0DCDC' 
               }}
             />
           </div>
           
-          <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-1">
-            {member.name}
-          </h3>
-          
-          <p className="text-polimi-bright-blue font-semibold text-sm mb-3">
-            {member.role}
-          </p>
-          
-          <p className="text-gray-700 text-sm mb-3 line-clamp-2">
-            {member.bio}
-          </p>
-
-          <div className="mt-auto pt-3 space-y-2">
-            <button
-              onClick={() => setShowModal(true)}
-              className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline"
-            >
-              Read more
-            </button>
+          <div className="flex-1 space-y-4">
+            <div>
+              <h3 className="font-frank font-bold text-2xl text-polimi-blue-heritage mb-2">
+                {pi.name}
+              </h3>
+              <p className="text-polimi-bright-blue font-semibold text-base mb-3">
+                {pi.role}
+              </p>
+            </div>
             
-            <div className="pt-2 border-t border-gray-200">
-              <a 
-                href={`mailto:${member.email}`} 
-                className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium"
-                onClick={(e) => e.stopPropagation()}
+            <p className="text-gray-700 leading-relaxed text-sm line-clamp-3">
+              {pi.bio}
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => setShowModal(true)}
+                className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline"
               >
-                <Mail size={16} className="mr-2" />
-                Contact
-              </a>
+                Read more
+              </button>
+              
+              <div className="pt-2">
+                <a 
+                  href={`mailto:${pi.email}`}
+                  className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm"
+                >
+                  <Mail size={16} className="mr-2" />
+                  {pi.email}
+                </a>
+              </div>
             </div>
           </div>
-        </Card>
+        </div>
       </motion.div>
 
       {/* Modal for full bio and publications */}
@@ -128,42 +129,42 @@ export default function TeamCard({ member }: TeamCardProps) {
               <div className="w-24 h-24 rounded-full overflow-hidden bg-polimi-gray flex-shrink-0">
                 <div 
                   className="w-full h-full bg-cover bg-center"
-                  style={{ backgroundImage: `url(${member.image})` }}
+                  style={{ backgroundImage: `url(${pi.image})` }}
                 />
               </div>
               <div>
                 <h2 className="font-frank font-bold text-3xl text-polimi-blue-heritage mb-2">
-                  {member.name}
+                  {pi.name}
                 </h2>
                 <p className="text-polimi-bright-blue font-semibold text-lg mb-2">
-                  {member.role}
+                  {pi.role}
                 </p>
                 <a 
-                  href={`mailto:${member.email}`} 
+                  href={`mailto:${pi.email}`} 
                   className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm"
                 >
                   <Mail size={16} className="mr-2" />
-                  {member.email}
+                  {pi.email}
                 </a>
               </div>
             </div>
             
             {/* Bio */}
-            {member.bioFull && (
+            {pi.bioFull && (
               <div className="mb-8">
                 <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
                   About
                 </h3>
                 <div className="prose max-w-none">
                   <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                    {member.bioFull}
+                    {pi.bioFull}
                   </p>
                 </div>
               </div>
             )}
 
             {/* Publications Section */}
-            {memberPublications.length > 0 && (
+            {piPublications.length > 0 && (
               <div className="border-t border-gray-200 pt-6">
                 <div className="flex items-center gap-3 mb-4">
                   <FileText size={24} className="text-polimi-bright-blue" />
@@ -171,12 +172,12 @@ export default function TeamCard({ member }: TeamCardProps) {
                     Publications
                   </h3>
                   <span className="bg-polimi-bright-blue text-white px-3 py-1 rounded-full text-sm font-semibold">
-                    {memberPublications.length}
+                    {piPublications.length}
                   </span>
                 </div>
                 
                 <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                  {memberPublications.map((pub) => (
+                  {piPublications.map((pub) => (
                     <div 
                       key={pub.id} 
                       className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors"
