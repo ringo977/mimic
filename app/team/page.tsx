@@ -71,7 +71,7 @@ export default function TeamPage() {
       <section className="py-20 bg-gray-50">
         <div className="container-polimi">
           <h2 className="font-frank font-bold text-3xl text-polimi-blue-heritage mb-12 text-center">
-            Research Team
+            Team Members
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">

@@ -20,73 +20,155 @@
   "members": [
     {
       "id": 1,
-      "name": "Dr. Maria Bianchi",
-      "role": "PostDoc Researcher",
-      "email": "maria.bianchi@polimi.it",
-      "bio": "Research focus: microfluidic device fabrication and characterization for cardiac tissue modeling.",
-      "bioFull": "Dr. Maria Bianchi joined the lab in 2022 after completing her PhD at University of Cambridge. Her research focuses on developing heart MiMic systems with integrated biosensors for real-time monitoring of cardiac function. She has published 15 papers in high-impact journals and has been awarded the Marie Curie Fellowship.",
-      "image": "/images/team/maria-bianchi.jpg"
+      "name": "Dr. Cecilia Palma",
+      "role": "Scientific Project Manager",
+      "email": "cecilia.palma@polimi.it",
+      "bio": "PhD in Bioengineering focusing on microfluidic devices for studying joint disorders. Involved in project management activities.",
+      "image": "/images/team/cecilia-palma.jpg"
     },
     {
       "id": 2,
-      "name": "Dr. Luca Verdi",
-      "role": "PostDoc Researcher",
-      "email": "luca.verdi@polimi.it",
-      "bio": "Expertise in biosensor integration and electrochemical detection in microfluidic systems.",
-      "bioFull": "Dr. Luca Verdi specializes in integrating advanced biosensors into MiMic platforms. With a background in electrical engineering and bioelectronics, he develops novel sensing strategies for metabolite detection and tissue monitoring.",
-      "image": "/images/team/luca-verdi.jpg"
+      "name": "Dr. Alberto Mantegazza",
+      "role": "Assistant Professor",
+      "email": "alberto.mantegazza@polimi.it",
+      "bio": "Research at the intersection of organs-on-chip and microfluidic technology, hemodynamics at the microscale, experimental and computational fluid dynamics.",
+      "image": "/images/team/alberto-mantegazza.jpg"
     },
     {
       "id": 3,
-      "name": "Sofia Romano",
-      "role": "PhD Student",
-      "email": "sofia.romano@polimi.it",
-      "bio": "Working on liver MiMic models for drug toxicity testing and metabolism studies.",
-      "bioFull": "Sofia is a third-year PhD student developing liver MiMic platforms with hepatocyte co-cultures. Her work aims to create predictive models for drug-induced liver injury.",
-      "image": "/images/team/sofia-romano.jpg"
+      "name": "Stefania Brambilla",
+      "role": "Lab Manager",
+      "email": "stefania.brambilla@polimi.it",
+      "bio": "Laboratory operations and management, coordinating research activities and resources at MiMic Lab.",
+      "image": "/images/team/stefania-brambilla.jpg"
     },
     {
       "id": 4,
-      "name": "Alessandro Ferrari",
-      "role": "PhD Student",
-      "email": "alessandro.ferrari@polimi.it",
-      "bio": "Developing gut MiMic systems with integrated microbiome for studying host-microbe interactions.",
-      "bioFull": "Alessandro's research combines microfluidics with microbiology to create gut models that incorporate the intestinal microbiome. His work has implications for understanding inflammatory bowel diseases.",
-      "image": "/images/team/alessandro-ferrari.jpg"
+      "name": "Dr. Mattia Ballerini",
+      "role": "PostDoc Researcher",
+      "email": "mattia.ballerini@polimi.it",
+      "bio": "Developing innovative organ-on-chip platforms for various applications, including 3D mechanically active gut-on-chip systems.",
+      "image": "/images/team/mattia-ballerini.jpg"
     },
     {
       "id": 5,
-      "name": "Giulia Conti",
-      "role": "PhD Student",
-      "email": "giulia.conti@polimi.it",
-      "bio": "Focus on 3D bioprinting and biomaterials for creating vascularized tissue constructs.",
-      "bioFull": "Giulia combines 3D bioprinting with MiMic technology to create vascularized tissues. Her interdisciplinary approach bridges materials science and tissue engineering.",
-      "image": "/images/team/giulia-conti.jpg"
+      "name": "Dr. Paola Lagonegro",
+      "role": "PostDoc Researcher",
+      "email": "paola.lagonegro@polimi.it",
+      "bio": "Research focus on advanced microfluidic platforms and organ-on-chip systems.",
+      "image": "/images/team/paola-lagonegro.jpg"
     },
     {
       "id": 6,
-      "name": "Matteo Esposito",
-      "role": "PhD Student",
-      "email": "matteo.esposito@polimi.it",
-      "bio": "Developing lung MiMic models for studying respiratory diseases and air-liquid interface cultures.",
-      "bioFull": "Matteo's research focuses on creating physiologically relevant lung models that replicate breathing mechanics and air exposure. His work contributes to understanding respiratory infections and pollution effects.",
-      "image": "/images/team/matteo-esposito.jpg"
+      "name": "Dr. Rahimeh Atashgah",
+      "role": "PostDoc Researcher",
+      "email": "rahimeh.bairamiatashgah@polimi.it",
+      "bio": "Postdoctoral research in microfluidics and organ-on-chip technologies.",
+      "image": "/images/team/rahimeh-atashgah.jpg"
     },
     {
       "id": 7,
-      "name": "Elena Marino",
-      "role": "Master Student",
-      "email": "elena.marino@mail.polimi.it",
-      "bio": "Thesis project on microfluidic gradient generators for chemotaxis studies.",
-      "image": "/images/team/elena-marino.jpg"
+      "name": "Alessandro Cordiale",
+      "role": "PhD Student",
+      "email": "alessandro.cordiale@polimi.it",
+      "bio": "Development of microfluidic models of epithelial-endothelial barriers for drug discovery purposes.",
+      "image": "/images/team/alessandro-cordiale.jpg"
     },
     {
       "id": 8,
-      "name": "Francesco Ricci",
-      "role": "Master Student",
-      "email": "francesco.ricci@mail.polimi.it",
-      "bio": "Working on automated image analysis pipelines for MiMic experiments.",
-      "image": "/images/team/francesco-ricci.jpg"
+      "name": "Giacomo Cretti",
+      "role": "PhD Student",
+      "email": "giacomo.cretti@polimi.it",
+      "bio": "Developing multi-organs microfluidic platforms for colorectal cancer and lung disease modeling studies.",
+      "image": "/images/team/giacomo-cretti.jpg"
+    },
+    {
+      "id": 9,
+      "name": "Elisa Monti",
+      "role": "PhD Student",
+      "email": "elisa.monti@polimi.it",
+      "bio": "Investigating the molecular correlation between mechanical overloads and the onset of osteoarthritis in a cartilage-on-chip model.",
+      "image": "/images/team/elisa-monti.jpg"
+    },
+    {
+      "id": 10,
+      "name": "Alessandro Cacioppo",
+      "role": "PhD Student",
+      "email": "alessandro.cacioppo@polimi.it",
+      "bio": "Developing advanced 3D models for studying the heart using organ-on-chip systems and neuromuscular junctions.",
+      "image": "/images/team/alessandro-cacioppo.jpg"
+    },
+    {
+      "id": 11,
+      "name": "Bianca Aterini",
+      "role": "PhD Student",
+      "email": "bianca.aterini@polimi.it",
+      "bio": "Developing a model of healthy alveolar-capillary barrier-on-chip to investigate the effects of atmospheric pollutants.",
+      "image": "/images/team/bianca-aterini.jpg"
+    },
+    {
+      "id": 12,
+      "name": "Teresa Lucifora",
+      "role": "PhD Student",
+      "email": "teresa.lucifora@polimi.it",
+      "bio": "Developing a 3D human in vitro model of idiopathic pulmonary fibrosis in a lung-on-a-chip device.",
+      "image": "/images/team/teresa-lucifora.jpg"
+    },
+    {
+      "id": 13,
+      "name": "Sophie Véronique Materne",
+      "role": "PhD Student",
+      "email": "sophie.materne@polimi.it",
+      "bio": "Developing advanced organ-on-chip tools for research on pathophysiological models.",
+      "image": "/images/team/sophie-materne.jpg"
+    },
+    {
+      "id": 14,
+      "name": "Elia Pennati",
+      "role": "PhD Student",
+      "email": "elia.pennati@polimi.it",
+      "bio": "Using bone marrow-on-chip microfluidic device for early detection of lung cancer relapses.",
+      "image": "/images/team/elia-pennati.jpg"
+    },
+    {
+      "id": 15,
+      "name": "Asia Muraca",
+      "role": "PhD Student",
+      "email": "asia.muraca@polimi.it",
+      "bio": "PhD research in organ-on-chip systems and microfluidic platforms.",
+      "image": "/images/team/asia-muraca.jpg"
+    },
+    {
+      "id": 16,
+      "name": "Marina Pata",
+      "role": "PhD Student",
+      "email": "marina.pata@polimi.it",
+      "bio": "PhD research in microfluidics and biomimetic systems.",
+      "image": "/images/team/marina-pata.jpg"
+    },
+    {
+      "id": 17,
+      "name": "Sonia Peddio",
+      "role": "PhD Student",
+      "email": "sonia.peddio@polimi.it",
+      "bio": "PhD research in organ-on-chip technology and tissue engineering.",
+      "image": "/images/team/sonia-peddio.jpg"
+    },
+    {
+      "id": 18,
+      "name": "Viola Antonello",
+      "role": "PhD Student",
+      "email": "viola.antonello@polimi.it",
+      "bio": "PhD research in microfluidic systems and bioengineering.",
+      "image": "/images/team/viola-antonello.jpg"
+    },
+    {
+      "id": 19,
+      "name": "Federico Volpato",
+      "role": "PhD Student",
+      "email": "federico.volpato@polimi.it",
+      "bio": "PhD research in organ-on-chip platforms and microfluidic devices.",
+      "image": "/images/team/federico-volpato.jpg"
     }
   ]
 }
