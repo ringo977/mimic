@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 const quickLinks = [
   { href: '/', label: 'Home' },
@@ -23,15 +24,16 @@ export default function Footer() {
           
           {/* Colonna 1: Lab Info */}
           <div>
-            {/* Logo Placeholder - sostituire con logo PoliMi white version */}
-            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mb-4">
-              <span className="text-polimi-blue-heritage font-bold text-xs font-manrope">
-                POLIMI
-              </span>
+            {/* Logo MiMic + PoliMi */}
+            <div className="mb-4">
+              <Image
+                src="/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png"
+                alt="MiMic Laboratory - Politecnico di Milano"
+                width={200}
+                height={50}
+                className="h-12 w-auto brightness-0 invert"
+              />
             </div>
-            <h3 className="font-semibold text-base mb-2 font-manrope">
-              MiMic Laboratory
-            </h3>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
               Developing advanced microfluidic platforms and microphysiological systems 
               for drug screening and disease modeling at DEIB, Politecnico di Milano.
