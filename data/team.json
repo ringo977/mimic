@@ -1,12 +1,22 @@
 {
-  "pi": {
-    "name": "Prof. Marco Rossi",
-    "role": "Principal Investigator",
-    "email": "marco.rossi@polimi.it",
-    "bio": "Professor of Bioengineering with expertise in microfluidics and MiMic systems. Leading research in biomimetic devices and tissue engineering.",
-    "bioFull": "Professor Marco Rossi is the founder and director of the MiMic Lab at DEIB, Politecnico di Milano. His research focuses on developing advanced microfluidic platforms for drug discovery and disease modeling. With over 100 publications in peer-reviewed journals and numerous patents, he has established himself as a leading expert in MiMic technology.\n\nProf. Rossi received his PhD from ETH Zurich and completed postdoctoral training at MIT. He has received several prestigious awards including the ERC Starting Grant and the IEEE EMBS Technical Achievement Award. His lab collaborates with leading pharmaceutical companies and academic institutions worldwide.",
-    "image": "/images/team/marco-rossi.jpg"
-  },
+  "pis": [
+    {
+      "name": "Prof. Marco Rasponi",
+      "role": "Full Professor",
+      "email": "marco.rasponi@polimi.it",
+      "bio": "Full Professor of Bioengineering with expertise in microfluidics and organ-on-chip systems. Leading research in biomimetic devices and tissue engineering.",
+      "bioFull": "Professor Marco Rasponi is the founder and director of the MiMic Lab at DEIB, Politecnico di Milano. His research focuses on developing advanced microfluidic platforms for drug discovery and disease modeling. With over 80 publications in peer-reviewed journals and numerous patents, he has established himself as a leading expert in organ-on-chip technology.\n\nProf. Rasponi received his PhD from Politecnico di Milano and has received several prestigious awards. His lab collaborates with leading pharmaceutical companies and academic institutions worldwide.",
+      "image": "/images/team/marco-rasponi.jpg"
+    },
+    {
+      "name": "Prof. Paola Occhetta",
+      "role": "Associate Professor",
+      "email": "paola.occhetta@polimi.it",
+      "bio": "Associate Professor specializing in mechanobiology and cartilage-on-chip systems. Expert in 3D tissue models and mechanical stimulation platforms.",
+      "bioFull": "Professor Paola Occhetta is Associate Professor at DEIB, Politecnico di Milano, where she leads research on mechanobiology and osteoarthritis modeling using organ-on-chip technology. Her work focuses on understanding how mechanical forces influence tissue development and disease progression.\n\nProf. Occhetta has published extensively in the field of cartilage engineering and microfluidic systems. She collaborates with orthopedic researchers and pharmaceutical companies to develop predictive models for joint diseases.",
+      "image": "/images/team/paola-occhetta.jpg"
+    }
+  ],
   "members": [
     {
       "id": 1,
