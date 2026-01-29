@@ -3,6 +3,36 @@
     {
       "id": 1,
       "authors": [
+        "Constantinescu-Bercu, A.",
+        "Smith, K.E.",
+        "Wong, S.Y.",
+        "Ballerini, M.",
+        "Nastro, A.",
+        "Wiggins, B.G.",
+        "Pirri, D.",
+        "Li, Y.",
+        "Evers, J.A.M.",
+        "Tsiamita, O.",
+        "Dibble, M.",
+        "Pericleous, C.",
+        "Paschalaki, K.E.",
+        "Birdsey, G.M.",
+        "Bernier-Latmani, J.",
+        "Petrova, T.V.",
+        "Laffan, M.A.",
+        "Sivapalaratnam, S.",
+        "Rasponi, M.",
+        "Randi, A.M."
+      ],
+      "title": "Von Willebrand Factor Deficiency Impairs Angiogenesis via Angiopoietin-2: Relevance for Gut Angiodysplasia",
+      "journal": "Blood",
+      "year": 2026,
+      "doi": "10.1182/blood.2025031558",
+      "type": "Journal Article"
+    },
+    {
+      "id": 2,
+      "authors": [
         "Cordiale, A.",
         "Stanco, D.",
         "Visone, R.",
@@ -20,7 +50,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 2,
+      "id": 3,
       "authors": [
         "Mainardi, A.",
         "Barbero, A.",
@@ -36,7 +66,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 3,
+      "id": 4,
       "authors": [
         "Peretto, G.",
         "Rizzo, S.",
@@ -86,7 +116,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 4,
+      "id": 5,
       "authors": [
         "Vicinanza, F.",
         "Mencarini, T.",
@@ -108,7 +138,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 5,
+      "id": 6,
       "authors": [
         "Palma, C.",
         "Salehi, S.",
@@ -125,7 +155,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 6,
+      "id": 7,
       "authors": [
         "Mainardi, A.",
         "Börsch, A.",
@@ -148,7 +178,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 7,
+      "id": 8,
       "authors": [
         "Ballerini, M.",
         "Gali, S.",
@@ -180,7 +210,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 8,
+      "id": 9,
       "authors": [
         "Palma, C.",
         "Aterini, B.",
@@ -202,7 +232,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 9,
+      "id": 10,
       "authors": [
         "Palma, C.",
         "Piazza, S.",
@@ -222,7 +252,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 10,
+      "id": 11,
       "authors": [
         "Salehi, S.",
         "Brambilla, S.",
@@ -239,7 +269,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 11,
+      "id": 12,
       "authors": [
         "Niro, F.",
         "Fernandes, S.",
@@ -270,7 +300,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 12,
+      "id": 13,
       "authors": [
         "Colombo, F.",
         "Guzzeloni, V.",
@@ -299,7 +329,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 13,
+      "id": 14,
       "authors": [
         "Visone, R.",
         "Paoletti, C.",
@@ -319,7 +349,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 14,
+      "id": 15,
       "authors": [
         "Polidoro, M.A.",
         "Ferrari, E.",
@@ -344,7 +374,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 15,
+      "id": 16,
       "authors": [
         "Ferrari, E.",
         "Monti, E.",
@@ -363,7 +393,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 16,
+      "id": 17,
       "authors": [
         "Cauli, E.",
         "Polidoro, M.A.",
@@ -380,7 +410,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 17,
+      "id": 18,
       "authors": [
         "Mancino, C.",
         "Pasto, A.",
@@ -399,7 +429,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 18,
+      "id": 19,
       "authors": [
         "Ferrari, E.",
         "Visone, R.",
@@ -418,7 +448,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 19,
+      "id": 20,
       "authors": [
         "Ruppelt, A.",
         "Pijnenburg, I.",
@@ -438,7 +468,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 20,
+      "id": 21,
       "authors": [
         "Protopapa, G.",
         "Bono, N.",
@@ -456,7 +486,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 21,
+      "id": 22,
       "authors": [
         "Visone, R.",
         "Lozano-Juan, F.",
@@ -477,7 +507,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 22,
+      "id": 23,
       "authors": [
         "Tiberti, S.",
         "Catozzi, C.",
@@ -517,7 +547,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 23,
+      "id": 24,
       "authors": [
         "King, O.",
         "Cruz-Moreira, D.",
@@ -543,7 +573,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 24,
+      "id": 25,
       "authors": [
         "Krüger, M.",
         "Ruppelt, A.",
@@ -568,7 +598,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 25,
+      "id": 26,
       "authors": [
         "Haase, K.",
         "Piatti, F.",
@@ -588,7 +618,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 26,
+      "id": 27,
       "authors": [
         "Mazzara, P.G.",
         "Criscuolo, E.",
@@ -612,7 +642,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 27,
+      "id": 28,
       "authors": [
         "Beretta, S.",
         "Versace, A.",
@@ -651,7 +681,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 28,
+      "id": 29,
       "authors": [
         "Ferrari, E.",
         "Ugolini, G.S.",
@@ -667,7 +697,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 29,
+      "id": 30,
       "authors": [
         "Carlos-Oliveira, M.",
         "Lozano-Juan, F.",
@@ -684,7 +714,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 30,
+      "id": 31,
       "authors": [
         "Pirosa, A.",
         "Tankus, E.B.",
@@ -705,7 +735,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 31,
+      "id": 32,
       "authors": [
         "Ferrari, E.",
         "Rasponi, M."
@@ -719,7 +749,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 32,
+      "id": 33,
       "authors": [
         "Visone, R.",
         "Ugolini, G.S.",
@@ -741,7 +771,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 33,
+      "id": 34,
       "authors": [
         "Cruz-Moreira, D.",
         "Visone, R.",
@@ -761,7 +791,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 34,
+      "id": 35,
       "authors": [
         "Mondadori, C.",
         "Palombella, S.",
@@ -782,7 +812,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 35,
+      "id": 36,
       "authors": [
         "Mainardi, A.",
         "Carminati, F.",
@@ -804,7 +834,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 36,
+      "id": 37,
       "authors": [
         "Polidoro, M.A.",
         "Ferrari, E.",
@@ -821,7 +851,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 37,
+      "id": 38,
       "authors": [
         "Pagella, P.",
         "Cordiale, A.",
@@ -839,7 +869,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 38,
+      "id": 39,
       "authors": [
         "Mazzara, P.G.",
         "Muggeo, S.",
@@ -871,7 +901,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 39,
+      "id": 40,
       "authors": [
         "Ferrari, E.",
         "Palma, C.",
@@ -888,7 +918,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 40,
+      "id": 41,
       "authors": [
         "Lopa, S.",
         "Piraino, F.",
@@ -909,7 +939,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 41,
+      "id": 42,
       "authors": [
         "Roka-Moiia, Y.",
         "Bozzi, S.",
@@ -933,7 +963,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 42,
+      "id": 43,
       "authors": [
         "Iannielli, A.",
         "Ugolini, G.S.",
@@ -955,7 +985,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 43,
+      "id": 44,
       "authors": [
         "Occhetta, P.",
         "Mainardi, A.",
@@ -975,7 +1005,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 44,
+      "id": 45,
       "authors": [
         "Marcuzzo, S.",
         "Terragni, B.",
@@ -1004,7 +1034,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 45,
+      "id": 46,
       "authors": [
         "Ungaro, F.",
         "Colombo, P.",
@@ -1035,7 +1065,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 46,
+      "id": 47,
       "authors": [
         "Visone, R.",
         "Ugolini, G.S.",
@@ -1054,7 +1084,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 47,
+      "id": 48,
       "authors": [
         "Visone, R.",
         "Talò, G.",
@@ -1074,7 +1104,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 48,
+      "id": 49,
       "authors": [
         "Visone, R.",
         "Talò, G.",
@@ -1091,7 +1121,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 49,
+      "id": 50,
       "authors": [
         "Occhetta, P.",
         "Pigeot, S.",
@@ -1113,7 +1143,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 50,
+      "id": 51,
       "authors": [
         "Ugolini, G.S.",
         "Occhetta, P.",
@@ -1132,7 +1162,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 51,
+      "id": 52,
       "authors": [
         "Occhetta, P.",
         "Isu, G.",
@@ -1155,7 +1185,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 52,
+      "id": 53,
       "authors": [
         "Dimasi, A.",
         "Roka-Moiia, Y.",
@@ -1174,7 +1204,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 53,
+      "id": 54,
       "authors": [
         "Ugolini, G.S.",
         "Visone, R.",
@@ -1191,7 +1221,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 54,
+      "id": 55,
       "authors": [
         "Giupponi, E.",
         "Visone, R.",
@@ -1209,7 +1239,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 55,
+      "id": 56,
       "authors": [
         "Ugolini, G.S.",
         "Visone, R.",
@@ -1226,7 +1256,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 56,
+      "id": 57,
       "authors": [
         "Dimasi, A.",
         "Rasponi, M.",
@@ -1245,7 +1275,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 57,
+      "id": 58,
       "authors": [
         "Ugolini, G.S.",
         "Pavesi, A.",
@@ -1263,7 +1293,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 58,
+      "id": 59,
       "authors": [
         "Ugolini, G.",
         "Cruz-Moreira, D.",
@@ -1280,7 +1310,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 59,
+      "id": 60,
       "authors": [
         "Zhang, Y.S.",
         "Arneri, A.",
@@ -1310,7 +1340,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 60,
+      "id": 61,
       "authors": [
         "Visone, R.",
         "Gilardi, M.",
@@ -1328,7 +1358,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 61,
+      "id": 62,
       "authors": [
         "Gowran, A.",
         "Rasponi, M.",
@@ -1348,7 +1378,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 62,
+      "id": 63,
       "authors": [
         "Consolo, F.",
         "Dimasi, A.",
@@ -1369,7 +1399,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 63,
+      "id": 64,
       "authors": [
         "Occhetta, P.",
         "Glass, N.",
@@ -1386,7 +1416,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 64,
+      "id": 65,
       "authors": [
         "Marsano, A.",
         "Conficconi, C.",
@@ -1407,7 +1437,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 65,
+      "id": 66,
       "authors": [
         "Occhetta, P.",
         "Licini, M.",
@@ -1423,7 +1453,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 66,
+      "id": 67,
       "authors": [
         "Ugolini, G.S.",
         "Rasponi, M.",
@@ -1443,7 +1473,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 67,
+      "id": 68,
       "authors": [
         "Russo, L.",
         "Sgambato, A.",
@@ -1463,7 +1493,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 68,
+      "id": 69,
       "authors": [
         "Dimasi, A.",
         "Rasponi, M.",
@@ -1483,7 +1513,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 69,
+      "id": 70,
       "authors": [
         "Rasponi, M.",
         "Gazaneo, A.",
@@ -1503,7 +1533,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 70,
+      "id": 71,
       "authors": [
         "Boccafoschi, F.",
         "Rasponi, M.",
@@ -1521,7 +1551,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 71,
+      "id": 72,
       "authors": [
         "Pavesi, A.",
         "Adriani, G.",
@@ -1539,7 +1569,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 72,
+      "id": 73,
       "authors": [
         "Occhetta, P.",
         "Centola, M.",
@@ -1557,7 +1587,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 73,
+      "id": 74,
       "authors": [
         "Lopa, S.",
         "Piraino, F.",
@@ -1579,7 +1609,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 74,
+      "id": 75,
       "authors": [
         "Occhetta, P.",
         "Malloggi, C.",
@@ -1597,7 +1627,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 75,
+      "id": 76,
       "authors": [
         "Occhetta, P.",
         "Visone, R.",
@@ -1615,7 +1645,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 76,
+      "id": 77,
       "authors": [
         "Occhetta, P.",
         "Sadr, N.",
@@ -1633,7 +1663,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 77,
+      "id": 78,
       "authors": [
         "Pennella, F.",
         "Rossi, M.",
@@ -1654,7 +1684,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 78,
+      "id": 79,
       "authors": [
         "Biffi, E.",
         "Piraino, F.",
@@ -1674,7 +1704,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 79,
+      "id": 80,
       "authors": [
         "Biffi, E.",
         "Menegon, A.",
@@ -1692,7 +1722,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 80,
+      "id": 81,
       "authors": [
         "Piraino, F.",
         "Camci-Unal, G.",
@@ -1709,7 +1739,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 81,
+      "id": 82,
       "authors": [
         "Rasponi, M.",
         "Piraino, F.",
@@ -1727,7 +1757,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 82,
+      "id": 83,
       "authors": [
         "Hancock, M.J.",
         "Piraino, F.",
@@ -1744,7 +1774,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 83,
+      "id": 84,
       "authors": [
         "Selimović, S.",
         "Piraino, F.",
@@ -1762,7 +1792,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 84,
+      "id": 85,
       "authors": [
         "Pavesi, A.",
         "Piraino, F.",
@@ -1780,7 +1810,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 85,
+      "id": 86,
       "authors": [
         "Rasponi, M.",
         "Ullah, T.",
@@ -1797,7 +1827,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 86,
+      "id": 87,
       "authors": [
         "Gilbert, R.J.",
         "Park, H.",
@@ -1816,7 +1846,7 @@
       "type": "Journal Article"
     },
     {
-      "id": 87,
+      "id": 88,
       "authors": [
         "Ferrari, E.",
         "Nebuloni, F.",
@@ -1832,7 +1862,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 88,
+      "id": 89,
       "authors": [
         "Ballerini, M.",
         "Jouybar, M.",
@@ -1849,7 +1879,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 89,
+      "id": 90,
       "authors": [
         "Visone, R.",
         "Occhetta, P.",
@@ -1864,7 +1894,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 90,
+      "id": 91,
       "authors": [
         "Mainardi, A.",
         "Occhetta, P.",
@@ -1879,7 +1909,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 91,
+      "id": 92,
       "authors": [
         "Ugolini, G.S.",
         "Visone, R.",
@@ -1896,7 +1926,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 92,
+      "id": 93,
       "authors": [
         "Occhetta, P.",
         "Visone, R.",
@@ -1911,7 +1941,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 93,
+      "id": 94,
       "authors": [
         "Regalia, G.",
         "Biffi, E.",
@@ -1927,7 +1957,7 @@
       "type": "Book Chapter"
     },
     {
-      "id": 94,
+      "id": 95,
       "authors": [
         "Occhetta, P.",
         "Biffi, E.",
