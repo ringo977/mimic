@@ -162,7 +162,7 @@ export default function GrantsPage() {
                       </span>
                       {project.yearGranted && (
                         <span className="text-gray-500 text-xs block mt-1">
-                          Granted: {project.yearGranted}
+                          Call year: {project.yearGranted}
                         </span>
                       )}
                     </div>
