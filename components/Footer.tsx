@@ -29,7 +29,7 @@ export default function Footer() {
                 src="/mimic/images/logos/LogoMiMicLab_trasp_footer_vertical.png"
                 alt="MiMic Laboratory - Politecnico di Milano"
                 className="max-w-full h-auto"
-                style={{ maxHeight: '120px' }}
+                style={{ maxHeight: '240px' }}
               />
             </div>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
