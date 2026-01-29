@@ -147,12 +147,14 @@ export default function GrantsPage() {
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <h3 className="font-frank font-bold text-2xl text-gray-600 mb-2">
-                        {project.acronym}
-                      </h3>
-                      <p className="text-base text-gray-700 font-medium leading-relaxed">
+                      <h3 className="font-frank font-bold text-2xl text-polimi-blue-heritage mb-2 leading-tight">
                         {project.title}
-                      </p>
+                      </h3>
+                      {project.acronym && (
+                        <p className="text-sm text-gray-500 font-medium mb-3">
+                          {project.acronym}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right ml-4">
                       <span className="text-gray-600 font-semibold text-sm whitespace-nowrap block">
@@ -167,7 +169,7 @@ export default function GrantsPage() {
                   </div>
 
                   {/* Metadata */}
-                  <div className="flex flex-wrap gap-3 mb-4 pb-4 border-b border-gray-200">
+                  <div className="flex flex-wrap gap-3 mb-4">
                     <span className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full font-medium">
                       {project.program}
                     </span>
@@ -178,26 +180,6 @@ export default function GrantsPage() {
                       Role: {project.role}
                     </span>
                   </div>
-
-                  {/* Funding Information */}
-                  {(project.totalGrant || project.localGrant) && (
-                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-4 mb-4 border border-gray-200">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {project.totalGrant && project.totalGrant !== 'N/A' && (
-                          <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1 font-semibold">Total Grant</p>
-                            <p className="text-lg font-bold text-gray-700">{project.totalGrant}</p>
-                          </div>
-                        )}
-                        {project.localGrant && project.localGrant !== 'N/A' && (
-                          <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1 font-semibold">Local Grant</p>
-                            <p className="text-lg font-bold text-polimi-blue-heritage">{project.localGrant}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Website */}
                   {project.website && (
