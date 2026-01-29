@@ -73,7 +73,7 @@ export default function GrantsPage() {
 
                   {/* Metadata */}
                   <div className="flex flex-wrap gap-3 mb-4 pb-4 border-b border-gray-200">
-                    <span className="text-sm px-3 py-1 bg-polimi-blue-heritage/10 text-polimi-blue-heritage rounded-full font-medium">
+                    <span className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full font-medium">
                       {project.program}
                     </span>
                     <span className="text-sm px-3 py-1 bg-gray-100 text-gray-700 rounded-full">
