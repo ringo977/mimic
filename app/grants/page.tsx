@@ -14,7 +14,10 @@ interface Project {
   role: string;
   period: string;
   website: string | null;
-  abstract: string;
+  abstract?: string;
+  yearGranted?: string;
+  totalGrant?: string;
+  localGrant?: string;
 }
 
 export default function GrantsPage() {
@@ -140,20 +143,27 @@ export default function GrantsPage() {
               const isExpanded = expandedProjects.includes(project.id);
               
               return (
-                <Card key={project.id} className="hover:shadow-xl transition-shadow duration-300">
+                <Card key={project.id} className="hover:shadow-xl transition-shadow duration-300 bg-white">
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <h3 className="font-frank font-bold text-3xl text-gray-600 mb-2">
+                      <h3 className="font-frank font-bold text-2xl text-gray-600 mb-2">
                         {project.acronym}
                       </h3>
-                      <p className="text-lg text-polimi-blue-heritage font-medium leading-relaxed">
+                      <p className="text-base text-gray-700 font-medium leading-relaxed">
                         {project.title}
                       </p>
                     </div>
-                    <span className="text-gray-600 font-semibold text-sm whitespace-nowrap ml-4 mt-1">
-                      {project.period}
-                    </span>
+                    <div className="text-right ml-4">
+                      <span className="text-gray-600 font-semibold text-sm whitespace-nowrap block">
+                        {project.period}
+                      </span>
+                      {project.yearGranted && (
+                        <span className="text-gray-500 text-xs block mt-1">
+                          Granted: {project.yearGranted}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Metadata */}
@@ -169,6 +179,26 @@ export default function GrantsPage() {
                     </span>
                   </div>
 
+                  {/* Funding Information */}
+                  {(project.totalGrant || project.localGrant) && (
+                    <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-4 mb-4 border border-gray-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {project.totalGrant && project.totalGrant !== 'N/A' && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1 font-semibold">Total Grant</p>
+                            <p className="text-lg font-bold text-gray-700">{project.totalGrant}</p>
+                          </div>
+                        )}
+                        {project.localGrant && project.localGrant !== 'N/A' && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1 font-semibold">Local Grant</p>
+                            <p className="text-lg font-bold text-polimi-blue-heritage">{project.localGrant}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Website */}
                   {project.website && (
                     <a
@@ -182,33 +212,35 @@ export default function GrantsPage() {
                     </a>
                   )}
 
-                  {/* Abstract */}
-                  <div className="mt-4">
-                    <button
-                      onClick={() => toggleProject(project.id)}
-                      className="flex items-center gap-2 text-polimi-blue-heritage hover:text-polimi-bright-blue font-semibold text-sm mb-3 transition-colors"
-                    >
-                      {isExpanded ? (
-                        <>
-                          <ChevronUp size={18} />
-                          Hide Abstract
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown size={18} />
-                          Show Abstract
-                        </>
-                      )}
-                    </button>
+                  {/* Abstract (if available) */}
+                  {project.abstract && (
+                    <div className="mt-4">
+                      <button
+                        onClick={() => toggleProject(project.id)}
+                        className="flex items-center gap-2 text-polimi-blue-heritage hover:text-polimi-bright-blue font-semibold text-sm mb-3 transition-colors"
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp size={18} />
+                            Hide Description
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown size={18} />
+                            Show Description
+                          </>
+                        )}
+                      </button>
 
-                    {isExpanded && (
-                      <div className="bg-gray-50 rounded-lg p-6 border-l-4 border-gray-400">
-                        <p className="text-gray-700 leading-relaxed text-justify">
-                          {project.abstract}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                      {isExpanded && (
+                        <div className="bg-gray-50 rounded-lg p-6 border-l-4 border-gray-400">
+                          <p className="text-gray-700 leading-relaxed text-justify">
+                            {project.abstract}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </Card>
               );
             })}
