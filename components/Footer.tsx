@@ -23,13 +23,13 @@ export default function Footer() {
           
           {/* Colonna 1: Logo (più ampia - 5 colonne su 12) */}
           <div className="lg:col-span-5">
-            {/* Logo MiMic per footer - mantenere proporzioni originali */}
+            {/* Logo MiMic per footer - versione verticale */}
             <div className="mb-6">
               <img
-                src="/mimic/images/logos/LogoMiMicLab_trasp_footer.png"
+                src="/mimic/images/logos/LogoMiMicLab_trasp_footer_vertical.png"
                 alt="MiMic Laboratory - Politecnico di Milano"
                 className="max-w-full h-auto"
-                style={{ maxHeight: '80px' }}
+                style={{ maxHeight: '120px' }}
               />
             </div>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
