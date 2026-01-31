@@ -11,8 +11,9 @@ import teamData from '@/data/team.json';
 import collaborationsData from '@/data/collaborations.json';
 
 export default function Hero() {
-  // Calculate stats dynamically and round to nearest 5
-  const roundTo5 = (num: number) => Math.round(num / 5) * 5;
+  // Calculate stats dynamically and round DOWN to nearest 5
+  // e.g., 27 → 25+, 30 → 30+, 33 → 30+, 35 → 35+
+  const roundTo5 = (num: number) => Math.floor(num / 5) * 5;
   
   const totalGrants = roundTo5(grantsData.current.length + grantsData.past.length);
   const totalPublications = roundTo5(publicationsData.publications.length);
