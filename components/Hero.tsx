@@ -73,11 +73,11 @@ export default function Hero() {
               transition={{ duration: 0.8, delay: 0.3 }}
             >
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">15+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">25+</div>
                 <div className="text-sm text-gray-600">Research Projects</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">80+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">95+</div>
                 <div className="text-sm text-gray-600">Publications</div>
               </div>
               <div className="text-center">
