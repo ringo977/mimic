@@ -4,7 +4,28 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowDown } from 'lucide-react';
 
+// Import data for dynamic stats
+import grantsData from '@/data/grants.json';
+import publicationsData from '@/data/publications.json';
+import teamData from '@/data/team.json';
+import collaborationsData from '@/data/collaborations.json';
+
 export default function Hero() {
+  // Calculate stats dynamically and round to nearest 5
+  const roundTo5 = (num: number) => Math.round(num / 5) * 5;
+  
+  const totalGrants = roundTo5(grantsData.current.length + grantsData.past.length);
+  const totalPublications = roundTo5(publicationsData.publications.length);
+  // Count team members (PIs + members only, alumni explicitly excluded)
+  const totalTeam = roundTo5(
+    teamData.pis.length + 
+    teamData.members.length
+    // alumni array exists but is NOT counted
+  );
+  const totalPartners = roundTo5(
+    collaborationsData.academic.length + 
+    collaborationsData.industry.length
+  );
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background Image */}
@@ -65,7 +86,7 @@ export default function Hero() {
               </Link>
             </div>
 
-            {/* Stats */}
+            {/* Stats - Dynamic from JSON data */}
             <motion.div 
               className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg"
               initial={{ opacity: 0, y: 20 }}
@@ -73,19 +94,19 @@ export default function Hero() {
               transition={{ duration: 0.8, delay: 0.3 }}
             >
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">25+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalGrants}+</div>
                 <div className="text-sm text-gray-600">Research Projects</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">95+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalPublications}+</div>
                 <div className="text-sm text-gray-600">Publications</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">20+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalTeam}+</div>
                 <div className="text-sm text-gray-600">Team Members</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">10+</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalPartners}+</div>
                 <div className="text-sm text-gray-600">International Partners</div>
               </div>
             </motion.div>
