@@ -4,6 +4,12 @@ import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangl
 import { useLabContext } from './LabContext';
 import { mockInstruments, rolePermissions, formatTime } from '@/data/lab-data';
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.substring(0, 3).toUpperCase();
+  return parts[0][0].toUpperCase() + parts[parts.length - 1].substring(0, 2).toUpperCase();
+}
+
 interface Props {
   onNavigate: (page: string) => void;
 }
@@ -32,7 +38,7 @@ export default function DashboardPage({ onNavigate }: Props) {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-[#102C53] flex items-center justify-center text-white text-xl font-bold font-manrope shrink-0">
-            {user.name.split(' ').map(n => n[0]).join('')}
+            {getInitials(user.name)}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-gray-900 font-manrope">Welcome back, {user.name.split(' ')[0]}!</h1>

@@ -4,6 +4,16 @@ import React, { useState } from 'react';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X } from 'lucide-react';
 import { mockUsers, LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
+
+// 3-letter initials: first letter of first name + first 2 letters of last name
+// e.g., "Marco Rasponi" → "MRA"
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name.substring(0, 3).toUpperCase();
+  const first = parts[0][0].toUpperCase();
+  const last = parts[parts.length - 1].substring(0, 2).toUpperCase();
+  return first + last;
+}
 import DashboardPage from './DashboardPage';
 import InstrumentsPage from './InstrumentsPage';
 import ReagentsPage from './ReagentsPage';
@@ -169,7 +179,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-[#102C53] flex items-center justify-center text-white font-bold text-sm font-manrope">
-              {user.name.split(' ').map(n => n[0]).join('')}
+              {getInitials(user.name)}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate font-manrope">{user.name}</p>
@@ -220,7 +230,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#102C53] flex items-center justify-center text-white font-bold text-sm">
-                  {user.name.split(' ').map(n => n[0]).join('')}
+                  {getInitials(user.name)}
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-gray-900 font-manrope">{user.name}</p>
@@ -265,7 +275,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
             {filteredNav.find(n => n.id === currentPage)?.label || 'Lab Manager'}
           </h1>
           <div className="w-8 h-8 rounded-full bg-[#102C53] flex items-center justify-center text-white text-xs font-bold">
-            {user.name.split(' ').map(n => n[0]).join('')}
+            {getInitials(user.name)}
           </div>
         </header>
 

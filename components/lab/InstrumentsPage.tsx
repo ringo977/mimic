@@ -181,11 +181,12 @@ export default function InstrumentsPage() {
         </button>
       </div>
 
-      {/* Week Quick Nav */}
+      {/* Week Quick Nav - centered on selected date, scrolls with arrows */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {Array.from({ length: 7 }, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() + i);
+          const base = new Date(selectedDate + 'T12:00:00');
+          const d = new Date(base);
+          d.setDate(base.getDate() + (i - 3)); // 3 days before, selected, 3 days after
           const ds = d.toISOString().split('T')[0];
           const dayBookingsCount = bookings.filter(b => b.instrumentId === selectedInstrument && b.date === ds).length;
           const isToday = ds === new Date().toISOString().split('T')[0];
