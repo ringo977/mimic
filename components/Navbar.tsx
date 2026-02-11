@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, FlaskConical } from 'lucide-react';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -87,6 +87,13 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                href="/lab"
+                className="flex items-center gap-1.5 ml-2 px-4 py-2 bg-polimi-blue-heritage text-white rounded-lg hover:bg-polimi-blue-heritage/90 transition-all duration-200 font-manrope font-medium text-sm"
+              >
+                <FlaskConical size={15} />
+                Lab Login
+              </Link>
             </div>
 
             {/* Mobile Menu Button */}
@@ -114,6 +121,14 @@ export default function Navbar() {
                     {link.label}
                   </Link>
                 ))}
+                <Link
+                  href="/lab"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center gap-2 mx-4 mt-2 px-4 py-3 bg-polimi-blue-heritage text-white rounded-lg font-manrope font-medium text-center justify-center"
+                >
+                  <FlaskConical size={16} />
+                  Lab Login
+                </Link>
               </div>
             </div>
           )}
