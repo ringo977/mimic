@@ -27,7 +27,7 @@ export default function LogPage({ showDatabase = false }: { showDatabase?: boole
   const { permissions, log, bookings, reagents, cryoVials, wishlist } = useLabContext();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [activeTab, setActiveTab] = useState<'log' | 'database'>(showDatabase ? 'database' : 'log');
+  const activeTab = showDatabase ? 'database' : 'log';
   const [dbTable, setDbTable] = useState<'bookings' | 'reagents' | 'cryo' | 'wishlist'>('bookings');
 
   const categories = ['all', 'booking', 'reagent', 'cryo', 'wishlist', 'auth'];
@@ -103,28 +103,6 @@ export default function LogPage({ showDatabase = false }: { showDatabase?: boole
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4">
-      {/* Tabs */}
-      {permissions.canViewDatabase && (
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          <button
-            onClick={() => setActiveTab('log')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium font-manrope transition-all ${
-              activeTab === 'log' ? 'bg-white text-[#102C53] shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Activity Log
-          </button>
-          <button
-            onClick={() => setActiveTab('database')}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium font-manrope transition-all ${
-              activeTab === 'database' ? 'bg-white text-[#102C53] shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            Database
-          </button>
-        </div>
-      )}
-
       {activeTab === 'log' && (
         <>
           <div className="flex items-center justify-between">
