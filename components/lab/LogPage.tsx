@@ -82,7 +82,7 @@ export default function LogPage({ showDatabase = false }: { showDatabase?: boole
       id: v.id,
       cellLine: v.cellLine,
       passage: v.passage,
-      position: `T${v.tank} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}`,
+      position: `${v.dewarId} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}`,
       storedBy: v.userName,
       date: v.date,
       notes: v.notes,

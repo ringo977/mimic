@@ -3,7 +3,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
-  rolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals, generateId,
+  Dewar, Project, Certification,
+  rolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals,
+  mockDewars, mockProjects, mockCertifications,
+  generateId, migrateCryoVials,
   getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
 } from '@/data/lab-data';
 
@@ -50,6 +53,21 @@ interface LabContextType {
   addManual: (m: Manual) => void;
   updateManual: (m: Manual) => void;
   removeManual: (id: string) => void;
+  // Admin: Dewars
+  dewars: Dewar[];
+  addDewar: (d: Dewar) => void;
+  updateDewar: (d: Dewar) => void;
+  removeDewar: (id: string) => void;
+  // Admin: Projects
+  projects: Project[];
+  addProject: (p: Project) => void;
+  updateProject: (p: Project) => void;
+  removeProject: (id: string) => void;
+  // Admin: Certifications
+  certifications: Certification[];
+  addCertification: (c: Certification) => void;
+  updateCertification: (c: Certification) => void;
+  removeCertification: (id: string) => void;
 }
 
 const LabContext = createContext<LabContextType | null>(null);
@@ -72,6 +90,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [users, setUsers] = useState<LabUser[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [manuals, setManuals] = useState<Manual[]>([]);
+  const [dewars, setDewars] = useState<Dewar[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [certifications, setCertifications] = useState<Certification[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Load from localStorage
@@ -82,12 +103,15 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         const data = JSON.parse(saved);
         setBookings(data.bookings || getInitialBookings());
         setReagents(data.reagents || mockReagents);
-        setCryoVials(data.cryoVials || getInitialCryoVials());
+        setCryoVials(data.cryoVials ? migrateCryoVials(data.cryoVials) : getInitialCryoVials());
         setWishlist(data.wishlist || getInitialWishlist());
         setLog(data.log || getInitialLog());
         setUsers(data.users || [...mockUsers]);
         setInstruments(data.instruments || [...mockInstruments]);
         setManuals(data.manuals || [...mockManuals]);
+        setDewars(data.dewars || [...mockDewars]);
+        setProjects(data.projects || [...mockProjects]);
+        setCertifications(data.certifications || [...mockCertifications]);
       } else {
         setBookings(getInitialBookings());
         setReagents([...mockReagents]);
@@ -97,6 +121,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         setUsers([...mockUsers]);
         setInstruments([...mockInstruments]);
         setManuals([...mockManuals]);
+        setDewars([...mockDewars]);
+        setProjects([...mockProjects]);
+        setCertifications([...mockCertifications]);
       }
     } catch {
       setBookings(getInitialBookings());
@@ -107,6 +134,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setUsers([...mockUsers]);
       setInstruments([...mockInstruments]);
       setManuals([...mockManuals]);
+      setDewars([...mockDewars]);
+      setProjects([...mockProjects]);
+      setCertifications([...mockCertifications]);
     }
     setLoaded(true);
   }, []);
@@ -114,8 +144,11 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // Save to localStorage
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals }));
-  }, [bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals,
+      dewars, projects, certifications,
+    }));
+  }, [bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals, dewars, projects, certifications, loaded]);
 
   const addLogEntry = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
     setLog(prev => [{ ...entry, id: generateId(), timestamp: new Date().toISOString() }, ...prev]);
@@ -154,14 +187,14 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // --- Cryo ---
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {
     setCryoVials(prev => [...prev, { ...v, id: generateId() }]);
-    addLogEntry({ userId: user.id, userName: user.name, action: `Stored vial ${v.cellLine}`, category: 'cryo', details: `T${v.tank} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}, P${v.passage}` });
+    addLogEntry({ userId: user.id, userName: user.name, action: `Stored vial ${v.cellLine}`, category: 'cryo', details: `${v.dewarId} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}, P${v.passage}` });
   }, [user, addLogEntry]);
 
   const removeCryoVial = useCallback((id: string) => {
     setCryoVials(prev => {
       const vial = prev.find(v => v.id === id);
       if (vial) {
-        addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vial.cellLine}`, category: 'cryo', details: `T${vial.tank} R${vial.rack} B${vial.box} ${String.fromCharCode(65 + vial.row)}${vial.col + 1}, P${vial.passage}` });
+        addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vial.cellLine}`, category: 'cryo', details: `${vial.dewarId} R${vial.rack} B${vial.box} ${String.fromCharCode(65 + vial.row)}${vial.col + 1}, P${vial.passage}` });
       }
       return prev.filter(v => v.id !== id);
     });
@@ -252,6 +285,60 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     });
   }, [user, addLogEntry]);
 
+  // --- Admin: Dewars ---
+  const addDewar = useCallback((d: Dewar) => {
+    setDewars(prev => [...prev, d]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added dewar ${d.name}`, category: 'cryo', details: `${d.model}, ${d.location}` });
+  }, [user, addLogEntry]);
+
+  const updateDewar = useCallback((d: Dewar) => {
+    setDewars(prev => prev.map(existing => existing.id === d.id ? d : existing));
+  }, []);
+
+  const removeDewar = useCallback((id: string) => {
+    setDewars(prev => {
+      const d = prev.find(x => x.id === id);
+      if (d) addLogEntry({ userId: user.id, userName: user.name, action: `Removed dewar ${d.name}`, category: 'cryo', details: d.model });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
+  // --- Admin: Projects ---
+  const addProject = useCallback((p: Project) => {
+    setProjects(prev => [...prev, p]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added project ${p.name}`, category: 'auth', details: p.description });
+  }, [user, addLogEntry]);
+
+  const updateProject = useCallback((p: Project) => {
+    setProjects(prev => prev.map(existing => existing.id === p.id ? p : existing));
+  }, []);
+
+  const removeProject = useCallback((id: string) => {
+    setProjects(prev => {
+      const p = prev.find(x => x.id === id);
+      if (p) addLogEntry({ userId: user.id, userName: user.name, action: `Removed project ${p.name}`, category: 'auth', details: p.description });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
+  // --- Admin: Certifications ---
+  const addCertification = useCallback((c: Certification) => {
+    setCertifications(prev => [...prev, c]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added certification ${c.name}`, category: 'auth', details: c.description });
+  }, [user, addLogEntry]);
+
+  const updateCertification = useCallback((c: Certification) => {
+    setCertifications(prev => prev.map(existing => existing.id === c.id ? c : existing));
+  }, []);
+
+  const removeCertification = useCallback((id: string) => {
+    setCertifications(prev => {
+      const c = prev.find(x => x.id === id);
+      if (c) addLogEntry({ userId: user.id, userName: user.name, action: `Removed certification ${c.name}`, category: 'auth', details: c.description });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
   if (!loaded) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-50">
@@ -272,6 +359,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       addNewReagent, updateReagent, removeReagent,
       instruments, addInstrument, updateInstrument, removeInstrument,
       manuals, addManual, updateManual, removeManual,
+      dewars, addDewar, updateDewar, removeDewar,
+      projects, addProject, updateProject, removeProject,
+      certifications, addCertification, updateCertification, removeCertification,
     }}>
       {children}
     </LabContext.Provider>

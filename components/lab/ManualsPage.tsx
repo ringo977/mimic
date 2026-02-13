@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, FileText, BookOpen, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, FileText, BookOpen, AlertTriangle, Download } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { formatDate } from '@/data/lab-data';
 
@@ -12,23 +12,23 @@ const categoryLabels = {
 };
 
 export default function ManualsPage() {
-  const { manuals: mockManuals } = useLabContext();
+  const { manuals: allManuals } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'protocol' | 'manual' | 'sds'>('all');
 
   const filtered = useMemo(() => {
-    return mockManuals.filter(m => {
+    return allManuals.filter(m => {
       const matchCat = selectedCategory === 'all' || m.category === selectedCategory;
       const matchSearch = !search || m.title.toLowerCase().includes(search.toLowerCase()) || m.description.toLowerCase().includes(search.toLowerCase());
       return matchCat && matchSearch;
     });
-  }, [search, selectedCategory]);
+  }, [allManuals, search, selectedCategory]);
 
   const categoryCounts = {
-    all: mockManuals.length,
-    protocol: mockManuals.filter(m => m.category === 'protocol').length,
-    manual: mockManuals.filter(m => m.category === 'manual').length,
-    sds: mockManuals.filter(m => m.category === 'sds').length,
+    all: allManuals.length,
+    protocol: allManuals.filter(m => m.category === 'protocol').length,
+    manual: allManuals.filter(m => m.category === 'manual').length,
+    sds: allManuals.filter(m => m.category === 'sds').length,
   };
 
   return (
@@ -101,6 +101,11 @@ export default function ManualsPage() {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${catInfo.color}`}>
                       {catInfo.label.replace(/s$/, '')}
                     </span>
+                    {doc.fileData && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700">
+                        PDF
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 font-manrope mt-1">{doc.description}</p>
                   <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400 font-manrope">
@@ -109,9 +114,18 @@ export default function ManualsPage() {
                     {doc.instrument && <span className="text-blue-500">Instrument: {doc.instrument}</span>}
                   </div>
                 </div>
-                <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-[#102C53] transition-colors shrink-0" title="View document">
-                  <ExternalLink size={16} />
-                </button>
+                {doc.fileData ? (
+                  <a
+                    href={doc.fileData}
+                    download={doc.fileName || `${doc.title}.pdf`}
+                    className="p-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700 transition-colors shrink-0 flex items-center gap-1"
+                    title="Download PDF"
+                  >
+                    <Download size={16} />
+                  </a>
+                ) : (
+                  <div className="w-10 shrink-0" />
+                )}
               </div>
             </div>
           );

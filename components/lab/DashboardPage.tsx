@@ -1,8 +1,8 @@
 'use client';
 
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award } from 'lucide-react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { rolePermissions, formatTime } from '@/data/lab-data';
+import { rolePermissions, formatTime, formatDate } from '@/data/lab-data';
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function DashboardPage({ onNavigate }: Props) {
-  const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments } = useLabContext();
+  const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments, manuals } = useLabContext();
 
   const today = new Date().toISOString().split('T')[0];
   const todayBookings = bookings.filter(b => b.date === today);
@@ -146,6 +146,34 @@ export default function DashboardPage({ onNavigate }: Props) {
           )}
         </div>
       </div>
+
+      {/* Available Documents (with PDF) */}
+      {manuals.filter(m => m.fileData).length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2 mb-4">
+            <FileText size={16} className="text-purple-500" />
+            Documents Available
+          </h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {manuals.filter(m => m.fileData).map(doc => (
+              <a
+                key={doc.id}
+                href={doc.fileData}
+                download={doc.fileName || `${doc.title}.pdf`}
+                className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center text-purple-600">
+                  <Download size={14} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-900 font-manrope truncate">{doc.title}</p>
+                  <p className="text-[10px] text-gray-500 font-manrope">{doc.fileName || 'PDF'} · {formatDate(doc.lastUpdated)}</p>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* All Today's Bookings */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">

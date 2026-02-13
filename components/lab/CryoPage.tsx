@@ -1,14 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronLeft, Plus, X, Trash2, Info } from 'lucide-react';
+import { Plus, X, Trash2, Info } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDate } from '@/data/lab-data';
-
-const TANKS = [1, 2];
-const RACKS = [1, 2, 3, 4, 5, 6];
-const ROWS = ['A', 'B', 'C', 'D', 'E'];
-const COLS = [1, 2, 3, 4, 5];
+import { formatDate, getRowLabels } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -22,15 +17,14 @@ const cellLineColors: Record<string, string> = {
 
 function getCellLineColor(cellLine: string): string {
   if (cellLineColors[cellLine]) return cellLineColors[cellLine];
-  // Generate a consistent color from string
   const hash = cellLine.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   const colors = ['bg-pink-400', 'bg-indigo-400', 'bg-teal-400', 'bg-orange-400', 'bg-lime-400', 'bg-rose-400'];
   return colors[hash % colors.length];
 }
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVial, removeCryoVial } = useLabContext();
-  const [selectedTank, setSelectedTank] = useState(1);
+  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, dewars } = useLabContext();
+  const [selectedDewarId, setSelectedDewarId] = useState(dewars[0]?.id || 'dewar-1');
   const [selectedRack, setSelectedRack] = useState(1);
   const [selectedBox, setSelectedBox] = useState(1);
   const [selectedVial, setSelectedVial] = useState<string | null>(null);
@@ -43,7 +37,15 @@ export default function CryoPage() {
   const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
   const [newNotes, setNewNotes] = useState('');
 
-  const boxVials = cryoVials.filter(v => v.tank === selectedTank && v.rack === selectedRack && v.box === selectedBox);
+  // Get current dewar config
+  const dewar = dewars.find(d => d.id === selectedDewarId) || { id: selectedDewarId, name: selectedDewarId, model: '', location: '', numRacks: 6, boxesPerRack: 5, gridRows: 5, gridCols: 5 };
+  const RACKS = Array.from({ length: dewar.numRacks }, (_, i) => i + 1);
+  const totalBoxes = dewar.boxesPerRack;
+  const ROWS = getRowLabels(dewar.gridRows);
+  const COLS = Array.from({ length: dewar.gridCols }, (_, i) => i + 1);
+  const slotsPerBox = dewar.gridRows * dewar.gridCols;
+
+  const boxVials = cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === selectedRack && v.box === selectedBox);
   const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
 
   const getVialAt = (row: number, col: number) => {
@@ -58,7 +60,7 @@ export default function CryoPage() {
       date: new Date().toISOString().split('T')[0],
       userId: user.id,
       userName: user.name,
-      tank: selectedTank,
+      dewarId: selectedDewarId,
       rack: selectedRack,
       box: selectedBox,
       row: addPosition.row,
@@ -71,9 +73,7 @@ export default function CryoPage() {
     setNewNotes('');
   };
 
-  // Count vials per rack for the overview
-  const vialsInRack = (rack: number) => cryoVials.filter(v => v.tank === selectedTank && v.rack === rack).length;
-  const totalBoxes = 5; // boxes per rack
+  const vialsInRack = (rack: number) => cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === rack).length;
 
   // Cell line legend
   const usedCellLines = Array.from(new Set(cryoVials.map(v => v.cellLine)));
@@ -82,22 +82,23 @@ export default function CryoPage() {
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4">
       <h1 className="text-lg font-bold text-gray-900 font-manrope">Cryo Storage</h1>
 
-      {/* Tank Selection */}
-      <div className="flex gap-3">
-        {TANKS.map(tank => {
-          const tankVials = cryoVials.filter(v => v.tank === tank).length;
+      {/* Dewar Selection */}
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {dewars.map(dw => {
+          const tankVials = cryoVials.filter(v => v.dewarId === dw.id).length;
           return (
             <button
-              key={tank}
-              onClick={() => { setSelectedTank(tank); setSelectedRack(1); setSelectedBox(1); setSelectedVial(null); }}
-              className={`flex-1 p-4 rounded-xl border-2 transition-all ${
-                selectedTank === tank ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
+              key={dw.id}
+              onClick={() => { setSelectedDewarId(dw.id); setSelectedRack(1); setSelectedBox(1); setSelectedVial(null); }}
+              className={`flex-1 min-w-[140px] p-4 rounded-xl border-2 transition-all ${
+                selectedDewarId === dw.id ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
               <div className="text-center">
                 <div className="text-3xl mb-1">🧊</div>
-                <p className="text-sm font-semibold text-gray-900 font-manrope">Dewar {tank}</p>
-                <p className="text-xs text-gray-500 font-manrope">{tankVials} vials</p>
+                <p className="text-sm font-semibold text-gray-900 font-manrope">{dw.name}</p>
+                <p className="text-[10px] text-gray-400 font-manrope">{dw.model}</p>
+                <p className="text-xs text-gray-500 font-manrope">{tankVials} vials · {dw.gridRows}×{dw.gridCols} grid</p>
               </div>
             </button>
           );
@@ -107,7 +108,7 @@ export default function CryoPage() {
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Rack Overview */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">Dewar {selectedTank} &mdash; Racks</h2>
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">{dewar.name} &mdash; Racks</h2>
           <div className="grid grid-cols-3 gap-2">
             {RACKS.map(rack => {
               const count = vialsInRack(rack);
@@ -122,9 +123,8 @@ export default function CryoPage() {
                 >
                   <p className="text-xs font-bold text-gray-900 font-manrope">Rack {rack}</p>
                   <p className="text-[10px] text-gray-400 font-manrope">{count} vials</p>
-                  {/* Mini capacity bar */}
                   <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5">
-                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(100, (count / (totalBoxes * 25)) * 100)}%` }} />
+                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(100, (count / (totalBoxes * slotsPerBox)) * 100)}%` }} />
                   </div>
                 </button>
               );
@@ -133,60 +133,63 @@ export default function CryoPage() {
 
           {/* Box selection */}
           <h3 className="text-xs font-semibold text-gray-700 font-manrope mt-4 mb-2">Rack {selectedRack} &mdash; Boxes</h3>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {Array.from({ length: totalBoxes }, (_, i) => i + 1).map(box => {
-              const boxCount = cryoVials.filter(v => v.tank === selectedTank && v.rack === selectedRack && v.box === box).length;
+              const boxCount = cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === selectedRack && v.box === box).length;
               const isSelected = selectedBox === box;
               return (
                 <button
                   key={box}
                   onClick={() => { setSelectedBox(box); setSelectedVial(null); }}
-                  className={`flex-1 p-2 rounded-lg border-2 text-center transition-all ${
+                  className={`flex-1 min-w-[40px] p-2 rounded-lg border-2 text-center transition-all ${
                     isSelected ? 'border-cyan-500 bg-cyan-50' : 'border-gray-100 hover:border-gray-300'
                   }`}
                 >
                   <p className="text-xs font-bold font-manrope">{box}</p>
-                  <p className="text-[9px] text-gray-400">{boxCount}/25</p>
+                  <p className="text-[9px] text-gray-400">{boxCount}/{slotsPerBox}</p>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Box Grid (5x5) */}
+        {/* Box Grid (dynamic size) */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-900 font-manrope">
-              Box {selectedBox} <span className="text-gray-400 font-normal">({boxVials.length}/25)</span>
+              Box {selectedBox} <span className="text-gray-400 font-normal">({boxVials.length}/{slotsPerBox})</span>
             </h2>
           </div>
 
           {/* Grid */}
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Column headers */}
-            <div className="grid grid-cols-6 bg-gray-50">
-              <div className="p-1.5" />
+            <div className="grid bg-gray-50" style={{ gridTemplateColumns: `auto repeat(${dewar.gridCols}, 1fr)` }}>
+              <div className="p-1" />
               {COLS.map(col => (
-                <div key={col} className="p-1.5 text-center text-[10px] font-bold text-gray-500 font-manrope">{col}</div>
+                <div key={col} className="p-1 text-center text-[9px] font-bold text-gray-500 font-manrope">{col}</div>
               ))}
             </div>
 
             {/* Rows */}
             {ROWS.map((rowLabel, rowIdx) => (
-              <div key={rowLabel} className="grid grid-cols-6 border-t border-gray-100">
-                <div className="p-1.5 flex items-center justify-center text-[10px] font-bold text-gray-500 font-manrope bg-gray-50">{rowLabel}</div>
+              <div key={rowLabel} className="grid border-t border-gray-100" style={{ gridTemplateColumns: `auto repeat(${dewar.gridCols}, 1fr)` }}>
+                <div className="p-1 flex items-center justify-center text-[9px] font-bold text-gray-500 font-manrope bg-gray-50 min-w-[20px]">{rowLabel}</div>
                 {COLS.map((_, colIdx) => {
                   const vial = getVialAt(rowIdx, colIdx);
                   const isSelected = selectedVial === vial?.id;
+                  // Adjust cell size based on grid size
+                  const isLarge = dewar.gridCols > 6;
                   return (
-                    <div key={colIdx} className="p-1 aspect-square flex items-center justify-center">
+                    <div key={colIdx} className={`p-0.5 aspect-square flex items-center justify-center ${isLarge ? 'min-w-[20px]' : ''}`}>
                       {vial ? (
                         <button
                           onClick={() => setSelectedVial(isSelected ? null : vial.id)}
-                          className={`w-full h-full rounded-full flex items-center justify-center text-[8px] text-white font-bold transition-all
+                          className={`w-full h-full rounded-full flex items-center justify-center text-white font-bold transition-all
                             ${getCellLineColor(vial.cellLine)}
                             ${isSelected ? 'ring-2 ring-offset-1 ring-[#102C53] scale-110' : 'hover:scale-105'}
                           `}
+                          style={{ fontSize: isLarge ? '6px' : '8px' }}
                           title={`${vial.cellLine} P${vial.passage}`}
                         >
                           P{vial.passage}
@@ -197,7 +200,7 @@ export default function CryoPage() {
                             onClick={() => { setAddPosition({ row: rowIdx, col: colIdx }); setShowAddModal(true); }}
                             className="w-full h-full rounded-full border-2 border-dashed border-gray-200 hover:border-cyan-400 hover:bg-cyan-50 flex items-center justify-center text-gray-300 hover:text-cyan-500 transition-all"
                           >
-                            <Plus size={10} />
+                            <Plus size={isLarge ? 6 : 10} />
                           </button>
                         ) : (
                           <div className="w-full h-full rounded-full border-2 border-dashed border-gray-100" />
@@ -240,8 +243,12 @@ export default function CryoPage() {
 
               <div className="space-y-2 text-xs font-manrope">
                 <div className="flex justify-between">
+                  <span className="text-gray-500">Dewar</span>
+                  <span className="text-gray-900 font-medium">{dewars.find(d => d.id === selectedVialData.dewarId)?.name || selectedVialData.dewarId}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-gray-500">Position</span>
-                  <span className="text-gray-900 font-medium">T{selectedVialData.tank} R{selectedVialData.rack} B{selectedVialData.box} {ROWS[selectedVialData.row]}{selectedVialData.col + 1}</span>
+                  <span className="text-gray-900 font-medium">R{selectedVialData.rack} B{selectedVialData.box} {ROWS[selectedVialData.row]}{selectedVialData.col + 1}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Stored</span>
@@ -289,7 +296,7 @@ export default function CryoPage() {
             <div className="space-y-4">
               <div className="bg-cyan-50 rounded-xl p-3 text-sm font-manrope">
                 <span className="font-semibold">Position: </span>
-                T{selectedTank} R{selectedRack} B{selectedBox} {ROWS[addPosition.row]}{addPosition.col + 1}
+                {dewar.name} R{selectedRack} B{selectedBox} {ROWS[addPosition.row]}{addPosition.col + 1}
               </div>
 
               <div>

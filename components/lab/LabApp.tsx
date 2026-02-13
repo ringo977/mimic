@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings } from 'lucide-react';
-import { mockUsers, LabUser, rolePermissions } from '@/data/lab-data';
+import { LabUser, rolePermissions, getStoredUsers } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 
 // 3-letter initials: first letter of first name + first 2 letters of last name
@@ -34,7 +34,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: LabUser) => void }) {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const user = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.pin === pin);
+    const user = getStoredUsers().find(u => u.email.toLowerCase() === email.toLowerCase() && u.pin === pin);
     if (user) {
       localStorage.setItem('mimic-lab-user', JSON.stringify(user));
       onLogin(user);
