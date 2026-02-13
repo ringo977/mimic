@@ -28,8 +28,10 @@ export default function WishlistPage() {
   const [type, setType] = useState<'reagent' | 'antibody' | 'consumable' | 'equipment'>('reagent');
   const [catalogNumber, setCatalogNumber] = useState('');
   const [supplier, setSupplier] = useState('');
-  const [estimatedCost, setEstimatedCost] = useState(0);
-  const [quantity, setQuantity] = useState(1);
+  const [estimatedCostStr, setEstimatedCostStr] = useState('0');
+  const [quantityStr, setQuantityStr] = useState('1');
+  const estimatedCost = estimatedCostStr === '' ? 0 : Number(estimatedCostStr);
+  const quantity = quantityStr === '' ? 0 : Number(quantityStr);
   const [urgency, setUrgency] = useState<'low' | 'medium' | 'high'>('medium');
   const [notes, setNotes] = useState('');
 
@@ -47,7 +49,7 @@ export default function WishlistPage() {
 
   const resetForm = () => {
     setName(''); setType('reagent'); setCatalogNumber(''); setSupplier('');
-    setEstimatedCost(0); setQuantity(1); setUrgency('medium'); setNotes('');
+    setEstimatedCostStr('0'); setQuantityStr('1'); setUrgency('medium'); setNotes('');
   };
 
   const exportCSV = () => {
@@ -225,11 +227,11 @@ export default function WishlistPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Est. Cost (€/unit)</label>
-                  <input type="number" min={0} value={estimatedCost} onChange={e => setEstimatedCost(Number(e.target.value))} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+                  <input type="number" min={0} value={estimatedCostStr} onChange={e => setEstimatedCostStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Quantity</label>
-                  <input type="number" min={1} value={quantity} onChange={e => setQuantity(Math.max(1, Number(e.target.value)))} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+                  <input type="number" min={1} value={quantityStr} onChange={e => setQuantityStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
                 </div>
               </div>
               <div>

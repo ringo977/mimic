@@ -2,15 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry,
-  rolePermissions, mockReagents, generateId,
+  LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument,
+  rolePermissions, mockReagents, mockInstruments, mockUsers, generateId,
   getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
 } from '@/data/lab-data';
 
 interface LabContextType {
   user: LabUser;
   permissions: typeof rolePermissions[LabUser['role']];
-  // Navigation
   currentPage: string;
   setCurrentPage: (page: string) => void;
   // Bookings
@@ -32,6 +31,20 @@ interface LabContextType {
   // Log
   log: LogEntry[];
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
+  // Admin: Users
+  users: LabUser[];
+  addUser: (u: LabUser) => void;
+  updateUser: (u: LabUser) => void;
+  removeUser: (id: string) => void;
+  // Admin: Reagents CRUD
+  addNewReagent: (r: Reagent) => void;
+  updateReagent: (r: Reagent) => void;
+  removeReagent: (id: string) => void;
+  // Admin: Instruments
+  instruments: Instrument[];
+  addInstrument: (i: Instrument) => void;
+  updateInstrument: (i: Instrument) => void;
+  removeInstrument: (id: string) => void;
 }
 
 const LabContext = createContext<LabContextType | null>(null);
@@ -51,6 +64,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [cryoVials, setCryoVials] = useState<CryoVial[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [log, setLog] = useState<LogEntry[]>([]);
+  const [users, setUsers] = useState<LabUser[]>([]);
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Load from localStorage
@@ -64,12 +79,16 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         setCryoVials(data.cryoVials || getInitialCryoVials());
         setWishlist(data.wishlist || getInitialWishlist());
         setLog(data.log || getInitialLog());
+        setUsers(data.users || [...mockUsers]);
+        setInstruments(data.instruments || [...mockInstruments]);
       } else {
         setBookings(getInitialBookings());
         setReagents([...mockReagents]);
         setCryoVials(getInitialCryoVials());
         setWishlist(getInitialWishlist());
         setLog(getInitialLog());
+        setUsers([...mockUsers]);
+        setInstruments([...mockInstruments]);
       }
     } catch {
       setBookings(getInitialBookings());
@@ -77,20 +96,23 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setCryoVials(getInitialCryoVials());
       setWishlist(getInitialWishlist());
       setLog(getInitialLog());
+      setUsers([...mockUsers]);
+      setInstruments([...mockInstruments]);
     }
     setLoaded(true);
   }, []);
 
-  // Save to localStorage on changes
+  // Save to localStorage
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bookings, reagents, cryoVials, wishlist, log }));
-  }, [bookings, reagents, cryoVials, wishlist, log, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bookings, reagents, cryoVials, wishlist, log, users, instruments }));
+  }, [bookings, reagents, cryoVials, wishlist, log, users, instruments, loaded]);
 
   const addLogEntry = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
     setLog(prev => [{ ...entry, id: generateId(), timestamp: new Date().toISOString() }, ...prev]);
   }, []);
 
+  // --- Bookings ---
   const addBooking = useCallback((b: Omit<Booking, 'id' | 'createdAt'>) => {
     const newB: Booking = { ...b, id: generateId(), createdAt: new Date().toISOString() };
     setBookings(prev => [...prev, newB]);
@@ -107,6 +129,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     });
   }, [user, addLogEntry]);
 
+  // --- Reagents ---
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
     setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.max(0, r.currentStock - amount) } : r));
     const reagent = reagents.find(r => r.id === reagentId);
@@ -119,6 +142,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${reagent?.name || reagentId}`, category: 'reagent', details: `+${amount} ${reagent?.unit || ''}` });
   }, [user, reagents, addLogEntry]);
 
+  // --- Cryo ---
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {
     setCryoVials(prev => [...prev, { ...v, id: generateId() }]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Stored vial ${v.cellLine}`, category: 'cryo', details: `T${v.tank} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}, P${v.passage}` });
@@ -134,6 +158,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     });
   }, [user, addLogEntry]);
 
+  // --- Wishlist ---
   const addWishlistItem = useCallback((item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => {
     setWishlist(prev => [...prev, { ...item, id: generateId(), timestamp: new Date().toISOString(), status: 'pending' }]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Requested ${item.name}`, category: 'wishlist', details: `${item.supplier} ${item.catalogNumber}, Est. €${item.estimatedCost}` });
@@ -144,6 +169,61 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     const item = wishlist.find(w => w.id === id);
     addLogEntry({ userId: user.id, userName: user.name, action: `${status} ${item?.name || id}`, category: 'wishlist', details: `Status → ${status}` });
   }, [user, wishlist, addLogEntry]);
+
+  // --- Admin: Users ---
+  const addUser = useCallback((u: LabUser) => {
+    setUsers(prev => [...prev, u]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added user ${u.name}`, category: 'auth', details: `Role: ${u.role}, Email: ${u.email}` });
+  }, [user, addLogEntry]);
+
+  const updateUser = useCallback((u: LabUser) => {
+    setUsers(prev => prev.map(existing => existing.id === u.id ? u : existing));
+    addLogEntry({ userId: user.id, userName: user.name, action: `Updated user ${u.name}`, category: 'auth', details: `Role: ${u.role}` });
+  }, [user, addLogEntry]);
+
+  const removeUser = useCallback((id: string) => {
+    setUsers(prev => {
+      const u = prev.find(x => x.id === id);
+      if (u) addLogEntry({ userId: user.id, userName: user.name, action: `Removed user ${u.name}`, category: 'auth', details: u.email });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
+  // --- Admin: Reagents CRUD ---
+  const addNewReagent = useCallback((r: Reagent) => {
+    setReagents(prev => [...prev, r]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added reagent ${r.name}`, category: 'reagent', details: `${r.supplier} ${r.catalogNumber}` });
+  }, [user, addLogEntry]);
+
+  const updateReagent = useCallback((r: Reagent) => {
+    setReagents(prev => prev.map(existing => existing.id === r.id ? r : existing));
+  }, []);
+
+  const removeReagent = useCallback((id: string) => {
+    setReagents(prev => {
+      const r = prev.find(x => x.id === id);
+      if (r) addLogEntry({ userId: user.id, userName: user.name, action: `Removed reagent ${r.name}`, category: 'reagent', details: r.catalogNumber });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
+  // --- Admin: Instruments ---
+  const addInstrument = useCallback((i: Instrument) => {
+    setInstruments(prev => [...prev, i]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added instrument ${i.name}`, category: 'booking', details: `${i.category}, ${i.location}` });
+  }, [user, addLogEntry]);
+
+  const updateInstrument = useCallback((i: Instrument) => {
+    setInstruments(prev => prev.map(existing => existing.id === i.id ? i : existing));
+  }, []);
+
+  const removeInstrument = useCallback((id: string) => {
+    setInstruments(prev => {
+      const i = prev.find(x => x.id === id);
+      if (i) addLogEntry({ userId: user.id, userName: user.name, action: `Removed instrument ${i.name}`, category: 'booking', details: i.category });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
 
   if (!loaded) {
     return (
@@ -161,6 +241,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       cryoVials, addCryoVial, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus,
       log, addLogEntry,
+      users, addUser, updateUser, removeUser,
+      addNewReagent, updateReagent, removeReagent,
+      instruments, addInstrument, updateInstrument, removeInstrument,
     }}>
       {children}
     </LabContext.Provider>

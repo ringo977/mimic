@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X } from 'lucide-react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings } from 'lucide-react';
 import { mockUsers, LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 
@@ -21,6 +21,7 @@ import CryoPage from './CryoPage';
 import WishlistPage from './WishlistPage';
 import ManualsPage from './ManualsPage';
 import LogPage from './LogPage';
+import AdminPage from './AdminPage';
 
 // ============================================================
 // Login Screen
@@ -113,6 +114,7 @@ function LoginScreen({ onLogin }: { onLogin: (user: LabUser) => void }) {
             </button>
             {showDemo && (
               <div className="mt-3 space-y-1.5 text-xs text-gray-500 font-mono">
+                <div className="flex justify-between"><span>Admin:</span><span>admin@polimi.it / 0000</span></div>
                 <div className="flex justify-between"><span>PI:</span><span>marco.rasponi@polimi.it / 1234</span></div>
                 <div className="flex justify-between"><span>Lab Mgr:</span><span>cecilia.palma@polimi.it / 5678</span></div>
                 <div className="flex justify-between"><span>PostDoc:</span><span>roberta.visone@polimi.it / 3456</span></div>
@@ -143,6 +145,7 @@ const navItems = [
   { id: 'manuals', label: 'Manuals', icon: BookOpen, requiresPerm: null },
   { id: 'log', label: 'Activity Log', icon: ClipboardList, requiresPerm: 'canViewLog' as const },
   { id: 'database', label: 'Database', icon: Database, requiresPerm: 'canViewDatabase' as const },
+  { id: 'admin', label: 'Admin Panel', icon: Settings, requiresPerm: 'canAdmin' as const },
 ];
 
 function AppShell({ onLogout }: { onLogout: () => void }) {
@@ -167,6 +170,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       case 'manuals': return <ManualsPage />;
       case 'log': return <LogPage />;
       case 'database': return <LogPage showDatabase />;
+      case 'admin': return <AdminPage />;
       default: return <DashboardPage onNavigate={setCurrentPage} />;
     }
   };

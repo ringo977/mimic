@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Download, Calendar, FlaskConical, Snowflake, ShoppingCart, LogIn, BookOpen } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDateTime, mockInstruments } from '@/data/lab-data';
+import { formatDateTime } from '@/data/lab-data';
 
 const categoryIcons: Record<string, typeof Calendar> = {
   booking: Calendar,
@@ -24,7 +24,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function LogPage({ showDatabase = false }: { showDatabase?: boolean }) {
-  const { permissions, log, bookings, reagents, cryoVials, wishlist } = useLabContext();
+  const { permissions, log, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments } = useLabContext();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const activeTab = showDatabase ? 'database' : 'log';

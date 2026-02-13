@@ -2,7 +2,7 @@
 
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { mockInstruments, rolePermissions, formatTime } from '@/data/lab-data';
+import { rolePermissions, formatTime } from '@/data/lab-data';
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function DashboardPage({ onNavigate }: Props) {
-  const { user, permissions, bookings, reagents, cryoVials, wishlist } = useLabContext();
+  const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments } = useLabContext();
 
   const today = new Date().toISOString().split('T')[0];
   const todayBookings = bookings.filter(b => b.date === today);

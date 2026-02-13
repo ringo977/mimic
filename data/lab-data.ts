@@ -4,7 +4,7 @@
 
 // --- Types ---
 
-export type UserRole = 'pi' | 'lab_manager' | 'postdoc' | 'phd' | 'msc';
+export type UserRole = 'admin' | 'pi' | 'lab_manager' | 'postdoc' | 'phd' | 'msc';
 
 export interface LabUser {
   id: string;
@@ -129,43 +129,56 @@ export const rolePermissions: Record<UserRole, {
   canViewDatabase: boolean;
   canExportData: boolean;
   canUploadManuals: boolean;
+  canAdmin: boolean;
   label: string;
 }> = {
+  admin: {
+    canBook: true, canWithdrawReagents: true, canAddReagents: true,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: true,
+    canViewLog: true, canViewDatabase: true, canExportData: true,
+    canUploadManuals: true, canAdmin: true, label: 'Administrator',
+  },
   pi: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
-    canUploadManuals: true, label: 'Principal Investigator',
+    canUploadManuals: true, canAdmin: false, label: 'Principal Investigator',
   },
   lab_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
-    canUploadManuals: true, label: 'Lab Manager',
+    canUploadManuals: true, canAdmin: false, label: 'Lab Manager',
   },
   postdoc: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
     canViewLog: true, canViewDatabase: false, canExportData: false,
-    canUploadManuals: true, label: 'Post-Doc',
+    canUploadManuals: true, canAdmin: false, label: 'Post-Doc',
   },
   phd: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, label: 'PhD Student',
+    canUploadManuals: false, canAdmin: false, label: 'PhD Student',
   },
   msc: {
     canBook: true, canWithdrawReagents: false, canAddReagents: false,
     canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, label: 'MSc Student',
+    canUploadManuals: false, canAdmin: false, label: 'MSc Student',
   },
 };
 
 // --- Mock Users ---
 
 export const mockUsers: LabUser[] = [
+  {
+    id: 'u0', email: 'admin@polimi.it', pin: '0000',
+    name: 'Admin MiMic', role: 'admin',
+    certifications: ['confocal', 'flow-cytometer', 'rt-pcr', 'spin-coater', 'plasma-cleaner', 'syringe-pump', 'plate-reader', 'western-blot', 'fluorescence', 'uv-curing', 'pressure-ctrl', 'chip-bonding'],
+    projects: ['All Projects'],
+  },
   {
     id: 'u1', email: 'marco.rasponi@polimi.it', pin: '1234',
     name: 'Marco Rasponi', role: 'pi',

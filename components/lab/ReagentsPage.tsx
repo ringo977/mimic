@@ -9,9 +9,10 @@ export default function ReagentsPage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [modal, setModal] = useState<{ type: 'withdraw' | 'add'; reagentId: string } | null>(null);
-  const [amount, setAmount] = useState(1);
+  const [amountStr, setAmountStr] = useState('1');
   const [purpose, setPurpose] = useState('');
   const [project, setProject] = useState(user.projects[0] || '');
+  const amount = amountStr === '' ? 0 : Number(amountStr);
 
   const categories = useMemo(() => {
     return ['All', ...Array.from(new Set(reagents.map(r => r.category)))];
@@ -35,7 +36,7 @@ export default function ReagentsPage() {
       addReagentStock(modal.reagentId, amount);
     }
     setModal(null);
-    setAmount(1);
+    setAmountStr('1');
     setPurpose('');
   };
 
@@ -121,7 +122,7 @@ export default function ReagentsPage() {
             <div className="flex gap-2 mt-3">
               {permissions.canWithdrawReagents && (
                 <button
-                  onClick={() => { setModal({ type: 'withdraw', reagentId: r.id }); setAmount(1); setPurpose(''); setProject(user.projects[0] || ''); }}
+                  onClick={() => { setModal({ type: 'withdraw', reagentId: r.id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
                   className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium font-manrope hover:bg-amber-100 transition-colors"
                 >
                   <Minus size={12} /> Withdraw
@@ -129,7 +130,7 @@ export default function ReagentsPage() {
               )}
               {permissions.canAddReagents && (
                 <button
-                  onClick={() => { setModal({ type: 'add', reagentId: r.id }); setAmount(1); }}
+                  onClick={() => { setModal({ type: 'add', reagentId: r.id }); setAmountStr('1'); }}
                   className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium font-manrope hover:bg-emerald-100 transition-colors"
                 >
                   <Plus size={12} /> Restock
@@ -167,8 +168,8 @@ export default function ReagentsPage() {
                   type="number"
                   min={1}
                   max={modal.type === 'withdraw' ? modalReagent.currentStock : modalReagent.maxStock - modalReagent.currentStock}
-                  value={amount}
-                  onChange={e => setAmount(Math.max(1, Number(e.target.value)))}
+                  value={amountStr}
+                  onChange={e => setAmountStr(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
                 />
               </div>
@@ -200,11 +201,12 @@ export default function ReagentsPage() {
 
               <button
                 onClick={handleSubmit}
-                className={`w-full py-3 rounded-xl font-semibold text-sm font-manrope text-white transition-colors ${
+                disabled={amount <= 0}
+                className={`w-full py-3 rounded-xl font-semibold text-sm font-manrope text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                   modal.type === 'withdraw' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'
                 }`}
               >
-                {modal.type === 'withdraw' ? `Withdraw ${amount}` : `Add ${amount}`}
+                {modal.type === 'withdraw' ? `Withdraw ${amount || ''}` : `Add ${amount || ''}`}
               </button>
             </div>
           </div>

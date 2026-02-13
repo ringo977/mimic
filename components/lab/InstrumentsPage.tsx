@@ -3,13 +3,13 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { mockInstruments, formatTime } from '@/data/lab-data';
+import { formatTime } from '@/data/lab-data';
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 - 20:00
-const categories = ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))];
 
 export default function InstrumentsPage() {
-  const { user, bookings, addBooking, removeBooking } = useLabContext();
+  const { user, bookings, addBooking, removeBooking, instruments: mockInstruments } = useLabContext();
+  const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedInstrument, setSelectedInstrument] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);

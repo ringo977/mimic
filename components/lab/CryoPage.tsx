@@ -39,7 +39,8 @@ export default function CryoPage() {
 
   // Form state
   const [newCellLine, setNewCellLine] = useState('');
-  const [newPassage, setNewPassage] = useState(0);
+  const [newPassageStr, setNewPassageStr] = useState('0');
+  const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
   const [newNotes, setNewNotes] = useState('');
 
   const boxVials = cryoVials.filter(v => v.tank === selectedTank && v.rack === selectedRack && v.box === selectedBox);
@@ -66,7 +67,7 @@ export default function CryoPage() {
     });
     setShowAddModal(false);
     setNewCellLine('');
-    setNewPassage(0);
+    setNewPassageStr('0');
     setNewNotes('');
   };
 
@@ -310,8 +311,8 @@ export default function CryoPage() {
                 <input
                   type="number"
                   min={0}
-                  value={newPassage}
-                  onChange={e => setNewPassage(Math.max(0, Number(e.target.value)))}
+                  value={newPassageStr}
+                  onChange={e => setNewPassageStr(e.target.value)}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
                 />
               </div>
