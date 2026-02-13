@@ -2,8 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument,
-  rolePermissions, mockReagents, mockInstruments, mockUsers, generateId,
+  LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
+  rolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals, generateId,
   getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
 } from '@/data/lab-data';
 
@@ -45,6 +45,11 @@ interface LabContextType {
   addInstrument: (i: Instrument) => void;
   updateInstrument: (i: Instrument) => void;
   removeInstrument: (id: string) => void;
+  // Admin: Manuals
+  manuals: Manual[];
+  addManual: (m: Manual) => void;
+  updateManual: (m: Manual) => void;
+  removeManual: (id: string) => void;
 }
 
 const LabContext = createContext<LabContextType | null>(null);
@@ -66,6 +71,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [log, setLog] = useState<LogEntry[]>([]);
   const [users, setUsers] = useState<LabUser[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [manuals, setManuals] = useState<Manual[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Load from localStorage
@@ -81,6 +87,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         setLog(data.log || getInitialLog());
         setUsers(data.users || [...mockUsers]);
         setInstruments(data.instruments || [...mockInstruments]);
+        setManuals(data.manuals || [...mockManuals]);
       } else {
         setBookings(getInitialBookings());
         setReagents([...mockReagents]);
@@ -89,6 +96,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         setLog(getInitialLog());
         setUsers([...mockUsers]);
         setInstruments([...mockInstruments]);
+        setManuals([...mockManuals]);
       }
     } catch {
       setBookings(getInitialBookings());
@@ -98,6 +106,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setLog(getInitialLog());
       setUsers([...mockUsers]);
       setInstruments([...mockInstruments]);
+      setManuals([...mockManuals]);
     }
     setLoaded(true);
   }, []);
@@ -105,8 +114,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // Save to localStorage
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bookings, reagents, cryoVials, wishlist, log, users, instruments }));
-  }, [bookings, reagents, cryoVials, wishlist, log, users, instruments, loaded]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals }));
+  }, [bookings, reagents, cryoVials, wishlist, log, users, instruments, manuals, loaded]);
 
   const addLogEntry = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
     setLog(prev => [{ ...entry, id: generateId(), timestamp: new Date().toISOString() }, ...prev]);
@@ -225,6 +234,24 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     });
   }, [user, addLogEntry]);
 
+  // --- Admin: Manuals ---
+  const addManual = useCallback((m: Manual) => {
+    setManuals(prev => [...prev, m]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Added manual ${m.title}`, category: 'manual', details: m.category });
+  }, [user, addLogEntry]);
+
+  const updateManual = useCallback((m: Manual) => {
+    setManuals(prev => prev.map(existing => existing.id === m.id ? m : existing));
+  }, []);
+
+  const removeManual = useCallback((id: string) => {
+    setManuals(prev => {
+      const m = prev.find(x => x.id === id);
+      if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category });
+      return prev.filter(x => x.id !== id);
+    });
+  }, [user, addLogEntry]);
+
   if (!loaded) {
     return (
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-50">
@@ -244,6 +271,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       users, addUser, updateUser, removeUser,
       addNewReagent, updateReagent, removeReagent,
       instruments, addInstrument, updateInstrument, removeInstrument,
+      manuals, addManual, updateManual, removeManual,
     }}>
       {children}
     </LabContext.Provider>

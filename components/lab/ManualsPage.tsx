@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { Search, FileText, BookOpen, AlertTriangle, ExternalLink } from 'lucide-react';
-import { mockManuals, formatDate } from '@/data/lab-data';
+import { useLabContext } from './LabContext';
+import { formatDate } from '@/data/lab-data';
 
 const categoryLabels = {
   protocol: { label: 'Protocols', icon: BookOpen, color: 'bg-blue-100 text-blue-700' },
@@ -11,6 +12,7 @@ const categoryLabels = {
 };
 
 export default function ManualsPage() {
+  const { manuals: mockManuals } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'protocol' | 'manual' | 'sds'>('all');
 
