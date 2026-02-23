@@ -98,7 +98,7 @@
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
- */let n=(0,r(7461).Z)("Info",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 16v-4",key:"1dtifu"}],["path",{d:"M12 8h.01",key:"e9boi3"}]])},9608:function(e,t,r){r.d(t,{Z:function(){return n}});/**
+ */let n=(0,r(7461).Z)("Info",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 16v-4",key:"1dtifu"}],["path",{d:"M12 8h.01",key:"e9boi3"}]])},5423:function(e,t,r){r.d(t,{Z:function(){return n}});/**
  * @license lucide-react v0.323.0 - ISC
  *
  * This source code is licensed under the ISC license.
