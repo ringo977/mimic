@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, X, Trash2, Info } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDate, getRowLabels } from '@/data/lab-data';
+import { useConfirm } from './ConfirmDialog';
+import { formatDate, getRowLabels, storageUnitTypes } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -23,8 +24,13 @@ function getCellLineColor(cellLine: string): string {
 }
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, dewars } = useLabContext();
-  const [selectedDewarId, setSelectedDewarId] = useState(dewars[0]?.id || 'dewar-1');
+  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, storageUnits } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+
+  // Only show grid-capable storage units for cryo
+  const gridUnits = storageUnits.filter(s => s.numRacks && s.boxesPerRack && s.gridRows && s.gridCols);
+
+  const [selectedUnitId, setSelectedUnitId] = useState(gridUnits[0]?.id || '');
   const [selectedRack, setSelectedRack] = useState(1);
   const [selectedBox, setSelectedBox] = useState(1);
   const [selectedVial, setSelectedVial] = useState<string | null>(null);
@@ -37,15 +43,20 @@ export default function CryoPage() {
   const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
   const [newNotes, setNewNotes] = useState('');
 
-  // Get current dewar config
-  const dewar = dewars.find(d => d.id === selectedDewarId) || { id: selectedDewarId, name: selectedDewarId, model: '', location: '', numRacks: 6, boxesPerRack: 5, gridRows: 5, gridCols: 5 };
-  const RACKS = Array.from({ length: dewar.numRacks }, (_, i) => i + 1);
-  const totalBoxes = dewar.boxesPerRack;
-  const ROWS = getRowLabels(dewar.gridRows);
-  const COLS = Array.from({ length: dewar.gridCols }, (_, i) => i + 1);
-  const slotsPerBox = dewar.gridRows * dewar.gridCols;
+  // Get current unit config
+  const unit = gridUnits.find(s => s.id === selectedUnitId) || gridUnits[0];
+  const numRacks = unit?.numRacks || 6;
+  const boxesPerRack = unit?.boxesPerRack || 5;
+  const gridRows = unit?.gridRows || 5;
+  const gridCols = unit?.gridCols || 5;
 
-  const boxVials = cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === selectedRack && v.box === selectedBox);
+  const RACKS = Array.from({ length: numRacks }, (_, i) => i + 1);
+  const totalBoxes = boxesPerRack;
+  const ROWS = getRowLabels(gridRows);
+  const COLS = Array.from({ length: gridCols }, (_, i) => i + 1);
+  const slotsPerBox = gridRows * gridCols;
+
+  const boxVials = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === selectedBox);
   const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
 
   const getVialAt = (row: number, col: number) => {
@@ -53,14 +64,14 @@ export default function CryoPage() {
   };
 
   const handleAddVial = () => {
-    if (!addPosition || !newCellLine) return;
+    if (!addPosition || !newCellLine || !selectedUnitId) return;
     addCryoVial({
       cellLine: newCellLine,
       passage: newPassage,
       date: new Date().toISOString().split('T')[0],
       userId: user.id,
       userName: user.name,
-      dewarId: selectedDewarId,
+      storageUnitId: selectedUnitId,
       rack: selectedRack,
       box: selectedBox,
       row: addPosition.row,
@@ -73,32 +84,46 @@ export default function CryoPage() {
     setNewNotes('');
   };
 
-  const vialsInRack = (rack: number) => cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === rack).length;
+  const vialsInRack = (rack: number) => cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === rack).length;
 
   // Cell line legend
   const usedCellLines = Array.from(new Set(cryoVials.map(v => v.cellLine)));
+
+  if (gridUnits.length === 0) {
+    return (
+      <div className="p-4 lg:p-8 max-w-6xl mx-auto">
+        <h1 className="text-lg font-bold text-gray-900 font-manrope mb-4">Cryo Storage</h1>
+        <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-100 text-center text-gray-400 font-manrope">
+          <div className="text-4xl mb-3">🧊</div>
+          <p className="text-sm">No grid-capable storage units configured.</p>
+          <p className="text-xs mt-1">Ask an admin to add a storage unit with rack/box/grid configuration.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4">
       <h1 className="text-lg font-bold text-gray-900 font-manrope">Cryo Storage</h1>
 
-      {/* Dewar Selection */}
+      {/* Storage Unit Selection */}
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {dewars.map(dw => {
-          const tankVials = cryoVials.filter(v => v.dewarId === dw.id).length;
+        {gridUnits.map(su => {
+          const info = storageUnitTypes[su.type] || { icon: '📦', label: su.type };
+          const unitVials = cryoVials.filter(v => v.storageUnitId === su.id).length;
           return (
             <button
-              key={dw.id}
-              onClick={() => { setSelectedDewarId(dw.id); setSelectedRack(1); setSelectedBox(1); setSelectedVial(null); }}
+              key={su.id}
+              onClick={() => { setSelectedUnitId(su.id); setSelectedRack(1); setSelectedBox(1); setSelectedVial(null); }}
               className={`flex-1 min-w-[140px] p-4 rounded-xl border-2 transition-all ${
-                selectedDewarId === dw.id ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
+                selectedUnitId === su.id ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
               <div className="text-center">
-                <div className="text-3xl mb-1">🧊</div>
-                <p className="text-sm font-semibold text-gray-900 font-manrope">{dw.name}</p>
-                <p className="text-[10px] text-gray-400 font-manrope">{dw.model}</p>
-                <p className="text-xs text-gray-500 font-manrope">{tankVials} vials · {dw.gridRows}×{dw.gridCols} grid</p>
+                <div className="text-3xl mb-1">{info.icon}</div>
+                <p className="text-sm font-semibold text-gray-900 font-manrope">{su.name}</p>
+                <p className="text-[10px] text-gray-400 font-manrope">{info.label} &middot; {su.temperature}</p>
+                <p className="text-xs text-gray-500 font-manrope">{unitVials} vials &middot; {su.gridRows}&times;{su.gridCols} grid</p>
               </div>
             </button>
           );
@@ -108,7 +133,7 @@ export default function CryoPage() {
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Rack Overview */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">{dewar.name} &mdash; Racks</h2>
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">{unit?.name || 'Unit'} &mdash; Racks</h2>
           <div className="grid grid-cols-3 gap-2">
             {RACKS.map(rack => {
               const count = vialsInRack(rack);
@@ -135,7 +160,7 @@ export default function CryoPage() {
           <h3 className="text-xs font-semibold text-gray-700 font-manrope mt-4 mb-2">Rack {selectedRack} &mdash; Boxes</h3>
           <div className="flex gap-2 flex-wrap">
             {Array.from({ length: totalBoxes }, (_, i) => i + 1).map(box => {
-              const boxCount = cryoVials.filter(v => v.dewarId === selectedDewarId && v.rack === selectedRack && v.box === box).length;
+              const boxCount = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === box).length;
               const isSelected = selectedBox === box;
               return (
                 <button
@@ -164,7 +189,7 @@ export default function CryoPage() {
           {/* Grid */}
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Column headers */}
-            <div className="grid bg-gray-50" style={{ gridTemplateColumns: `auto repeat(${dewar.gridCols}, 1fr)` }}>
+            <div className="grid bg-gray-50" style={{ gridTemplateColumns: `auto repeat(${gridCols}, 1fr)` }}>
               <div className="p-1" />
               {COLS.map(col => (
                 <div key={col} className="p-1 text-center text-[9px] font-bold text-gray-500 font-manrope">{col}</div>
@@ -173,13 +198,12 @@ export default function CryoPage() {
 
             {/* Rows */}
             {ROWS.map((rowLabel, rowIdx) => (
-              <div key={rowLabel} className="grid border-t border-gray-100" style={{ gridTemplateColumns: `auto repeat(${dewar.gridCols}, 1fr)` }}>
+              <div key={rowLabel} className="grid border-t border-gray-100" style={{ gridTemplateColumns: `auto repeat(${gridCols}, 1fr)` }}>
                 <div className="p-1 flex items-center justify-center text-[9px] font-bold text-gray-500 font-manrope bg-gray-50 min-w-[20px]">{rowLabel}</div>
                 {COLS.map((_, colIdx) => {
                   const vial = getVialAt(rowIdx, colIdx);
                   const isSelected = selectedVial === vial?.id;
-                  // Adjust cell size based on grid size
-                  const isLarge = dewar.gridCols > 6;
+                  const isLarge = gridCols > 6;
                   return (
                     <div key={colIdx} className={`p-0.5 aspect-square flex items-center justify-center ${isLarge ? 'min-w-[20px]' : ''}`}>
                       {vial ? (
@@ -243,8 +267,10 @@ export default function CryoPage() {
 
               <div className="space-y-2 text-xs font-manrope">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Dewar</span>
-                  <span className="text-gray-900 font-medium">{dewars.find(d => d.id === selectedVialData.dewarId)?.name || selectedVialData.dewarId}</span>
+                  <span className="text-gray-500">Storage</span>
+                  <span className="text-gray-900 font-medium">
+                    {(() => { const su = storageUnits.find(s => s.id === selectedVialData.storageUnitId); return su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : selectedVialData.storageUnitId; })()}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Position</span>
@@ -268,7 +294,7 @@ export default function CryoPage() {
 
               {permissions.canManageCryo && (
                 <button
-                  onClick={() => { removeCryoVial(selectedVialData.id); setSelectedVial(null); }}
+                  onClick={() => confirmDelete('Withdraw Vial?', `${selectedVialData.cellLine} P${selectedVialData.passage} will be removed from storage.`, () => { removeCryoVial(selectedVialData.id); setSelectedVial(null); })}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors mt-4"
                 >
                   <Trash2 size={14} /> Withdraw Vial
@@ -277,12 +303,15 @@ export default function CryoPage() {
             </div>
           ) : (
             <div className="text-center py-12 text-gray-400 font-manrope text-sm">
-              <div className="text-3xl mb-2">❄️</div>
+              <div className="text-3xl mb-2">&#10052;&#65039;</div>
               Select a vial to see details
             </div>
           )}
         </div>
       </div>
+
+      {/* ============ Full Vial Inventory with Search ============ */}
+      <VialInventory />
 
       {/* Add Vial Modal */}
       {showAddModal && addPosition && (
@@ -296,7 +325,7 @@ export default function CryoPage() {
             <div className="space-y-4">
               <div className="bg-cyan-50 rounded-xl p-3 text-sm font-manrope">
                 <span className="font-semibold">Position: </span>
-                {dewar.name} R{selectedRack} B{selectedBox} {ROWS[addPosition.row]}{addPosition.col + 1}
+                {unit?.name || 'Unit'} R{selectedRack} B{selectedBox} {ROWS[addPosition.row]}{addPosition.col + 1}
               </div>
 
               <div>
@@ -345,6 +374,120 @@ export default function CryoPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
+    </div>
+  );
+}
+
+// ============================================================
+// Full Vial Inventory — searchable, sortable table
+// ============================================================
+type VialSortKey = 'cellLine' | 'passage' | 'storage' | 'position' | 'userName' | 'date';
+
+function VialInventory() {
+  const { cryoVials, removeCryoVial, storageUnits, permissions } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState<VialSortKey>('date');
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const toggleSort = (key: VialSortKey) => {
+    if (sortKey === key) { setSortAsc(!sortAsc); } else { setSortKey(key); setSortAsc(true); }
+  };
+
+  const getUnitName = (id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
+  const getPositionStr = (v: typeof cryoVials[0]) => {
+    const su = storageUnits.find(s => s.id === v.storageUnitId);
+    const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
+    return `R${v.rack} B${v.box} ${rows[v.row] || '?'}${v.col + 1}`;
+  };
+
+  const filtered = useMemo(() => {
+    let list = [...cryoVials];
+    if (search) {
+      const q = search.toLowerCase();
+      list = list.filter(v =>
+        v.cellLine.toLowerCase().includes(q) ||
+        v.userName.toLowerCase().includes(q) ||
+        v.notes.toLowerCase().includes(q) ||
+        getUnitName(v.storageUnitId).toLowerCase().includes(q)
+      );
+    }
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'cellLine': cmp = a.cellLine.localeCompare(b.cellLine); break;
+        case 'passage': cmp = a.passage - b.passage; break;
+        case 'storage': cmp = getUnitName(a.storageUnitId).localeCompare(getUnitName(b.storageUnitId)); break;
+        case 'position': cmp = getPositionStr(a).localeCompare(getPositionStr(b)); break;
+        case 'userName': cmp = a.userName.localeCompare(b.userName); break;
+        case 'date': cmp = a.date.localeCompare(b.date); break;
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+    return list;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cryoVials, search, sortKey, sortAsc]);
+
+  const SortHeader = ({ label, k }: { label: string; k: VialSortKey }) => (
+    <th className="px-3 py-2.5 text-left font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900 group" onClick={() => toggleSort(k)}>
+      <span className="inline-flex items-center gap-0.5">{label}
+        {sortKey === k ? (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />) : <ChevronDown size={10} className="opacity-0 group-hover:opacity-30" />}
+      </span>
+    </th>
+  );
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+        <h2 className="text-sm font-semibold text-gray-900 font-manrope whitespace-nowrap">All Vials ({cryoVials.length})</h2>
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search cell line, user, notes..."
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+        </div>
+        {search && <p className="text-[11px] text-gray-400 font-manrope">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs font-manrope">
+          <thead><tr className="bg-gray-50 border-b border-gray-200">
+            <SortHeader label="Cell Line" k="cellLine" />
+            <SortHeader label="P" k="passage" />
+            <SortHeader label="Storage" k="storage" />
+            <SortHeader label="Position" k="position" />
+            <SortHeader label="Stored By" k="userName" />
+            <SortHeader label="Date" k="date" />
+            <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Notes</th>
+            {permissions.canManageCryo && <th className="px-3 py-2.5 text-right font-semibold text-gray-700"></th>}
+          </tr></thead>
+          <tbody className="divide-y divide-gray-100">
+            {filtered.map(v => (
+              <tr key={v.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2 font-medium text-gray-900">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${getCellLineColor(v.cellLine)}`} />
+                    {v.cellLine}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-gray-600">P{v.passage}</td>
+                <td className="px-3 py-2 text-gray-500">{getUnitName(v.storageUnitId)}</td>
+                <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>
+                <td className="px-3 py-2 text-gray-500">{v.userName}</td>
+                <td className="px-3 py-2 text-gray-500">{v.date}</td>
+                <td className="px-3 py-2 text-gray-500 max-w-[150px] truncate">{v.notes || '—'}</td>
+                {permissions.canManageCryo && (
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => confirmDelete('Withdraw Vial?', `${v.cellLine} P${v.passage} will be removed from storage.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                  </td>
+                )}
+              </tr>
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No vials found</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <ConfirmDialog />
     </div>
   );
 }

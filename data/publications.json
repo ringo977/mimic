@@ -1827,25 +1827,6 @@
       "type": "Journal Article"
     },
     {
-      "id": 87,
-      "authors": [
-        "Gilbert, R.J.",
-        "Park, H.",
-        "Rasponi, M.",
-        "Redaelli, A.",
-        "Gellman, B.",
-        "Dasse, K.A.",
-        "Thorsen, T."
-      ],
-      "title": "Computational and functional evaluation of a microfluidic blood flow device",
-      "journal": "ASAIO Journal",
-      "year": 2007,
-      "volume": "53(4)",
-      "pages": "447-455",
-      "doi": "10.1097/MAT.0b013e3180a5e8ab",
-      "type": "Journal Article"
-    },
-    {
       "id": 88,
       "authors": [
         "Ferrari, E.",
@@ -1970,6 +1951,195 @@
       "pages": "25-38",
       "doi": "10.1007/978-1-4939-2510-0",
       "type": "Book Chapter"
+    },
+    {
+      "id": 96,
+      "authors": [
+        "Naik, N.N.",
+        "Vadloori, B.",
+        "Poosala, S.",
+        "Srivastava, P.",
+        "Coecke, S.",
+        "Smith, A.",
+        "Akhtar, A.",
+        "Roper, C.",
+        "Radhakrishnan, S.",
+        "Bhyravbhatla, B.",
+        "Damle, M.",
+        "Pulla, V.K.",
+        "Hackethal, J.",
+        "Horland, R.",
+        "Li, A.P.",
+        "Pati, F.",
+        "Singh, M.S.",
+        "Occhetta, P.",
+        "Bisht, R.",
+        "Dandekar, P.",
+        "Bhagavatula, K.",
+        "Pajkrt, D.",
+        "Johnson, M.",
+        "Weber, T.",
+        "Huang, J.",
+        "Hysenaj, L.",
+        "Mallar, B.",
+        "Ramray, B.",
+        "Dixit, S.",
+        "Joshi, S.",
+        "Kulkarni, M."
+      ],
+      "title": "Advances in Animal Models and Cutting-Edge Research in Alternatives: Proceedings of the Third International Conference on 3Rs Research and Progress, Vishakhapatnam, 2022",
+      "journal": "Alternatives to Laboratory Animals",
+      "year": 2023,
+      "volume": "51(4)",
+      "pages": "263-288",
+      "doi": "10.1177/02611929231180428",
+      "type": "Journal Article"
+    },
+    {
+      "id": 97,
+      "authors": [
+        "Chawla, S.",
+        "Mainardi, A.",
+        "Majumder, N.",
+        "Dönges, L.",
+        "Kumar, B.",
+        "Occhetta, P.",
+        "Martin, I.",
+        "Egloff, C.",
+        "Ghosh, S.",
+        "Bandyopadhyay, A.",
+        "Barbero, A."
+      ],
+      "title": "Chondrocyte Hypertrophy in Osteoarthritis: Mechanistic Studies and Models for the Identification of New Therapeutic Strategies",
+      "journal": "Cells",
+      "year": 2022,
+      "volume": "11(24)",
+      "pages": "4034",
+      "doi": "10.3390/cells11244034",
+      "type": "Journal Article"
+    },
+    {
+      "id": 98,
+      "authors": [
+        "Mainardi, A.",
+        "Cambria, E.",
+        "Occhetta, P.",
+        "Martin, I.",
+        "Barbero, A.",
+        "Schaeren, S.",
+        "Mehrkens, A.",
+        "Krupkova, O."
+      ],
+      "title": "Intervertebral Disc-on-a-Chip as Advanced In Vitro Model for Mechanobiology Research and Drug Testing: A Review and Perspective",
+      "journal": "Frontiers in Bioengineering and Biotechnology",
+      "year": 2022,
+      "volume": "9",
+      "pages": "826867",
+      "doi": "10.3389/fbioe.2021.826867",
+      "type": "Journal Article"
+    },
+    {
+      "id": 99,
+      "authors": [
+        "Rua, L.A.",
+        "Mumme, M.",
+        "Manferdini, C.",
+        "Darwiche, S.",
+        "Khalil, A.M.",
+        "Hilpert, M.",
+        "Buchner, D.A.",
+        "Lisignoli, G.",
+        "Occhetta, P.",
+        "von Rechenberg, B.",
+        "Haug, M.D.",
+        "Schaefer, D.J.",
+        "Jakob, M.",
+        "Caplan, A.I.",
+        "Martin, I.",
+        "Barbero, A.",
+        "Pelttari, K."
+      ],
+      "title": "Engineered nasal cartilage for the repair of osteoarthritic knee cartilage defects",
+      "journal": "Science Translational Medicine",
+      "year": 2021,
+      "volume": "13(609)",
+      "pages": "eaaz4499",
+      "doi": "10.1126/scitranslmed.aaz4499",
+      "type": "Journal Article"
+    },
+    {
+      "id": 100,
+      "authors": [
+        "Chawla, S.",
+        "Berkelaar, M.H.M.",
+        "Dasen, B.",
+        "Halleux, C.",
+        "Guth-Gundel, S.",
+        "Kramer, I.",
+        "Ghosh, S.",
+        "Martin, I.",
+        "Barbero, A.",
+        "Occhetta, P."
+      ],
+      "title": "Blockage of bone morphogenetic protein signalling counteracts hypertrophy in a human osteoarthritic micro-cartilage model",
+      "journal": "Journal of Cell Science",
+      "year": 2020,
+      "volume": "133(23)",
+      "pages": "jcs249094",
+      "doi": "10.1242/jcs.249094",
+      "type": "Journal Article"
+    },
+    {
+      "id": 101,
+      "authors": [
+        "Stüdle, C.",
+        "Occhetta, P.",
+        "Geier, F.",
+        "Mehrkens, A.",
+        "Barbero, A.",
+        "Martin, I."
+      ],
+      "title": "Challenges Toward the Identification of Predictive Markers for Human Mesenchymal Stromal Cells Chondrogenic Potential",
+      "journal": "Stem Cells Translational Medicine",
+      "year": 2019,
+      "volume": "8(2)",
+      "pages": "194-204",
+      "doi": "10.1002/sctm.18-0147",
+      "type": "Journal Article"
+    },
+    {
+      "id": 102,
+      "authors": [
+        "Haumer, A.",
+        "Bourgine, P.E.",
+        "Occhetta, P.",
+        "Born, G.",
+        "Tasso, R.",
+        "Martin, I."
+      ],
+      "title": "Delivery of cellular factors to regulate bone healing",
+      "journal": "Advanced Drug Delivery Reviews",
+      "year": 2018,
+      "volume": "129",
+      "pages": "285-294",
+      "doi": "10.1016/j.addr.2018.01.010",
+      "type": "Journal Article"
+    },
+    {
+      "id": 103,
+      "authors": [
+        "Occhetta, P.",
+        "Stüdle, C.",
+        "Barbero, A.",
+        "Martin, I."
+      ],
+      "title": "Learn, simplify and implement: developmental re-engineering strategies for cartilage repair",
+      "journal": "Swiss Medical Weekly",
+      "year": 2016,
+      "volume": "146",
+      "pages": "w14346",
+      "doi": "10.4414/smw.2016.14346",
+      "type": "Journal Article"
     }
   ]
 }

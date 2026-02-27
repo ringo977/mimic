@@ -1,6 +1,8 @@
 import { Metadata } from 'next';
+import Link from 'next/link';
 import ResearchCard from '@/components/ResearchCard';
 import researchData from '@/data/research.json';
+import { ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Research | MiMic Lab',
@@ -9,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function ResearchPage() {
   return (
-    <div className="relative z-10 pt-32 pb-20">
+    <div className="relative z-10 pb-20">
       {/* Header */}
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">
@@ -28,7 +30,7 @@ export default function ResearchPage() {
         <div className="container-polimi">
           <div className="max-w-4xl mx-auto text-center mb-16">
             <h2 className="font-frank font-bold text-3xl text-polimi-blue-heritage mb-6">
-              Research Focus
+              Research Topics
             </h2>
             <p className="text-lg text-gray-700 leading-relaxed">
               Our laboratory conducts cutting-edge research at the intersection of bioengineering, 
@@ -47,7 +49,8 @@ export default function ResearchPage() {
                 description={project.description}
                 tags={project.tags}
                 image={project.image}
-                link={`/research/${project.id}`}
+                video={(project as any).video}
+                link={`/research/${project.slug}`}
               />
             ))}
           </div>
@@ -74,54 +77,23 @@ export default function ResearchPage() {
         </div>
       </section>
 
-      {/* Facilities */}
+      {/* Technology & Facilities CTA */}
       <section className="py-20 bg-white">
-        <div className="container-polimi">
-          <h2 className="font-frank font-bold text-3xl text-polimi-blue-heritage mb-12 text-center">
-            Research Facilities
+        <div className="container-polimi text-center">
+          <h2 className="font-frank font-bold text-3xl text-polimi-blue-heritage mb-6">
+            Our Engineering Platforms
           </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            <div className="bg-gray-50 rounded-xl p-8">
-              <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
-                Microfabrication Lab
-              </h3>
-              <p className="text-gray-700">
-                State-of-the-art cleanroom facilities equipped with photolithography, 
-                soft lithography, and 3D printing capabilities for device fabrication.
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-8">
-              <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
-                Cell Culture Facilities
-              </h3>
-              <p className="text-gray-700">
-                Dedicated cell culture rooms with incubators, biosafety cabinets, 
-                and equipment for maintaining various cell lines and primary cultures.
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-8">
-              <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
-                Imaging Suite
-              </h3>
-              <p className="text-gray-700">
-                Advanced microscopy systems including confocal, fluorescence, and 
-                live-cell imaging platforms for real-time monitoring.
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-8">
-              <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
-                Analytical Laboratory
-              </h3>
-              <p className="text-gray-700">
-                Comprehensive analytical equipment for biochemical assays, 
-                molecular biology, and characterization of biological samples.
-              </p>
-            </div>
-          </div>
+          <p className="text-lg text-gray-700 leading-relaxed max-w-3xl mx-auto mb-8">
+            Discover the core technologies, fabrication methods, and state-of-the-art facilities 
+            that enable our research in organ-on-chip and microphysiological systems.
+          </p>
+          <Link
+            href="/technology-facilities"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-polimi-bright-blue text-white font-semibold rounded-lg hover:bg-polimi-blue-heritage transition-colors font-manrope"
+          >
+            See Technology &amp; Facilities
+            <ArrowRight size={18} />
+          </Link>
         </div>
       </section>
     </div>

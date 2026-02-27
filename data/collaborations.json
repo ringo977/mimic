@@ -2,82 +2,96 @@
   "academic": [
     {
       "id": 1,
-      "name": "Massachusetts Institute of Technology",
-      "location": "Cambridge, MA, USA",
-      "description": "Collaboration on microfluidic device design and multi-MiMic platforms with Prof. Linda Griffith's lab.",
-      "logo": "/images/partners/mit.png"
+      "name": "Lund University",
+      "location": "Lund, Sweden",
+      "abbreviation": "LU",
+      "description": "Collaboration with Prof. Paul Bourgine on advanced bone marrow modeling within the EU-funded BuonMarrow project, developing innovative in vitro platforms for hematopoietic stem cell research.",
+      "website": "https://www.lunduniversity.lu.se/"
     },
     {
       "id": 2,
-      "name": "ETH Zurich",
-      "location": "Zurich, Switzerland",
-      "description": "Joint research on biosensor integration and real-time monitoring in MiMic systems.",
-      "logo": "/images/partners/eth.png"
+      "name": "TU Delft",
+      "location": "Delft, The Netherlands",
+      "abbreviation": "TUD",
+      "description": "Partnership with Prof. Massimo Mastrangeli within the Horizon Europe PHOENIX project, jointly developing next-generation organ-on-chip platforms for neuro-muscular and cardiac disease modeling.",
+      "website": "https://www.tudelft.nl/"
     },
     {
       "id": 3,
-      "name": "University of Cambridge",
-      "location": "Cambridge, UK",
-      "description": "Partnership on iPSC-derived tissue models and cardiac electrophysiology studies.",
-      "logo": "/images/partners/cambridge.png"
+      "name": "IBEC — Institute for Bioengineering of Catalonia",
+      "location": "Barcelona, Spain",
+      "abbreviation": "IBEC",
+      "description": "Collaboration with Prof. Javier Ramón-Azcón in the BuonMarrow project, combining microfluidic and bioengineering expertise to advance bone marrow-on-chip technologies.",
+      "website": "https://ibecbarcelona.eu/"
     },
     {
       "id": 4,
-      "name": "Harvard Medical School",
-      "location": "Boston, MA, USA",
-      "description": "Collaborative projects on disease modeling and drug discovery using MiMic technology.",
-      "logo": "/images/partners/harvard.png"
-    },
-    {
-      "id": 5,
       "name": "Imperial College London",
-      "location": "London, UK",
-      "description": "Joint research on lung MiMic models for respiratory disease and infection studies.",
-      "logo": "/images/partners/imperial.png"
+      "location": "London, United Kingdom",
+      "abbreviation": "ICL",
+      "description": "Joint research with Prof. Anna Randi on vascularized organ-on-chip models within a UK Medical Research Council (MRC)-funded project, focusing on endothelial biology and vascular tissue engineering.",
+      "logo": "/images/partners/imperial.png",
+      "website": "https://www.imperial.ac.uk/"
+    }
+  ],
+  "research": [
+    {
+      "id": 1,
+      "name": "Humanitas Research Hospital",
+      "location": "Rozzano (Milan), Italy",
+      "abbreviation": "HRI",
+      "description": "Long-standing collaboration on liver and cardiac disease modeling. Joint projects with Prof. Ana Lleo De Nalda on cholangiocarcinoma-on-chip, and with Prof. Elisa Di Pasquale on cardiac models within the Horizon Europe PHOENIX project.",
+      "website": "https://www.humanitas.it/"
     },
     {
-      "id": 6,
-      "name": "National University of Singapore",
-      "location": "Singapore",
-      "description": "Collaboration on liver-on-chip platforms and drug metabolism studies.",
-      "logo": "/images/partners/nus.png"
+      "id": 2,
+      "name": "CNR @ San Raffaele Hospital",
+      "location": "Milan, Italy",
+      "abbreviation": "CNR",
+      "description": "Collaboration with Dr. Vania Broccoli at the Institute of Neuroscience (CNR) within San Raffaele Hospital, focused on neuromuscular modeling and neurodegenerative disease research using organ-on-chip platforms.",
+      "website": "https://www.cnr.it/"
+    },
+    {
+      "id": 3,
+      "name": "IEO — European Institute of Oncology",
+      "location": "Milan, Italy",
+      "abbreviation": "IEO",
+      "description": "Key partnership on immuno-oncology and tumor microenvironment modeling. Collaboration with Prof. Luigi Nezi on the gut-on-chip platform published in Nature Biomedical Engineering, and with Prof. Luisa Lanfrancone on tumor-on-chip models.",
+      "website": "https://www.ieo.it/"
     }
   ],
   "industry": [
     {
       "id": 1,
-      "name": "Emulate Bio",
-      "sector": "Biotechnology",
-      "description": "Partnership on commercialization of MiMic platforms and validation studies.",
-      "logo": "/images/partners/emulate.png"
+      "name": "BiomimX",
+      "sector": "Organ-on-Chip Technology",
+      "abbreviation": "BX",
+      "description": "Spin-off company of Politecnico di Milano co-founded by MiMic Lab. BiomimX develops and commercializes the patented uBeat technology — mechanically active organ-on-chip platforms for drug discovery and preclinical testing.",
+      "website": "https://www.biomimx.com/"
     },
     {
       "id": 2,
-      "name": "Roche Pharmaceuticals",
+      "name": "Chiesi Farmaceutici",
       "sector": "Pharmaceuticals",
-      "description": "Collaborative drug testing and toxicity screening using our MiMic models.",
-      "logo": "/images/partners/roche.png"
+      "abbreviation": "CF",
+      "description": "Collaboration on lung-on-chip models for the study of chronic respiratory diseases including COPD and asthma, combining Chiesi's pharmaceutical expertise with MiMic Lab's microfluidic platform technologies.",
+      "website": "https://www.chiesi.com/"
     },
     {
       "id": 3,
-      "name": "AstraZeneca",
-      "sector": "Pharmaceuticals",
-      "description": "Joint projects on cardiac safety testing and liver toxicity assessment platforms.",
-      "logo": "/images/partners/astrazeneca.png"
+      "name": "Micronit",
+      "sector": "Microfluidics",
+      "abbreviation": "MN",
+      "description": "Dutch leader in the development of microfluidic devices and partner in the Horizon Europe PHOENIX project. Micronit provides cutting-edge microfabrication capabilities for next-generation organ-on-chip platforms.",
+      "website": "https://www.micronit.com/"
     },
     {
       "id": 4,
-      "name": "TissUse GmbH",
-      "sector": "Biotechnology",
-      "description": "Technology exchange on multi-organ chips and microfluidic pump systems.",
-      "logo": "/images/partners/tissuse.png"
-    },
-    {
-      "id": 5,
-      "name": "Pfizer",
-      "sector": "Pharmaceuticals",
-      "description": "Research partnership on MiMic models for early-stage drug development.",
-      "logo": "/images/partners/pfizer.png"
+      "name": "Multi Channel Systems (MCS)",
+      "sector": "Electrophysiology",
+      "abbreviation": "MCS",
+      "description": "World leader in electrophysiology recording systems and partner in the Horizon Europe PHOENIX project. MCS provides advanced multi-electrode array technology for real-time functional readouts in organ-on-chip models.",
+      "website": "https://www.multichannelsystems.com/"
     }
   ]
 }

@@ -3,17 +3,8 @@
 import { motion } from 'framer-motion';
 import { ExternalLink, FileText } from 'lucide-react';
 import Card from './ui/Card';
-
-interface Publication {
-  id: number;
-  authors: string[];
-  title: string;
-  journal: string;
-  year: number;
-  doi?: string;
-  pdf?: string;
-  type: string;
-}
+import CiteButton from './CiteButton';
+import { Publication } from '@/lib/citations';
 
 interface PublicationCardProps {
   publication: Publication;
@@ -53,31 +44,36 @@ export default function PublicationCard({ publication }: PublicationCardProps) {
 
         <p className="text-gray-700 font-medium text-sm mb-4 italic">
           {publication.journal}
+          {publication.volume && `, ${publication.volume}`}
+          {publication.pages && `, ${publication.pages}`}
         </p>
 
-        <div className="flex items-center gap-4 pt-4 border-t border-gray-100">
-          {publication.doi && (
-            <a
-              href={`https://doi.org/${publication.doi}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium transition-colors"
-            >
-              <ExternalLink size={16} className="mr-1" />
-              DOI
-            </a>
-          )}
-          {publication.pdf && (
-            <a
-              href={publication.pdf}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium transition-colors"
-            >
-              <FileText size={16} className="mr-1" />
-              PDF
-            </a>
-          )}
+        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-4">
+            {publication.doi && (
+              <a
+                href={`https://doi.org/${publication.doi}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium transition-colors"
+              >
+                <ExternalLink size={16} className="mr-1" />
+                DOI
+              </a>
+            )}
+            {publication.pdf && (
+              <a
+                href={publication.pdf}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium transition-colors"
+              >
+                <FileText size={16} className="mr-1" />
+                PDF
+              </a>
+            )}
+          </div>
+          <CiteButton publication={publication} />
         </div>
       </Card>
     </motion.div>

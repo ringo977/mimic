@@ -3,52 +3,80 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download,
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
-  Upload, FileText, Container } from 'lucide-react';
+  Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
+  DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { LabUser, UserRole, Reagent, Instrument, Manual, Dewar, Project, Certification,
-  rolePermissions, generateId, formatDate, formatTime, getRowLabels } from '@/data/lab-data';
+import { useConfirm } from './ConfirmDialog';
+import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType,
+  storageUnitTypes, Project, Certification, Location,
+  ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
+  isRackBased, isShelfBased,
+  rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels } from '@/data/lab-data';
+import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog } from '@/lib/supabase-data';
 
-type Tab = 'users' | 'projects' | 'certifications' | 'instruments' | 'dewars' | 'reagents' | 'cryo' | 'manuals' | 'calendar';
+type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'backup';
 
 export default function AdminPage() {
   const ctx = useLabContext();
   const [activeTab, setActiveTab] = useState<Tab>('users');
 
-  const tabs: { id: Tab; label: string; icon: React.ElementType; count?: number }[] = [
-    { id: 'users', label: 'Users', icon: Users, count: ctx.users.length },
-    { id: 'projects', label: 'Projects', icon: FolderKanban, count: ctx.projects.length },
-    { id: 'certifications', label: 'Certifications', icon: Award, count: ctx.certifications.length },
-    { id: 'instruments', label: 'Instruments', icon: Microscope, count: ctx.instruments.length },
-    { id: 'dewars', label: 'Dewars', icon: Container, count: ctx.dewars.length },
-    { id: 'reagents', label: 'Reagents', icon: FlaskConical, count: ctx.reagents.length },
-    { id: 'cryo', label: 'Cryo Vials', icon: Snowflake, count: ctx.cryoVials.length },
-    { id: 'manuals', label: 'Manuals', icon: BookOpen, count: ctx.manuals.length },
-    { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+  const tabGroups: { label: string; tabs: { id: Tab; label: string; icon: React.ElementType; count?: number }[] }[] = [
+    { label: 'Organization', tabs: [
+      { id: 'users', label: 'Users', icon: Users, count: ctx.users.length },
+      { id: 'projects', label: 'Projects', icon: FolderKanban, count: ctx.projects.length },
+      { id: 'certifications', label: 'Certs', icon: Award, count: ctx.certifications.length },
+    ]},
+    { label: 'Infrastructure', tabs: [
+      { id: 'locations', label: 'Locations', icon: MapPin, count: ctx.locations.length },
+      { id: 'instruments', label: 'Instruments', icon: Microscope, count: ctx.instruments.length },
+      { id: 'storageUnits', label: 'Storage', icon: Warehouse, count: ctx.storageUnits.length },
+    ]},
+    { label: 'Inventory', tabs: [
+      { id: 'reagents', label: 'Reagents', icon: FlaskConical, count: ctx.reagents.length },
+      { id: 'cryo', label: 'Cryo', icon: Snowflake, count: ctx.cryoVials.length },
+    ]},
+    { label: 'Docs & Schedule', tabs: [
+      { id: 'manuals', label: 'Manuals', icon: BookOpen, count: ctx.manuals.length },
+      { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+    ]},
+    { label: 'System', tabs: [
+      { id: 'backup', label: 'Backup', icon: HardDrive },
+    ]},
   ];
 
   return (
     <div className="p-4 lg:p-8 max-w-7xl mx-auto space-y-4">
       <h1 className="text-lg font-bold text-gray-900 font-manrope">Admin Panel</h1>
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        {tabs.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium font-manrope whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              <Icon size={14} /> {tab.label}{tab.count !== undefined ? ` (${tab.count})` : ''}
-            </button>
-          );
-        })}
+      {/* Grouped tabs - wraps on desktop, scrollable on mobile */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2 pb-1">
+        {tabGroups.map(group => (
+          <div key={group.label} className="flex items-center gap-1">
+            <span className="text-[9px] font-semibold text-gray-400 font-manrope uppercase tracking-wider mr-1 hidden sm:block">{group.label}</span>
+            <div className="flex gap-1">
+              {group.tabs.map(tab => {
+                const Icon = tab.icon;
+                return (
+                  <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium font-manrope whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-[#102C53] text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                    <Icon size={12} /> {tab.label}{tab.count !== undefined ? <span className="opacity-70 ml-0.5">{tab.count}</span> : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
       {activeTab === 'users' && <UsersTab />}
       {activeTab === 'projects' && <ProjectsTab />}
       {activeTab === 'certifications' && <CertificationsTab />}
+      {activeTab === 'locations' && <LocationsTab />}
       {activeTab === 'instruments' && <InstrumentsTab />}
-      {activeTab === 'dewars' && <DewarsTab />}
+      {activeTab === 'storageUnits' && <StorageUnitsTab />}
       {activeTab === 'reagents' && <ReagentsTab />}
       {activeTab === 'cryo' && <CryoTab />}
       {activeTab === 'manuals' && <ManualsTab />}
       {activeTab === 'calendar' && <CalendarTab />}
+      {activeTab === 'backup' && <BackupTab />}
     </div>
   );
 }
@@ -87,16 +115,62 @@ const btnPrimary = "w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold
 const btnExport = "flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium font-manrope hover:bg-gray-200";
 const btnAdd = "flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-xs font-medium font-manrope hover:bg-[#1a3d6e]";
 
+// --- Sortable table helpers ---
+function useSort<T>(data: T[], defaultKey: string, accessors: Record<string, (item: T) => string | number>) {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortAsc, setSortAsc] = useState(true);
+  const toggle = (key: string) => { if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(true); } };
+  const sorted = useMemo(() => {
+    const fn = accessors[sortKey];
+    if (!fn) return data;
+    return [...data].sort((a, b) => {
+      const va = fn(a), vb = fn(b);
+      const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb));
+      return sortAsc ? cmp : -cmp;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, sortKey, sortAsc]);
+  return { sorted, sortKey, sortAsc, toggle };
+}
+
+function SortTh({ label, k, sortKey, sortAsc, toggle, align }: { label: string; k: string; sortKey: string; sortAsc: boolean; toggle: (k: string) => void; align?: 'right' }) {
+  return (
+    <th className={`px-3 py-2.5 font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900 group ${align === 'right' ? 'text-right' : 'text-left'}`} onClick={() => toggle(k)}>
+      <span className="inline-flex items-center gap-0.5">{label}
+        {sortKey === k ? (sortAsc ? <ChevronUp size={10} /> : <ChevronDown size={10} />) : <ChevronDown size={10} className="opacity-0 group-hover:opacity-30" />}
+      </span>
+    </th>
+  );
+}
+
 // ============================================================
-// Users Tab (with selectable projects & certifications)
+// Users Tab
 // ============================================================
 function UsersTab() {
-  const { users, addUser, updateUser, removeUser, projects, certifications } = useLabContext();
+  const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<LabUser | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const roles: UserRole[] = ['admin', 'pi', 'lab_manager', 'postdoc', 'phd', 'msc'];
-  const empty = (): LabUser => ({ id: generateId(), email: '', pin: '0000', name: '', role: 'phd', certifications: [], projects: [] });
+  const roles: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
+  const affiliations: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'External'];
+  const empty = (): LabUser => ({ id: generateId(), email: '', name: '', abbreviation: '', role: 'phd', affiliation: 'DEIB', isAdmin: false, certifications: [], projects: [] });
   const [form, setForm] = useState<LabUser>(empty());
+  const acc = useMemo(() => ({ name: (u: LabUser) => u.name, email: (u: LabUser) => u.email, role: (u: LabUser) => u.role, affiliation: (u: LabUser) => u.affiliation, admin: (u: LabUser) => u.isAdmin ? 1 : 0, certs: (u: LabUser) => u.certifications.length, projects: (u: LabUser) => u.projects.length }), []);
+  const { sorted, sortKey, sortAsc, toggle } = useSort(users, 'name', acc);
+
+  const currentIsPi = currentUser.role === 'pi';
+
+  const canToggleAdmin = (target: LabUser) => {
+    if (currentIsPi) return true;
+    // Non-PI admins cannot change admin flag on PIs
+    if (target.role === 'pi') return false;
+    return true;
+  };
+
+  const handleToggleAdmin = (target: LabUser) => {
+    if (!canToggleAdmin(target)) return;
+    updateUser({ ...target, isAdmin: !target.isAdmin });
+  };
 
   const open = (u?: LabUser) => { setForm(u ? { ...u } : empty()); setEditing(u || null); setShowForm(true); };
   const save = () => { if (!form.name || !form.email) return; editing ? updateUser(form) : addUser(form); setShowForm(false); };
@@ -108,31 +182,48 @@ function UsersTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{users.length} users</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Name','Email','Role','PIN','Certifications','Projects'], users.map(u => [u.name,u.email,u.role,u.pin,u.certifications.join('; '),u.projects.join('; ')]), 'users')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','ID','Email','Role','Affiliation','Admin','Certifications','Projects'], users.map(u => [u.name,u.abbreviation || generateAbbreviation(u.name),u.email,u.role,u.affiliation,u.isAdmin ? 'Yes' : 'No',u.certifications.join('; '),u.projects.join('; ')]), 'users')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add User</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Name</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Email</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Role</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">PIN</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Certs</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Projects</th>
+          <SortTh label="Name" k="name" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">ID</th>
+          <SortTh label="Email" k="email" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Role" k="role" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Affiliation" k="affiliation" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Admin" k="admin" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Certs" k="certs" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Projects" k="projects" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {users.map(u => (
+          {sorted.map(u => (
             <tr key={u.id} className="hover:bg-gray-50">
               <td className="px-3 py-2 font-medium text-gray-900">{u.name}</td>
+              <td className="px-3 py-2"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#102C53] text-white text-[10px] font-bold">{u.abbreviation || generateAbbreviation(u.name)}</span></td>
               <td className="px-3 py-2 text-gray-600">{u.email}</td>
               <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">{rolePermissions[u.role].label}</span></td>
-              <td className="px-3 py-2 text-gray-500 font-mono">{u.pin}</td>
+              <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium">{u.affiliation}</span></td>
+              <td className="px-3 py-2">
+                <button
+                  onClick={() => handleToggleAdmin(u)}
+                  disabled={!canToggleAdmin(u)}
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all ${
+                    u.isAdmin
+                      ? 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                      : 'bg-gray-100 text-gray-300 hover:bg-gray-200'
+                  } ${!canToggleAdmin(u) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  title={u.isAdmin ? 'Admin access granted' : 'No admin access'}
+                >
+                  <span className="text-[10px] font-bold">{u.isAdmin ? '★' : '—'}</span>
+                </button>
+              </td>
               <td className="px-3 py-2 text-gray-500">{u.certifications.length}</td>
               <td className="px-3 py-2 text-gray-500 max-w-[150px] truncate">{u.projects.join(', ')}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => open(u)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => removeUser(u.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => confirmDelete('Delete User?', `"${u.name}" will be permanently removed.`, () => removeUser(u.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
@@ -141,14 +232,29 @@ function UsersTab() {
       {showForm && <Modal title={editing ? 'Edit User' : 'Add User'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Full Name"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
+            <Field label="Full Name"><input value={form.name} onChange={e => { const name = e.target.value; const autoAbbr = generateAbbreviation(name); setForm(f => ({ ...f, name, abbreviation: f.abbreviation === '' || f.abbreviation === generateAbbreviation(f.name) ? autoAbbr : f.abbreviation })); }} className={inputCls} /></Field>
             <Field label="Email"><input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className={inputCls} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Role"><select value={form.role} onChange={e => setForm({...form, role: e.target.value as UserRole})} className={inputCls}>{roles.map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}</select></Field>
-            <Field label="PIN"><input maxLength={4} value={form.pin} onChange={e => setForm({...form, pin: e.target.value})} className={inputCls + ' font-mono tracking-widest'} /></Field>
+            <Field label="Affiliation"><select value={form.affiliation} onChange={e => setForm({...form, affiliation: e.target.value as UserAffiliation})} className={inputCls}>{affiliations.map(a => <option key={a} value={a}>{a}</option>)}</select></Field>
           </div>
-          {/* Projects - checkboxes */}
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isAdmin}
+                onChange={e => setForm({...form, isAdmin: e.target.checked})}
+                disabled={!currentIsPi && form.role === 'pi'}
+                className="w-4 h-4 rounded border-gray-300 text-amber-500"
+              />
+              <span className="text-sm font-manrope text-gray-700">Admin access</span>
+            </label>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-400 font-manrope">ID</span>
+              <input value={form.abbreviation} onChange={e => setForm({...form, abbreviation: e.target.value.toUpperCase().slice(0, 4)})} maxLength={4} className="w-14 px-1.5 py-1 border border-gray-200 rounded-lg text-xs text-center font-bold tracking-wider font-manrope focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none" />
+            </div>
+          </div>
           <Field label="Projects">
             <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-2 border border-gray-200 rounded-xl">
               {projects.map(p => (
@@ -159,7 +265,6 @@ function UsersTab() {
               ))}
             </div>
           </Field>
-          {/* Certifications - checkboxes */}
           <Field label="Certifications">
             <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-xl">
               {certifications.map(c => (
@@ -173,15 +278,17 @@ function UsersTab() {
           <button onClick={save} disabled={!form.name||!form.email} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add User'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
 
 // ============================================================
-// Projects Tab (standalone CRUD)
+// Projects Tab
 // ============================================================
 function ProjectsTab() {
   const { projects, addProject, updateProject, removeProject, users } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Project | null>(null);
   const [showForm, setShowForm] = useState(false);
   const empty = (): Project => ({ id: generateId(), name: '', description: '', status: 'active' });
@@ -189,11 +296,12 @@ function ProjectsTab() {
   const open = (p?: Project) => { setForm(p ? { ...p } : empty()); setEditing(p || null); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
-    // Use name as ID for new projects (matching user.projects convention)
     const toSave = editing ? form : { ...form, id: form.name };
     editing ? updateProject(toSave) : addProject(toSave);
     setShowForm(false);
   };
+  const acc = useMemo(() => ({ name: (p: Project) => p.name, status: (p: Project) => p.status, members: (p: Project) => users.filter(u => u.projects.includes(p.id)).length }), [users]);
+  const { sorted, sortKey, sortAsc, toggle } = useSort(projects, 'name', acc);
 
   return (
     <>
@@ -206,13 +314,13 @@ function ProjectsTab() {
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Name</th>
+          <SortTh label="Name" k="name" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Description</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Status</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Members</th>
+          <SortTh label="Status" k="status" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label="Members" k="members" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {projects.map(p => {
+          {sorted.map(p => {
             const members = users.filter(u => u.projects.includes(p.id));
             return (
               <tr key={p.id} className="hover:bg-gray-50">
@@ -222,7 +330,7 @@ function ProjectsTab() {
                 <td className="px-3 py-2 text-gray-500">{members.length > 0 ? members.map(m => m.name.split(' ')[0]).join(', ') : '—'}</td>
                 <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                   <button onClick={() => open(p)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                  <button onClick={() => removeProject(p.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                  <button onClick={() => confirmDelete('Delete Project?', `"${p.name}" will be permanently removed.`, () => removeProject(p.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                 </div></td>
               </tr>
             );
@@ -239,15 +347,17 @@ function ProjectsTab() {
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Project'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
 
 // ============================================================
-// Certifications Tab (standalone CRUD + matrix)
+// Certifications Tab
 // ============================================================
 function CertificationsTab() {
   const { certifications, addCertification, updateCertification, removeCertification, instruments, users, updateUser } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Certification | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'matrix'>('list');
@@ -268,6 +378,9 @@ function CertificationsTab() {
     updateUser({ ...u, certifications: newCerts });
   };
 
+  const certAcc = useMemo(() => ({ name: (c: Certification) => c.name, instrument: (c: Certification) => { const i = instruments.find(x => x.id === c.instrumentId); return i ? i.name : '— General'; }, users: (c: Certification) => users.filter(u => u.certifications.includes(c.id)).length }), [instruments, users]);
+  const { sorted: sortedCerts, sortKey: cSortKey, sortAsc: cSortAsc, toggle: cToggle } = useSort(certifications, 'name', certAcc);
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -282,13 +395,13 @@ function CertificationsTab() {
       {viewMode === 'list' ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
           <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Name</th>
-            <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Linked Instrument</th>
+            <SortTh label="Name" k="name" sortKey={cSortKey} sortAsc={cSortAsc} toggle={cToggle} />
+            <SortTh label="Linked Instrument" k="instrument" sortKey={cSortKey} sortAsc={cSortAsc} toggle={cToggle} />
             <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Description</th>
-            <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Users</th>
+            <SortTh label="Users" k="users" sortKey={cSortKey} sortAsc={cSortAsc} toggle={cToggle} />
             <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
           </tr></thead><tbody className="divide-y divide-gray-100">
-            {certifications.map(c => {
+            {sortedCerts.map(c => {
               const inst = instruments.find(i => i.id === c.instrumentId);
               const certUsers = users.filter(u => u.certifications.includes(c.id));
               return (
@@ -299,7 +412,7 @@ function CertificationsTab() {
                   <td className="px-3 py-2 text-gray-500">{certUsers.length}</td>
                   <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                     <button onClick={() => open(c)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                    <button onClick={() => removeCertification(c.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                    <button onClick={() => confirmDelete('Delete Certification?', `"${c.name}" will be permanently removed.`, () => removeCertification(c.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                   </div></td>
                 </tr>
               );
@@ -307,7 +420,6 @@ function CertificationsTab() {
           </tbody></table>
         </div></div>
       ) : (
-        /* Matrix view: users x certifications with toggleable cells */
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
           <table className="w-full text-xs font-manrope">
             <thead><tr className="bg-gray-50 border-b border-gray-200">
@@ -328,7 +440,7 @@ function CertificationsTab() {
                       <td key={c.id} className="px-1.5 py-2 text-center">
                         <button onClick={() => toggleUserCert(u.id, c.id)}
                           className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all ${has ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'}`}>
-                          {has ? <span className="text-[10px] font-bold">✓</span> : <span className="text-[10px]">—</span>}
+                          {has ? <span className="text-[10px] font-bold">&#10003;</span> : <span className="text-[10px]">—</span>}
                         </button>
                       </td>
                     );
@@ -353,6 +465,78 @@ function CertificationsTab() {
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Certification'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
+    </>
+  );
+}
+
+// ============================================================
+// Locations Tab
+// ============================================================
+function LocationsTab() {
+  const { locations, addLocation, updateLocation, removeLocation, instruments, storageUnits } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+  const [editing, setEditing] = useState<Location | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const empty = (): Location => ({ id: generateId(), name: '', building: '', floor: '', notes: '' });
+  const [form, setForm] = useState<Location>(empty());
+  const open = (l?: Location) => { setForm(l ? { ...l } : empty()); setEditing(l || null); setShowForm(true); };
+  const save = () => { if (!form.name) return; editing ? updateLocation(form) : addLocation(form); setShowForm(false); };
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-500 font-manrope">{locations.length} locations</p>
+        <div className="flex gap-2">
+          <button onClick={() => downloadCSV(['Name','Building','Floor','Notes','Instruments','Storage Units'], locations.map(l => {
+            const instCount = instruments.filter(i => i.locationId === l.id).length;
+            const suCount = storageUnits.filter(s => s.locationId === l.id).length;
+            return [l.name, l.building || '', l.floor || '', l.notes || '', instCount, suCount];
+          }), 'locations')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add Location</button>
+        </div>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {locations.map(l => {
+          const instHere = instruments.filter(i => i.locationId === l.id);
+          const suHere = storageUnits.filter(s => s.locationId === l.id);
+          return (
+            <div key={l.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><MapPin size={18} /></div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 font-manrope">{l.name}</h3>
+                    <p className="text-[10px] text-gray-400 font-manrope">{[l.building, l.floor].filter(Boolean).join(' · ') || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex gap-0.5">
+                  <button onClick={() => open(l)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                  <button onClick={() => confirmDelete('Delete Location?', `"${l.name}" will be permanently removed.`, () => removeLocation(l.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                </div>
+              </div>
+              {l.notes && <p className="text-[11px] text-gray-500 font-manrope mb-2">{l.notes}</p>}
+              <div className="space-y-1 text-[11px] font-manrope text-gray-500">
+                {instHere.length > 0 && <div className="flex justify-between"><span>Instruments</span><span className="text-gray-700">{instHere.length}</span></div>}
+                {suHere.length > 0 && <div className="flex justify-between"><span>Storage Units</span><span className="text-gray-700">{suHere.length}</span></div>}
+                {instHere.length === 0 && suHere.length === 0 && <div className="text-gray-300 text-[10px]">No items assigned yet</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {showForm && <Modal title={editing ? 'Edit Location' : 'Add Location'} onClose={() => setShowForm(false)}>
+        <div className="space-y-3">
+          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., Room 101" className={inputCls} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Building"><input value={form.building || ''} onChange={e => setForm({ ...form, building: e.target.value })} placeholder="e.g., DEIB" className={inputCls} /></Field>
+            <Field label="Floor"><input value={form.floor || ''} onChange={e => setForm({ ...form, floor: e.target.value })} placeholder="e.g., 1st Floor" className={inputCls} /></Field>
+          </div>
+          <Field label="Notes"><textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="e.g., Main cell culture lab" className={inputCls + ' resize-none'} /></Field>
+          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Location'}</button>
+        </div>
+      </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
@@ -361,188 +545,513 @@ function CertificationsTab() {
 // Instruments Tab
 // ============================================================
 function InstrumentsTab() {
-  const { instruments, addInstrument, updateInstrument, removeInstrument } = useLabContext();
+  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Instrument | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const empty = (): Instrument => ({ id: generateId(), name: '', category: 'Cell Culture', location: '', requiresCertification: false, description: '', icon: '🔬' });
+  const [showMaintenance, setShowMaintenance] = useState<string | null>(null);
+  const [mLogs, setMLogs] = useState<MaintenanceLog[]>([]);
+  const [mForm, setMForm] = useState<MaintenanceLog | null>(null);
+  const empty = (): Instrument => ({ id: generateId(), name: '', category: 'Cell Culture', location: '', locationId: undefined, requiresCertification: false, description: '', icon: '🔬' });
+  const emptyLog = (instId: string): MaintenanceLog => ({ id: generateId(), instrumentId: instId, date: new Date().toISOString().split('T')[0], type: 'scheduled', description: '', performedBy: user.name });
   const [form, setForm] = useState<Instrument>(empty());
   const open = (i?: Instrument) => { setForm(i ? { ...i } : empty()); setEditing(i || null); setShowForm(true); };
+  const setLocationId = (locId: string) => {
+    const loc = locations.find(l => l.id === locId);
+    setForm(f => ({ ...f, locationId: locId || undefined, location: loc?.name || f.location }));
+  };
   const save = () => { if (!form.name) return; editing ? updateInstrument(form) : addInstrument(form); setShowForm(false); };
+  const instAcc = useMemo(() => ({ name: (i: Instrument) => i.name, category: (i: Instrument) => i.category, location: (i: Instrument) => { const l = locations.find(x => x.id === i.locationId); return l?.name || i.location; }, cert: (i: Instrument) => i.requiresCertification ? 1 : 0, maintenance: (i: Instrument) => i.nextMaintenanceDate || 'z' }), [locations]);
+  const { sorted: sortedInst, sortKey: iSortKey, sortAsc: iSortAsc, toggle: iToggle } = useSort(instruments, 'name', instAcc);
+
+  const openMaintenance = async (instId: string) => {
+    setShowMaintenance(instId);
+    const logs = await fetchMaintenanceLogs(instId);
+    setMLogs(logs);
+    setMForm(null);
+  };
+
+  const saveMLog = async () => {
+    if (!mForm || !mForm.description) return;
+    await upsertMaintenanceLog(mForm);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Maintenance: ${mForm.type}`, category: 'booking', details: `${instruments.find(i => i.id === mForm.instrumentId)?.name} — ${mForm.description}` });
+    const logs = await fetchMaintenanceLogs(mForm.instrumentId);
+    setMLogs(logs);
+    setMForm(null);
+  };
+
+  const delMLog = async (id: string, instId: string) => {
+    await deleteMaintenanceLog(id);
+    const logs = await fetchMaintenanceLogs(instId);
+    setMLogs(logs);
+  };
+
+  const isOverdue = (i: Instrument) => i.nextMaintenanceDate && i.nextMaintenanceDate < new Date().toISOString().split('T')[0];
+  const isSoon = (i: Instrument) => {
+    if (!i.nextMaintenanceDate) return false;
+    const d = new Date(i.nextMaintenanceDate);
+    const now = new Date();
+    const diff = (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    return diff >= 0 && diff <= 30;
+  };
 
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{instruments.length} instruments</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Name','Category','Location','Description','Cert'], instruments.map(i => [i.name, i.category, i.location, i.description, i.requiresCertification ? 'Yes' : 'No']), 'instruments')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','Category','Location','S/N','Manufacturer','Model','Purchase Date','Next Maintenance','Cert'], instruments.map(i => [i.name, i.category, i.location, i.serialNumber||'', i.manufacturer||'', i.model||'', i.purchaseDate||'', i.nextMaintenanceDate||'', i.requiresCertification ? 'Yes' : 'No']), 'instruments')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700"></th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Name</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Category</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Location</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cert.</th><th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700"></th>
+          <SortTh label="Name" k="name" sortKey={iSortKey} sortAsc={iSortAsc} toggle={iToggle} />
+          <SortTh label="Category" k="category" sortKey={iSortKey} sortAsc={iSortAsc} toggle={iToggle} />
+          <SortTh label="Location" k="location" sortKey={iSortKey} sortAsc={iSortAsc} toggle={iToggle} />
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">S/N</th>
+          <SortTh label="Maintenance" k="maintenance" sortKey={iSortKey} sortAsc={iSortAsc} toggle={iToggle} />
+          <SortTh label="Cert." k="cert" sortKey={iSortKey} sortAsc={iSortAsc} toggle={iToggle} />
+          <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {instruments.map(i => (
+          {sortedInst.map(i => {
+            const loc = locations.find(l => l.id === i.locationId);
+            return (
             <tr key={i.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 text-lg">{i.icon}</td><td className="px-3 py-2 font-medium text-gray-900">{i.name}</td>
-              <td className="px-3 py-2 text-gray-500">{i.category}</td><td className="px-3 py-2 text-gray-500">{i.location}</td>
+              <td className="px-3 py-2 text-lg">{i.icon}</td>
+              <td className="px-3 py-2 font-medium text-gray-900">
+                {i.name}
+                {i.manufacturer && <span className="block text-[10px] text-gray-400">{i.manufacturer}{i.model ? ` ${i.model}` : ''}</span>}
+              </td>
+              <td className="px-3 py-2 text-gray-500">{i.category}</td>
+              <td className="px-3 py-2 text-gray-500">{loc?.name || i.location}</td>
+              <td className="px-3 py-2 text-gray-500 font-mono text-[10px]">{i.serialNumber || '—'}</td>
+              <td className="px-3 py-2">{i.nextMaintenanceDate ? (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${isOverdue(i) ? 'bg-red-50 text-red-700' : isSoon(i) ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
+                  {isOverdue(i) ? 'Overdue' : isSoon(i) ? 'Due soon' : 'OK'} · {i.nextMaintenanceDate}
+                </span>
+              ) : <span className="text-gray-300 text-[10px]">—</span>}</td>
               <td className="px-3 py-2">{i.requiresCertification ? <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium">Yes</span> : <span className="text-gray-400 text-[10px]">No</span>}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
+                <button onClick={() => openMaintenance(i.id)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Maintenance log"><FileText size={13} /></button>
                 <button onClick={() => open(i)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => removeInstrument(i.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => confirmDelete('Delete Instrument?', `"${i.name}" will be permanently removed.`, () => removeInstrument(i.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
-          ))}
+          ); })}
         </tbody></table>
       </div></div>
+
+      {/* Instrument Form */}
       {showForm && <Modal title={editing ? 'Edit Instrument' : 'Add Instrument'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
-          <div className="grid grid-cols-5 gap-3">
-            <Field label="Icon"><input value={form.icon} onChange={e => setForm({ ...form, icon: e.target.value })} className={inputCls + ' text-center text-lg'} /></Field>
-            <div className="col-span-4"><Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} /></Field></div>
-          </div>
+          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} /></Field>
+          <Field label="Icon">
+            <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-xl max-h-28 overflow-y-auto">
+              {instrumentIcons.map(emoji => (
+                <button key={emoji} type="button" onClick={() => setForm({ ...form, icon: emoji })}
+                  className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${form.icon === emoji ? 'bg-[#102C53] ring-2 ring-[#4DC9FF] scale-110' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category"><input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls} list="icat" /><datalist id="icat">{Array.from(new Set(instruments.map(i => i.category))).map(c => <option key={c} value={c} />)}</datalist></Field>
-            <Field label="Location"><input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className={inputCls} /></Field>
+            <Field label="Category">
+              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls}>
+                {instrumentCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="Location">
+              <select value={form.locationId || ''} onChange={e => setLocationId(e.target.value)} className={inputCls}>
+                <option value="">— Select location</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}{l.building ? ` (${l.building})` : ''}</option>)}
+              </select>
+            </Field>
           </div>
           <Field label="Description"><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={inputCls} /></Field>
+
+          {/* Inventory section */}
+          <div className="border-t border-gray-100 pt-3 mt-1">
+            <p className="text-xs font-semibold text-gray-500 font-manrope uppercase tracking-wider mb-2">Inventory</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Serial Number"><input value={form.serialNumber || ''} onChange={e => setForm({ ...form, serialNumber: e.target.value || undefined })} placeholder="e.g., SN-12345" className={inputCls} /></Field>
+              <Field label="Manufacturer"><input value={form.manufacturer || ''} onChange={e => setForm({ ...form, manufacturer: e.target.value || undefined })} placeholder="e.g., Zeiss" className={inputCls} /></Field>
+              <Field label="Model"><input value={form.model || ''} onChange={e => setForm({ ...form, model: e.target.value || undefined })} placeholder="e.g., LSM 900" className={inputCls} /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <Field label="Purchase Date"><input type="date" value={form.purchaseDate || ''} onChange={e => setForm({ ...form, purchaseDate: e.target.value || undefined })} className={inputCls} /></Field>
+              <Field label="Commission Date"><input type="date" value={form.commissionDate || ''} onChange={e => setForm({ ...form, commissionDate: e.target.value || undefined })} className={inputCls} /></Field>
+            </div>
+          </div>
+
+          {/* Maintenance section */}
+          <div className="border-t border-gray-100 pt-3 mt-1">
+            <p className="text-xs font-semibold text-gray-500 font-manrope uppercase tracking-wider mb-2">Maintenance Schedule</p>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Period (months)"><input type="number" min={0} value={form.maintenancePeriodMonths ?? ''} onChange={e => setForm({ ...form, maintenancePeriodMonths: e.target.value ? Number(e.target.value) : undefined })} placeholder="e.g., 12" className={inputCls} /></Field>
+              <Field label="Last Maintenance"><input type="date" value={form.lastMaintenanceDate || ''} onChange={e => setForm({ ...form, lastMaintenanceDate: e.target.value || undefined })} className={inputCls} /></Field>
+              <Field label="Next Expected"><input type="date" value={form.nextMaintenanceDate || ''} onChange={e => setForm({ ...form, nextMaintenanceDate: e.target.value || undefined })} className={inputCls} /></Field>
+            </div>
+          </div>
+
           <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.requiresCertification} onChange={e => setForm({ ...form, requiresCertification: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-[#102C53]" /><span className="text-sm font-manrope text-gray-700">Requires certification</span></label>
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add'}</button>
         </div>
       </Modal>}
+
+      {/* Maintenance Log Modal */}
+      {showMaintenance && <Modal title={`Maintenance Log — ${instruments.find(i => i.id === showMaintenance)?.name || ''}`} onClose={() => { setShowMaintenance(null); setMForm(null); }}>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-xs text-gray-500 font-manrope">{mLogs.length} entries</p>
+            {!mForm && <button onClick={() => setMForm(emptyLog(showMaintenance))} className="flex items-center gap-1 px-3 py-1.5 bg-[#102C53] text-white text-xs font-medium font-manrope rounded-lg hover:bg-[#1a3d6e]"><Plus size={12} /> Add Entry</button>}
+          </div>
+
+          {mForm && (
+            <div className="bg-gray-50 rounded-xl p-3 space-y-2 border border-gray-200">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Date"><input type="date" value={mForm.date} onChange={e => setMForm({ ...mForm, date: e.target.value })} className={inputCls} /></Field>
+                <Field label="Type">
+                  <select value={mForm.type} onChange={e => setMForm({ ...mForm, type: e.target.value as MaintenanceLog['type'] })} className={inputCls}>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="repair">Repair</option>
+                    <option value="calibration">Calibration</option>
+                    <option value="inspection">Inspection</option>
+                  </select>
+                </Field>
+              </div>
+              <Field label="Description"><input value={mForm.description} onChange={e => setMForm({ ...mForm, description: e.target.value })} placeholder="What was done" className={inputCls} /></Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Performed By"><input value={mForm.performedBy} onChange={e => setMForm({ ...mForm, performedBy: e.target.value })} className={inputCls} /></Field>
+                <Field label="Cost (€)"><input type="number" min={0} value={mForm.cost ?? ''} onChange={e => setMForm({ ...mForm, cost: e.target.value ? Number(e.target.value) : undefined })} placeholder="Optional" className={inputCls} /></Field>
+              </div>
+              <Field label="Notes"><input value={mForm.notes || ''} onChange={e => setMForm({ ...mForm, notes: e.target.value || undefined })} placeholder="Optional" className={inputCls} /></Field>
+              <div className="flex gap-2">
+                <button onClick={saveMLog} disabled={!mForm.description} className="flex items-center gap-1 px-3 py-1.5 bg-[#102C53] text-white text-xs font-medium rounded-lg hover:bg-[#1a3d6e] disabled:opacity-40"><Save size={12} /> Save</button>
+                <button onClick={() => setMForm(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {mLogs.length === 0 && !mForm && <p className="text-xs text-gray-400 font-manrope text-center py-6">No maintenance records yet</p>}
+          {mLogs.length > 0 && (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {mLogs.map(log => {
+                const typeColors: Record<string, string> = { scheduled: 'bg-blue-50 text-blue-700', repair: 'bg-red-50 text-red-700', calibration: 'bg-purple-50 text-purple-700', inspection: 'bg-amber-50 text-amber-700' };
+                return (
+                  <div key={log.id} className="bg-white rounded-lg p-3 border border-gray-100 text-xs font-manrope">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-900 font-medium">{log.date}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${typeColors[log.type] || 'bg-gray-100 text-gray-700'}`}>{log.type}</span>
+                        {log.cost != null && <span className="text-gray-400">€{log.cost}</span>}
+                      </div>
+                      <button onClick={() => confirmDelete('Delete entry?', log.description, () => delMLog(log.id, log.instrumentId))} className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"><Trash2 size={11} /></button>
+                    </div>
+                    <p className="text-gray-700">{log.description}</p>
+                    <p className="text-gray-400 mt-0.5">By: {log.performedBy}{log.notes ? ` — ${log.notes}` : ''}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </Modal>}
+
+      <ConfirmDialog />
     </>
   );
 }
 
 // ============================================================
-// Dewars Tab (NEW)
+// Storage Units Tab (was Dewars)
 // ============================================================
-function DewarsTab() {
-  const { dewars, addDewar, updateDewar, removeDewar, cryoVials } = useLabContext();
-  const [editing, setEditing] = useState<Dewar | null>(null);
+function StorageUnitsTab() {
+  const { storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit, cryoVials, reagents, locations } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+  const [editing, setEditing] = useState<StorageUnit | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const empty = (): Dewar => ({ id: `dewar-${Date.now()}`, name: '', model: '', location: '', numRacks: 6, boxesPerRack: 5, gridRows: 5, gridCols: 5 });
-  const [form, setForm] = useState<Dewar>(empty());
-  const open = (d?: Dewar) => { setForm(d ? { ...d } : empty()); setEditing(d || null); setShowForm(true); };
-  const save = () => { if (!form.name) return; editing ? updateDewar(form) : addDewar(form); setShowForm(false); };
+  const allTypes = Object.keys(storageUnitTypes) as StorageUnitType[];
+  const empty = (): StorageUnit => ({ id: `su-${Date.now()}`, name: '', type: 'FRIDGE', temperature: '+4 °C', model: '', location: '' });
+  const [form, setForm] = useState<StorageUnit>(empty());
+  const open = (s?: StorageUnit) => { setForm(s ? { ...s } : empty()); setEditing(s || null); setShowForm(true); };
+  const save = () => { if (!form.name) return; editing ? updateStorageUnit(form) : addStorageUnit(form); setShowForm(false); };
+
+  // When type changes, auto-fill temperature and clear irrelevant config
+  const changeType = (t: StorageUnitType) => {
+    setForm(f => ({
+      ...f, type: t, temperature: storageUnitTypes[t].temperature,
+      // Clear fields not relevant to the new type
+      ...(isRackBased(t) ? { numShelves: undefined, numDoors: undefined } : { numRacks: undefined, boxesPerRack: undefined, gridRows: undefined, gridCols: undefined }),
+    }));
+  };
 
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-manrope">{dewars.length} dewars configured</p>
+        <p className="text-sm text-gray-500 font-manrope">{storageUnits.length} storage units</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Name','Model','Location','Racks','Boxes/Rack','Grid'], dewars.map(d => [d.name, d.model, d.location, d.numRacks, d.boxesPerRack, `${d.gridRows}x${d.gridCols}`]), 'dewars')} className={btnExport}><Download size={14} /> Export</button>
-          <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add Dewar</button>
+          <button onClick={() => downloadCSV(
+            ['Name','Type','Temperature','Model','Location','Layout','Vials','Reagents'],
+            storageUnits.map(s => {
+              const vialCount = cryoVials.filter(v => v.storageUnitId === s.id).length;
+              const reagentCount = reagents.filter(r => r.storageUnitId === s.id).length;
+              const layout = isRackBased(s.type)
+                ? (s.numRacks ? `${s.numRacks}R x ${s.boxesPerRack}B x ${s.gridRows}x${s.gridCols}` : '—')
+                : (s.numDoors || s.numShelves ? `${s.numDoors || 1} door(s) x ${s.numShelves || 0} shelves` : '—');
+              return [s.name, s.type, s.temperature, s.model, s.location, layout, vialCount, reagentCount];
+            }), 'storage_units')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add Unit</button>
         </div>
       </div>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {dewars.map(d => {
-          const vialCount = cryoVials.filter(v => v.dewarId === d.id).length;
-          const totalSlots = d.numRacks * d.boxesPerRack * d.gridRows * d.gridCols;
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {storageUnits.map(s => {
+          const info = storageUnitTypes[s.type] || { label: s.type, icon: '📦' };
+          const vialCount = cryoVials.filter(v => v.storageUnitId === s.id).length;
+          const reagentCount = reagents.filter(r => r.storageUnitId === s.id).length;
+          const totalSlots = isRackBased(s.type) ? (s.numRacks || 0) * (s.boxesPerRack || 0) * (s.gridRows || 0) * (s.gridCols || 0) : 0;
           const pct = totalSlots > 0 ? Math.round((vialCount / totalSlots) * 100) : 0;
           return (
-            <div key={d.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="text-3xl">🧊</div>
+            <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="text-2xl">{info.icon}</div>
                   <div>
-                    <h3 className="text-sm font-bold text-gray-900 font-manrope">{d.name}</h3>
-                    <p className="text-xs text-gray-500 font-manrope">{d.model}</p>
+                    <h3 className="text-sm font-bold text-gray-900 font-manrope">{s.name}</h3>
+                    <p className="text-[10px] text-gray-400 font-manrope">{info.label} &middot; {s.temperature}</p>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => open(d)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                  <button onClick={() => removeDewar(d.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <div className="flex gap-0.5">
+                  <button onClick={() => open(s)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
+                  <button onClick={() => confirmDelete('Delete Storage Unit?', `"${s.name}" and its associations will be permanently removed.`, () => removeStorageUnit(s.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                 </div>
               </div>
-              <div className="space-y-1.5 text-xs font-manrope text-gray-600">
-                <div className="flex justify-between"><span>Location</span><span className="text-gray-900">{d.location}</span></div>
-                <div className="flex justify-between"><span>Config</span><span className="text-gray-900">{d.numRacks} racks × {d.boxesPerRack} boxes × {d.gridRows}×{d.gridCols} grid</span></div>
-                <div className="flex justify-between"><span>Capacity</span><span className="text-gray-900">{totalSlots} slots ({vialCount} used, {pct}%)</span></div>
-              </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full mt-3">
-                <div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              <div className="space-y-1 text-[11px] font-manrope text-gray-500">
+                {s.model && <div className="flex justify-between"><span>Model</span><span className="text-gray-700">{s.model}</span></div>}
+                <div className="flex justify-between"><span>Location</span><span className="text-gray-700">{locations.find(l => l.id === s.locationId)?.name || s.location || '—'}</span></div>
+                {reagentCount > 0 && <div className="flex justify-between"><span>Reagents</span><span className="text-gray-700">{reagentCount} items</span></div>}
+                {/* Rack-based: show grid config + vial occupancy */}
+                {isRackBased(s.type) && totalSlots > 0 && (
+                  <>
+                    <div className="flex justify-between"><span>Racks / Boxes</span><span className="text-gray-700">{s.numRacks}R &times; {s.boxesPerRack}B &times; {s.gridRows}&times;{s.gridCols}</span></div>
+                    <div className="flex justify-between"><span>Vials</span><span className="text-gray-700">{vialCount} / {totalSlots} ({pct}%)</span></div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full mt-1">
+                      <div className="h-full bg-cyan-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </>
+                )}
+                {/* Shelf-based: show compartments + shelves */}
+                {isShelfBased(s.type) && (s.numDoors || s.numShelves) && (
+                  <div className="flex justify-between"><span>Layout</span><span className="text-gray-700">{s.numDoors === 2 ? '2 doors (L+R)' : '1 door'} &middot; {s.numShelves || 0} shelves</span></div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
-      {showForm && <Modal title={editing ? 'Edit Dewar' : 'Add Dewar'} onClose={() => setShowForm(false)}>
+      {showForm && <Modal title={editing ? 'Edit Storage Unit' : 'Add Storage Unit'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
-          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., Main LN₂ Dewar" className={inputCls} /></Field>
+          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., ULT Freezer #1" className={inputCls} /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Model"><input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g., CryoPlus 2" className={inputCls} /></Field>
-            <Field label="Location"><input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className={inputCls} /></Field>
+            <Field label="Type">
+              <select value={form.type} onChange={e => changeType(e.target.value as StorageUnitType)} className={inputCls}>
+                {allTypes.map(t => <option key={t} value={t}>{storageUnitTypes[t].icon} {storageUnitTypes[t].label} ({storageUnitTypes[t].temperature})</option>)}
+              </select>
+            </Field>
+            <Field label="Temperature"><input value={form.temperature} onChange={e => setForm({ ...form, temperature: e.target.value })} className={inputCls} /></Field>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Racks"><input type="number" min={1} value={form.numRacks || ''} onChange={e => setForm({ ...form, numRacks: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Boxes / Rack"><input type="number" min={1} value={form.boxesPerRack || ''} onChange={e => setForm({ ...form, boxesPerRack: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Grid (rows)"><input type="number" min={1} max={15} value={form.gridRows || ''} onChange={e => setForm({ ...form, gridRows: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Model"><input value={form.model} onChange={e => setForm({ ...form, model: e.target.value })} placeholder="e.g., Thermo TSX600" className={inputCls} /></Field>
+            <Field label="Location">
+              <select value={form.locationId || ''} onChange={e => { const loc = locations.find(l => l.id === e.target.value); setForm({ ...form, locationId: e.target.value || undefined, location: loc?.name || form.location }); }} className={inputCls}>
+                <option value="">— Select location</option>
+                {locations.map(l => <option key={l.id} value={l.id}>{l.name}{l.building ? ` (${l.building})` : ''}</option>)}
+              </select>
+            </Field>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Grid (cols)"><input type="number" min={1} max={15} value={form.gridCols || ''} onChange={e => setForm({ ...form, gridCols: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <div className="col-span-2 flex items-end">
-              <div className="bg-cyan-50 rounded-xl p-3 text-xs font-manrope text-cyan-700 w-full">
-                Total: {(form.numRacks || 0) * (form.boxesPerRack || 0) * (form.gridRows || 0) * (form.gridCols || 0)} vial slots
+
+          {/* === Rack / Box / Vial Grid — only for cryo-type (DEWAR, ULT_FREEZER, FREEZER_40) === */}
+          {isRackBased(form.type) && (
+            <div className="border-t border-gray-100 pt-3 mt-2">
+              <p className="text-xs font-semibold text-gray-600 font-manrope mb-2">
+                Rack / Box / Vial Grid <span className="font-normal text-gray-400">(cryo &amp; ultra-low storage)</span>
+              </p>
+              <div className="grid grid-cols-4 gap-2">
+                <Field label="Racks"><input type="number" min={0} value={form.numRacks ?? ''} onChange={e => setForm({ ...form, numRacks: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls} /></Field>
+                <Field label="Boxes/Rack"><input type="number" min={0} value={form.boxesPerRack ?? ''} onChange={e => setForm({ ...form, boxesPerRack: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls} /></Field>
+                <Field label="Grid rows"><input type="number" min={0} max={15} value={form.gridRows ?? ''} onChange={e => setForm({ ...form, gridRows: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls} /></Field>
+                <Field label="Grid cols"><input type="number" min={0} max={15} value={form.gridCols ?? ''} onChange={e => setForm({ ...form, gridCols: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls} /></Field>
+              </div>
+              {(form.numRacks && form.boxesPerRack && form.gridRows && form.gridCols) ? (
+                <div className="bg-cyan-50 rounded-xl p-2.5 mt-2 text-xs font-manrope text-cyan-700">
+                  Total capacity: {form.numRacks * form.boxesPerRack * form.gridRows * form.gridCols} vial slots
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* === Shelves / Compartments — for fridge, freezer, cabinet, etc. === */}
+          {isShelfBased(form.type) && (
+            <div className="border-t border-gray-100 pt-3 mt-2">
+              <p className="text-xs font-semibold text-gray-600 font-manrope mb-2">
+                Doors &amp; Shelves
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Doors">
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setForm({ ...form, numDoors: 1 })}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-medium font-manrope transition-all ${form.numDoors === 1 || !form.numDoors ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      1 door
+                    </button>
+                    <button type="button" onClick={() => setForm({ ...form, numDoors: 2 })}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-medium font-manrope transition-all ${form.numDoors === 2 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                      2 doors (L+R)
+                    </button>
+                  </div>
+                </Field>
+                <Field label="Shelves"><input type="number" min={0} value={form.numShelves ?? ''} onChange={e => setForm({ ...form, numShelves: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls} /></Field>
               </div>
             </div>
-          </div>
-          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Dewar'}</button>
+          )}
+
+          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Storage Unit'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
 
 // ============================================================
-// Reagents Tab
+// Reagents Tab — with macro-category selector
 // ============================================================
 function ReagentsTab() {
-  const { reagents, addNewReagent, updateReagent, removeReagent } = useLabContext();
+  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+  const [activeMacro, setActiveMacro] = useState<ReagentMacroCategory>('Reagents');
+  const [selectedSubCat, setSelectedSubCat] = useState<string>('All');
   const [editing, setEditing] = useState<Reagent | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const empty = (): Reagent => ({ id: generateId(), name: '', category: 'Reagents', currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', supplier: '', catalogNumber: '', alertThreshold: 2 });
+
+  const macroInfo = reagentMacroCategories[activeMacro];
+  // Items in this macro-category
+  const macroFiltered = useMemo(() => reagents.filter(r => macroInfo.subCategories.includes(r.category)), [reagents, macroInfo]);
+  // Further filter by selected sub-category
+  const filtered = useMemo(() => selectedSubCat === 'All' ? macroFiltered : macroFiltered.filter(r => r.category === selectedSubCat), [macroFiltered, selectedSubCat]);
+  // All sub-categories for current macro (from data + from definition, deduplicated)
+  const availableSubCategories = useMemo(() => {
+    const fromData = new Set(macroFiltered.map(r => r.category));
+    macroInfo.subCategories.forEach(c => fromData.add(c));
+    return Array.from(fromData);
+  }, [macroFiltered, macroInfo]);
+  // Sub-category counts
+  const subCatCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    macroFiltered.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
+    return counts;
+  }, [macroFiltered]);
+
+  // Reset sub-category filter when switching macro
+  const switchMacro = (k: ReagentMacroCategory) => { setActiveMacro(k); setSelectedSubCat('All'); };
+
+  const defaultCategory = selectedSubCat !== 'All' ? selectedSubCat : macroInfo.subCategories[0];
+  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2 });
   const [form, setForm] = useState<Reagent>(empty());
+
   const open = (r?: Reagent) => { setForm(r ? { ...r } : empty()); setEditing(r || null); setShowForm(true); };
   const save = () => { if (!form.name) return; editing ? updateReagent(form) : addNewReagent(form); setShowForm(false); };
 
+  const getUnitName = (id?: string) => { if (!id) return '—'; const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
+
+  // Sorting
+  const rAcc = useMemo(() => ({ name: (r: Reagent) => r.name, category: (r: Reagent) => r.category, stock: (r: Reagent) => r.currentStock, supplier: (r: Reagent) => r.supplier, storage: (r: Reagent) => getUnitName(r.storageUnitId), expiry: (r: Reagent) => r.expiryDate || 'zzz' }), [storageUnits]);
+  const { sorted: sortedReagents, sortKey: rSortKey, sortAsc: rSortAsc, toggle: rToggle } = useSort(filtered, 'name', rAcc);
+
+  // Counts per macro-category
+  const macroCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allMacroKeys.forEach(k => { counts[k] = reagents.filter(r => reagentMacroCategories[k].subCategories.includes(r.category)).length; });
+    return counts;
+  }, [reagents]);
+
   return (
     <>
+      {/* Macro-category selector */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+        {allMacroKeys.map(k => {
+          const info = reagentMacroCategories[k];
+          const count = macroCounts[k] || 0;
+          return (
+            <button key={k} onClick={() => switchMacro(k)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium font-manrope whitespace-nowrap transition-all ${activeMacro === k ? 'bg-[#102C53] text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <span>{info.icon}</span> {info.label} <span className="opacity-70">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sub-category filter (shown when macro has multiple sub-categories) */}
+      {availableSubCategories.length > 1 && (
+        <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+          <button onClick={() => setSelectedSubCat('All')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope whitespace-nowrap transition-all ${selectedSubCat === 'All' ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
+            All <span className="opacity-70">{macroFiltered.length}</span>
+          </button>
+          {availableSubCategories.map(cat => (
+            <button key={cat} onClick={() => setSelectedSubCat(cat)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope whitespace-nowrap transition-all ${selectedSubCat === cat ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-500 hover:bg-gray-100'}`}>
+              {cat} <span className="opacity-70">{subCatCounts[cat] || 0}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-manrope">{reagents.length} reagents</p>
+        <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Location','Expiry','Alert'], reagents.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, r.location, r.expiryDate, r.alertThreshold]), 'reagents')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Name</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Category</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Stock</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Supplier</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cat#</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Location</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Expiry</th><th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
+          <SortTh label="Name" k="name" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          {availableSubCategories.length > 1 && <SortTh label="Category" k="category" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />}
+          <SortTh label="Stock" k="stock" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          <SortTh label="Supplier" k="supplier" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cat#</th>
+          <SortTh label="Storage" k="storage" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          <SortTh label="Expiry" k="expiry" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {reagents.map(r => (
+          {sortedReagents.map(r => (
             <tr key={r.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td><td className="px-3 py-2 text-gray-500">{r.category}</td>
+              <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
+              {availableSubCategories.length > 1 && <td className="px-3 py-2 text-gray-500">{r.category}</td>}
               <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}/{r.maxStock} {r.unit}</span></td>
               <td className="px-3 py-2 text-gray-500">{r.supplier}</td><td className="px-3 py-2 text-gray-500 font-mono">{r.catalogNumber}</td>
-              <td className="px-3 py-2 text-gray-500">{r.location}</td><td className="px-3 py-2 text-gray-500">{r.expiryDate}</td>
+              <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate">{getUnitName(r.storageUnitId)}</td>
+              <td className="px-3 py-2 text-gray-500">{r.expiryDate}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => open(r)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => removeReagent(r.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => confirmDelete('Delete Item?', `"${r.name}" will be permanently removed from inventory.`, () => removeReagent(r.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
+          {filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No items in this category</td></tr>}
         </tbody></table>
       </div></div>
-      {showForm && <Modal title={editing ? 'Edit Reagent' : 'Add Reagent'} onClose={() => setShowForm(false)}>
+      {showForm && <Modal title={editing ? `Edit ${macroInfo.label} Item` : `Add ${macroInfo.label} Item`} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} /></Field>
-            <Field label="Category"><input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls} list="rcat" /><datalist id="rcat">{Array.from(new Set(reagents.map(r => r.category))).map(c => <option key={c} value={c} />)}</datalist></Field>
+            <Field label="Category">
+              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls}>
+                {availableSubCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Stock"><input type="number" min={0} value={form.currentStock || ''} onChange={e => setForm({ ...form, currentStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
@@ -551,16 +1060,22 @@ function ReagentsTab() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Unit"><input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className={inputCls} /></Field>
-            <Field label="Location"><input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} className={inputCls} /></Field>
+            <Field label="Storage Unit">
+              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
+                <option value="">— Not assigned</option>
+                {storageUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
+              </select>
+            </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Supplier"><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} className={inputCls} /></Field>
             <Field label="Catalog #"><input value={form.catalogNumber} onChange={e => setForm({ ...form, catalogNumber: e.target.value })} className={inputCls} /></Field>
           </div>
           <Field label="Expiry Date"><input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className={inputCls} /></Field>
-          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Reagent'}</button>
+          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Item'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
@@ -569,48 +1084,62 @@ function ReagentsTab() {
 // Cryo Vials Tab
 // ============================================================
 function CryoTab() {
-  const { cryoVials, addCryoVial, removeCryoVial, user, dewars } = useLabContext();
+  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showForm, setShowForm] = useState(false);
-  const empty = () => ({ cellLine: '', passage: 0, date: new Date().toISOString().split('T')[0], userId: user.id, userName: user.name, dewarId: dewars[0]?.id || 'dewar-1', rack: 1, box: 1, row: 0, col: 0, notes: '' });
+  // Only grid-capable units for cryo
+  const gridUnits = storageUnits.filter(s => s.numRacks && s.boxesPerRack && s.gridRows && s.gridCols);
+  const empty = () => ({ cellLine: '', passage: 0, date: new Date().toISOString().split('T')[0], userId: user.id, userName: user.name, storageUnitId: gridUnits[0]?.id || '', rack: 1, box: 1, row: 0, col: 0, notes: '' });
   const [form, setForm] = useState(empty());
 
   const save = () => {
-    if (!form.cellLine) return;
+    if (!form.cellLine || !form.storageUnitId) return;
     addCryoVial(form);
     setShowForm(false);
     setForm(empty());
   };
 
-  const getDewarName = (id: string) => dewars.find(d => d.id === id)?.name || id;
+  const getUnitName = (id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
+  const getPositionStr = (v: typeof cryoVials[0]) => { const su = storageUnits.find(s => s.id === v.storageUnitId); const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5); return `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`; };
+
+  const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [storageUnits]);
+  const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
 
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{cryoVials.length} vials stored</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Cell Line','Passage','Dewar','Position','Stored By','Date','Notes'], cryoVials.map(v => [v.cellLine, v.passage, getDewarName(v.dewarId), `R${v.rack}B${v.box} ${getRowLabels(5)[v.row] || '?'}${v.col + 1}`, v.userName, v.date, v.notes]), 'cryo_vials')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Cell Line','Passage','Storage Unit','Position','Stored By','Date','Notes'], cryoVials.map(v => {
+            const su = storageUnits.find(s => s.id === v.storageUnitId);
+            const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
+            return [v.cellLine, v.passage, getUnitName(v.storageUnitId), `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`, v.userName, v.date, v.notes];
+          }), 'cryo_vials')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => { setForm(empty()); setShowForm(true); }} className={btnAdd}><Plus size={14} /> Add Vial</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cell Line</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">P</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Dewar</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Position</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Stored By</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Date</th>
+          <SortTh label="Cell Line" k="cellLine" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="P" k="passage" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="Storage" k="storage" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="Position" k="position" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="Stored By" k="user" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="Date" k="date" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
           <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Notes</th>
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {cryoVials.map(v => {
-            const dew = dewars.find(d => d.id === v.dewarId);
-            const rows = dew ? getRowLabels(dew.gridRows) : getRowLabels(5);
+          {sortedVials.map(v => {
+            const su = storageUnits.find(s => s.id === v.storageUnitId);
+            const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
             return (
               <tr key={v.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-900">{v.cellLine}</td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
-                <td className="px-3 py-2 text-gray-500">{dew?.name || v.dewarId}</td>
+                <td className="px-3 py-2 text-gray-500">{su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : v.storageUnitId}</td>
                 <td className="px-3 py-2 text-gray-600 font-mono">R{v.rack} B{v.box} {rows[v.row] || '?'}{v.col + 1}</td>
                 <td className="px-3 py-2 text-gray-500">{v.userName}</td><td className="px-3 py-2 text-gray-500">{v.date}</td>
                 <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{v.notes}</td>
-                <td className="px-3 py-2 text-right"><button onClick={() => removeCryoVial(v.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
+                <td className="px-3 py-2 text-right"><button onClick={() => confirmDelete('Remove Vial?', `${v.cellLine} P${v.passage} will be permanently removed.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
               </tr>
             );
           })}
@@ -623,8 +1152,8 @@ function CryoTab() {
             <Field label="Passage"><input type="number" min={0} value={form.passage || ''} onChange={e => setForm({ ...form, passage: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
             <Field label="Date"><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className={inputCls} /></Field>
           </div>
-          <Field label="Dewar"><select value={form.dewarId} onChange={e => setForm({ ...form, dewarId: e.target.value })} className={inputCls}>
-            {dewars.map(d => <option key={d.id} value={d.id}>{d.name} ({d.model})</option>)}
+          <Field label="Storage Unit"><select value={form.storageUnitId} onChange={e => setForm({ ...form, storageUnitId: e.target.value })} className={inputCls}>
+            {gridUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
           </select></Field>
           <div className="grid grid-cols-4 gap-2">
             <Field label="Rack"><input type="number" min={1} value={form.rack || ''} onChange={e => setForm({ ...form, rack: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
@@ -636,6 +1165,7 @@ function CryoTab() {
           <button onClick={save} disabled={!form.cellLine} className="w-full py-3 bg-cyan-500 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-cyan-600 disabled:opacity-40 flex items-center justify-center gap-2"><Save size={16} /> Store Vial</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
@@ -645,57 +1175,76 @@ function CryoTab() {
 // ============================================================
 function ManualsTab() {
   const { manuals, addManual, updateManual, removeManual } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Manual | null>(null);
   const [showForm, setShowForm] = useState(false);
   const categories: Manual['category'][] = ['protocol', 'manual', 'sds'];
-  const catLabels = { protocol: 'Protocol', manual: 'Manual', sds: 'Safety Data Sheet' };
+  const catLabels: Record<string, string> = { protocol: 'Protocol', manual: 'Manual', sds: 'Safety Data Sheet' };
   const empty = (): Manual => ({ id: generateId(), title: '', category: 'protocol', description: '', lastUpdated: new Date().toISOString().split('T')[0], uploadedBy: '' });
   const [form, setForm] = useState<Manual>(empty());
   const fileRef = useRef<HTMLInputElement>(null);
-  const open = (m?: Manual) => { setForm(m ? { ...m } : empty()); setEditing(m || null); setShowForm(true); };
-  const save = () => { if (!form.title) return; editing ? updateManual(form) : addManual(form); setShowForm(false); };
+  const open = (m?: Manual) => { setForm(m ? { ...m } : empty()); setEditing(m || null); setPendingFile(null); setShowForm(true); };
+  const save = async () => {
+    if (!form.title) return;
+    setUploading(true);
+    try {
+      let finalForm = { ...form };
+      if (pendingFile) {
+        const { uploadManualFile } = await import('@/lib/supabase-storage');
+        const url = await uploadManualFile(finalForm.id, pendingFile);
+        if (url) { finalForm = { ...finalForm, fileUrl: url }; }
+        else { alert('File upload failed. The manual will be saved without the PDF.'); }
+      }
+      delete finalForm.fileData;
+      editing ? updateManual(finalForm) : addManual(finalForm);
+      setShowForm(false);
+    } finally { setUploading(false); }
+  };
+
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File too large. Max 5 MB for localStorage storage.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm(f => ({ ...f, fileData: reader.result as string, fileName: file.name }));
-    };
-    reader.readAsDataURL(file);
+    if (file.size > 50 * 1024 * 1024) { alert('File too large. Max 50 MB.'); return; }
+    setPendingFile(file);
+    setForm(f => ({ ...f, fileName: file.name, fileUrl: 'pending' }));
   };
+
+  const mAcc = useMemo(() => ({ title: (m: Manual) => m.title, category: (m: Manual) => m.category, updated: (m: Manual) => m.lastUpdated || '', by: (m: Manual) => m.uploadedBy || '' }), []);
+  const { sorted: sortedManuals, sortKey: mSortKey, sortAsc: mSortAsc, toggle: mToggle } = useSort(manuals, 'title', mAcc);
 
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{manuals.length} documents</p>
         <div className="flex gap-2">
-          <button onClick={() => downloadCSV(['Title','Category','Description','Instrument','Updated','Uploaded By','Has PDF'], manuals.map(m => [m.title, m.category, m.description, m.instrument || '', m.lastUpdated, m.uploadedBy, m.fileData ? 'Yes' : 'No']), 'manuals')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Title','Category','Description','Instrument','Updated','Uploaded By','Has PDF'], manuals.map(m => [m.title, m.category, m.description, m.instrument || '', m.lastUpdated, m.uploadedBy, m.fileUrl ? 'Yes' : 'No']), 'manuals')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Title</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">Category</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Instrument</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">PDF</th>
-          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Updated</th><th className="px-3 py-2.5 text-left font-semibold text-gray-700">By</th>
+          <SortTh label="Title" k="title" sortKey={mSortKey} sortAsc={mSortAsc} toggle={mToggle} />
+          <SortTh label="Category" k="category" sortKey={mSortKey} sortAsc={mSortAsc} toggle={mToggle} />
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Instrument</th>
+          <th className="px-3 py-2.5 text-left font-semibold text-gray-700">PDF</th>
+          <SortTh label="Updated" k="updated" sortKey={mSortKey} sortAsc={mSortAsc} toggle={mToggle} />
+          <SortTh label="By" k="by" sortKey={mSortKey} sortAsc={mSortAsc} toggle={mToggle} />
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
-          {manuals.map(m => (
+          {sortedManuals.map(m => (
             <tr key={m.id} className="hover:bg-gray-50">
               <td className="px-3 py-2 font-medium text-gray-900 max-w-[250px] truncate">{m.title}</td>
               <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${m.category === 'protocol' ? 'bg-blue-50 text-blue-700' : m.category === 'manual' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{catLabels[m.category]}</span></td>
               <td className="px-3 py-2 text-gray-500">{m.instrument || '—'}</td>
-              <td className="px-3 py-2">{m.fileData ? <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-medium">✓ {m.fileName}</span> : <span className="text-gray-300 text-[10px]">—</span>}</td>
+              <td className="px-3 py-2">{m.fileUrl ? <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-medium">&#10003; {m.fileName}</span> : <span className="text-gray-300 text-[10px]">—</span>}</td>
               <td className="px-3 py-2 text-gray-500">{m.lastUpdated}</td><td className="px-3 py-2 text-gray-500">{m.uploadedBy}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
-                {m.fileData && <a href={m.fileData} download={m.fileName || `${m.title}.pdf`} className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><Download size={13} /></a>}
+                {m.fileUrl && <a href={m.fileUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><Download size={13} /></a>}
                 <button onClick={() => open(m)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => removeManual(m.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => confirmDelete('Delete Document?', `"${m.title}" will be permanently removed.`, () => removeManual(m.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
@@ -713,19 +1262,19 @@ function ManualsTab() {
             <Field label="Last Updated"><input type="date" value={form.lastUpdated} onChange={e => setForm({ ...form, lastUpdated: e.target.value })} className={inputCls} /></Field>
             <Field label="Uploaded By"><input value={form.uploadedBy} onChange={e => setForm({ ...form, uploadedBy: e.target.value })} className={inputCls} /></Field>
           </div>
-          {/* PDF Upload */}
-          <Field label="PDF File (max 5 MB)">
+          <Field label="PDF File (max 50 MB)">
             <div className="flex items-center gap-2">
               <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileChange} className="hidden" />
               <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2.5 border border-dashed border-gray-300 rounded-xl text-sm font-manrope text-gray-600 hover:border-[#4DC9FF] hover:text-[#102C53] transition-all flex-1">
-                <Upload size={14} /> {form.fileData ? form.fileName || 'File attached' : 'Choose PDF...'}
+                <Upload size={14} /> {pendingFile ? pendingFile.name : form.fileUrl ? form.fileName || 'File attached' : 'Choose PDF...'}
               </button>
-              {form.fileData && <button type="button" onClick={() => setForm(f => ({ ...f, fileData: undefined, fileName: undefined }))} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><X size={14} /></button>}
+              {(pendingFile || form.fileUrl) && <button type="button" onClick={() => { setPendingFile(null); setForm(f => ({ ...f, fileUrl: undefined, fileName: undefined })); }} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><X size={14} /></button>}
             </div>
           </Field>
-          <button onClick={save} disabled={!form.title} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Document'}</button>
+          <button onClick={save} disabled={!form.title || uploading} className={btnPrimary}><Save size={16} /> {uploading ? 'Uploading...' : editing ? 'Save' : 'Add Document'}</button>
         </div>
       </Modal>}
+      <ConfirmDialog />
     </>
   );
 }
@@ -786,6 +1335,140 @@ function CalendarTab() {
               <span className="text-xs font-mono text-gray-600 shrink-0">{formatTime(b.startHour)}-{formatTime(b.endHour)}</span>
             </div>); })}</div>
         )}
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// Backup & Restore Tab
+// ============================================================
+function BackupTab() {
+  const [status, setStatus] = useState<{ type: 'idle' | 'loading' | 'success' | 'error'; message: string }>({ type: 'idle', message: '' });
+  const jsonFileRef = useRef<HTMLInputElement>(null);
+  const pdfFileRef = useRef<HTMLInputElement>(null);
+
+  const showStatus = (type: 'success' | 'error', message: string) => {
+    setStatus({ type, message });
+    if (type === 'success') setTimeout(() => setStatus({ type: 'idle', message: '' }), 5000);
+  };
+
+  const handleExportJSON = async () => {
+    setStatus({ type: 'loading', message: 'Exporting database...' });
+    try {
+      const { exportDatabaseJSON, downloadText, formatBackupDate } = await import('@/lib/backup');
+      const json = await exportDatabaseJSON();
+      downloadText(json, `mimic-backup-${formatBackupDate()}.json`);
+      showStatus('success', 'Database exported successfully');
+    } catch (e) { showStatus('error', `Export failed: ${e}`); }
+  };
+
+  const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm('This will REPLACE all current data in the database. Are you sure?')) { e.target.value = ''; return; }
+    setStatus({ type: 'loading', message: 'Restoring database...' });
+    try {
+      const text = await file.text();
+      const { importDatabaseJSON } = await import('@/lib/backup');
+      const result = await importDatabaseJSON(text);
+      if (result.ok) { showStatus('success', 'Database restored successfully. Reload the page to see changes.'); }
+      else { showStatus('error', `Restore completed with errors:\n${result.errors.join('\n')}`); }
+    } catch (err) { showStatus('error', `Restore failed: ${err}`); }
+    e.target.value = '';
+  };
+
+  const handleExportPDFs = async () => {
+    setStatus({ type: 'loading', message: 'Downloading PDF files...' });
+    try {
+      const { exportPDFsZip, downloadBlob, formatBackupDate } = await import('@/lib/backup');
+      const zip = await exportPDFsZip();
+      if (!zip) { showStatus('error', 'No PDF files found in storage'); return; }
+      downloadBlob(zip, `mimic-pdfs-${formatBackupDate()}.zip`);
+      showStatus('success', 'PDFs downloaded successfully');
+    } catch (e) { showStatus('error', `PDF export failed: ${e}`); }
+  };
+
+  const handleImportPDFs = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!confirm('This will upload all PDFs from the ZIP to storage (existing files with the same name will be overwritten). Continue?')) { e.target.value = ''; return; }
+    setStatus({ type: 'loading', message: 'Uploading PDF files...' });
+    try {
+      const { importPDFsZip } = await import('@/lib/backup');
+      const result = await importPDFsZip(file);
+      if (result.ok) { showStatus('success', `${result.uploaded} PDF(s) restored successfully`); }
+      else { showStatus('error', `Uploaded ${result.uploaded} files with errors:\n${result.errors.join('\n')}`); }
+    } catch (err) { showStatus('error', `PDF restore failed: ${err}`); }
+    e.target.value = '';
+  };
+
+  const cardCls = 'bg-white rounded-xl p-5 shadow-sm border border-gray-100';
+  const btnPrimary = 'flex items-center gap-2 px-4 py-2.5 bg-[#102C53] text-white text-sm font-medium font-manrope rounded-xl hover:bg-[#102C53]/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+  const btnOutline = 'flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 text-gray-600 text-sm font-medium font-manrope rounded-xl hover:border-[#4DC9FF] hover:text-[#102C53] transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+  const isLoading = status.type === 'loading';
+
+  return (
+    <>
+      {/* Status banner */}
+      {status.type !== 'idle' && (
+        <div className={`flex items-start gap-3 p-4 rounded-xl text-sm font-manrope ${
+          status.type === 'loading' ? 'bg-blue-50 text-blue-800' :
+          status.type === 'success' ? 'bg-green-50 text-green-800' :
+          'bg-red-50 text-red-800'
+        }`}>
+          {status.type === 'loading' && <Loader2 size={16} className="animate-spin shrink-0 mt-0.5" />}
+          {status.type === 'success' && <CheckCircle2 size={16} className="shrink-0 mt-0.5" />}
+          {status.type === 'error' && <AlertCircle size={16} className="shrink-0 mt-0.5" />}
+          <span className="whitespace-pre-wrap">{status.message}</span>
+        </div>
+      )}
+
+      {/* Database */}
+      <div className={cardCls}>
+        <div className="flex items-center gap-2 mb-1">
+          <DatabaseBackup size={18} className="text-[#102C53]" />
+          <h2 className="text-sm font-bold text-gray-900 font-manrope">Database Backup</h2>
+        </div>
+        <p className="text-xs text-gray-500 font-manrope mb-4">Export or restore all data (users, instruments, reagents, bookings, cryo, wishlist, logs, manuals metadata, etc.) as a single JSON file.</p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={handleExportJSON} disabled={isLoading} className={btnPrimary}>
+            <Download size={16} /> Export Database (JSON)
+          </button>
+          <input ref={jsonFileRef} type="file" accept=".json" onChange={handleImportJSON} className="hidden" />
+          <button onClick={() => jsonFileRef.current?.click()} disabled={isLoading} className={btnOutline}>
+            <UploadCloud size={16} /> Restore Database (JSON)
+          </button>
+        </div>
+      </div>
+
+      {/* PDFs */}
+      <div className={cardCls}>
+        <div className="flex items-center gap-2 mb-1">
+          <FileArchive size={18} className="text-[#102C53]" />
+          <h2 className="text-sm font-bold text-gray-900 font-manrope">PDF Files Backup</h2>
+        </div>
+        <p className="text-xs text-gray-500 font-manrope mb-4">Download all uploaded PDFs (protocols, manuals, safety data sheets) as a ZIP file organized by category, or restore from a previously downloaded ZIP.</p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={handleExportPDFs} disabled={isLoading} className={btnPrimary}>
+            <Download size={16} /> Download All PDFs (ZIP)
+          </button>
+          <input ref={pdfFileRef} type="file" accept=".zip" onChange={handleImportPDFs} className="hidden" />
+          <button onClick={() => pdfFileRef.current?.click()} disabled={isLoading} className={btnOutline}>
+            <UploadCloud size={16} /> Restore PDFs (ZIP)
+          </button>
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+        <h3 className="text-xs font-bold text-amber-900 font-manrope mb-2 flex items-center gap-1.5"><AlertCircle size={14} /> Important Notes</h3>
+        <ul className="text-xs text-amber-800 font-manrope space-y-1 list-disc list-inside">
+          <li><strong>Database Restore</strong> replaces all existing data — make sure to export first as a safety measure.</li>
+          <li><strong>PDF Restore</strong> uploads files and overwrites duplicates, but does not delete files not in the ZIP.</li>
+          <li>After restoring the database, <strong>reload the page</strong> to see the updated data.</li>
+          <li>Recommended: export a backup regularly (e.g., weekly) and store it in a safe location.</li>
+        </ul>
       </div>
     </>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Mail, X, FileText } from 'lucide-react';
+import { Mail, X, FileText, ExternalLink, Linkedin } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import publicationsData from '@/data/publications.json';
 
@@ -12,6 +12,9 @@ interface PI {
   bio: string;
   bioFull?: string;
   image: string;
+  scopusId?: string;
+  orcid?: string;
+  linkedin?: string;
 }
 
 interface PICardProps {
@@ -32,6 +35,7 @@ interface Publication {
 
 export default function PICard({ pi }: PICardProps) {
   const [showModal, setShowModal] = useState(false);
+  const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
 
   // Extract last name and first initial (e.g., "Prof. Marco Rasponi" -> "Rasponi, M.")
   const getAuthorPattern = (fullName: string): string => {
@@ -89,7 +93,7 @@ export default function PICard({ pi }: PICardProps) {
             <div 
               className="w-full h-full bg-cover bg-center"
               style={{ 
-                backgroundImage: `url(${pi.image})`,
+                backgroundImage: `url(${prefix}${pi.image})`,
                 backgroundColor: '#E0DCDC' 
               }}
             />
@@ -117,7 +121,7 @@ export default function PICard({ pi }: PICardProps) {
                 Read more
               </button>
               
-              <div className="pt-2">
+              <div className="flex items-center justify-center gap-4 pt-2">
                 <a 
                   href={`mailto:${pi.email}`}
                   className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm"
@@ -125,6 +129,17 @@ export default function PICard({ pi }: PICardProps) {
                   <Mail size={16} className="mr-2" />
                   {pi.email}
                 </a>
+                {pi.linkedin && (
+                  <a
+                    href={pi.linkedin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0A66C2] hover:text-[#004182] transition-colors"
+                    title="LinkedIn Profile"
+                  >
+                    <Linkedin size={18} />
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -134,7 +149,7 @@ export default function PICard({ pi }: PICardProps) {
       {/* Modal for full bio and publications */}
       {showModal && (
         <div 
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 z-[60] flex items-start justify-center p-4 pt-20 overflow-y-auto"
           onClick={() => setShowModal(false)}
         >
           <motion.div
@@ -157,7 +172,7 @@ export default function PICard({ pi }: PICardProps) {
               <div className="w-24 h-24 rounded-full overflow-hidden bg-polimi-gray flex-shrink-0">
                 <div 
                   className="w-full h-full bg-cover bg-center"
-                  style={{ backgroundImage: `url(${pi.image})` }}
+                  style={{ backgroundImage: `url(${prefix}${pi.image})` }}
                 />
               </div>
               <div>
@@ -167,29 +182,70 @@ export default function PICard({ pi }: PICardProps) {
                 <p className="text-polimi-bright-blue font-semibold text-lg mb-2">
                   {pi.role}
                 </p>
-                <a 
-                  href={`mailto:${pi.email}`} 
-                  className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm"
-                >
-                  <Mail size={16} className="mr-2" />
-                  {pi.email}
-                </a>
+                <div className="flex items-center gap-4">
+                  <a 
+                    href={`mailto:${pi.email}`} 
+                    className="inline-flex items-center text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm"
+                  >
+                    <Mail size={16} className="mr-2" />
+                    {pi.email}
+                  </a>
+                  {pi.linkedin && (
+                    <a
+                      href={pi.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-[#0A66C2] hover:text-[#004182] text-sm font-medium transition-colors"
+                      title="LinkedIn Profile"
+                    >
+                      <Linkedin size={16} />
+                      LinkedIn
+                    </a>
+                  )}
+                </div>
+                {/* Scopus & ORCID links */}
+                {(pi.scopusId || pi.orcid) && (
+                  <div className="flex items-center gap-3 mt-2">
+                    {pi.scopusId && (
+                      <a
+                        href={`https://www.scopus.com/authid/detail.uri?authorId=${pi.scopusId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-[#E9711C]/10 text-[#E9711C] hover:bg-[#E9711C]/20 transition-colors"
+                        title="Scopus Profile"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm3.14 17.474c-1.209.635-2.588.956-4.093.956-1.633 0-3.052-.398-4.21-1.186l.524-2.06c1.088.777 2.365 1.17 3.797 1.17.84 0 1.51-.175 2.003-.524.493-.35.74-.82.74-1.41 0-.553-.206-1.005-.618-1.356-.412-.35-1.124-.706-2.136-1.068-1.303-.467-2.264-1.02-2.884-1.658-.62-.638-.93-1.434-.93-2.388 0-1.12.42-2.017 1.258-2.69.84-.673 1.945-1.01 3.318-1.01 1.392 0 2.585.318 3.578.953l-.504 1.962c-.936-.6-2.002-.9-3.196-.9-.707 0-1.27.163-1.688.49-.42.326-.63.757-.63 1.293 0 .524.186.952.558 1.283.372.332 1.05.67 2.033 1.016 1.36.486 2.356 1.05 2.987 1.693.632.643.947 1.453.947 2.43 0 1.14-.432 2.053-1.296 2.737z"/></svg>
+                        Scopus
+                      </a>
+                    )}
+                    {pi.orcid && (
+                      <a
+                        href={`https://orcid.org/${pi.orcid}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-[#A6CE39]/15 text-[#6B8E23] hover:bg-[#A6CE39]/25 transition-colors"
+                        title="ORCID Profile"
+                      >
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zM7.369 4.378c.525 0 .947.431.947.947s-.422.947-.947.947a.95.95 0 01-.947-.947c0-.525.422-.947.947-.947zm-.722 3.038h1.444v10.041H6.647V7.416zm3.562 0h3.9c3.712 0 5.344 2.653 5.344 5.025 0 2.578-2.016 5.025-5.325 5.025h-3.919V7.416zm1.444 1.303v7.444h2.297c3.272 0 4.022-2.484 4.022-3.722 0-1.547-.853-3.722-3.853-3.722h-2.466z"/></svg>
+                        ORCID
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
             {/* Bio */}
-            {pi.bioFull && (
-              <div className="mb-8">
-                <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
-                  About
-                </h3>
-                <div className="prose max-w-none">
-                  <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-                    {pi.bioFull}
-                  </p>
-                </div>
+            <div className="mb-8">
+              <h3 className="font-frank font-bold text-xl text-polimi-blue-heritage mb-4">
+                About
+              </h3>
+              <div className="prose max-w-none">
+                <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                  {pi.bioFull || pi.bio}
+                </p>
               </div>
-            )}
+            </div>
 
             {/* Publications Section */}
             {piPublications.length > 0 && (

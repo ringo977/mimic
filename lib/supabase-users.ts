@@ -1,0 +1,108 @@
+import { supabase } from './supabase';
+import { LabUser, UserRole, UserAffiliation, generateAbbreviation } from '@/data/lab-data';
+
+export interface SupabaseLabUser {
+  id: string;
+  email: string;
+  name: string;
+  abbreviation: string;
+  role: UserRole;
+  affiliation: UserAffiliation;
+  is_admin: boolean;
+  certifications: string[];
+  projects: string[];
+  created_at?: string;
+}
+
+function toLabUser(row: SupabaseLabUser): LabUser {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    abbreviation: row.abbreviation || generateAbbreviation(row.name),
+    role: row.role,
+    affiliation: row.affiliation || 'External',
+    isAdmin: row.is_admin ?? false,
+    certifications: row.certifications || [],
+    projects: row.projects || [],
+  };
+}
+
+function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at'> {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    abbreviation: u.abbreviation || generateAbbreviation(u.name),
+    role: u.role,
+    affiliation: u.affiliation,
+    is_admin: u.isAdmin,
+    certifications: u.certifications,
+    projects: u.projects,
+  };
+}
+
+export async function fetchLabUsers(): Promise<LabUser[]> {
+  const { data, error } = await supabase
+    .from('lab_users')
+    .select('*')
+    .order('name');
+
+  if (error) {
+    console.error('Failed to fetch lab users:', error.message);
+    return [];
+  }
+
+  return (data || []).map(toLabUser);
+}
+
+export async function findLabUserByEmail(email: string): Promise<LabUser | null> {
+  const { data, error } = await supabase
+    .from('lab_users')
+    .select('*')
+    .ilike('email', email)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return toLabUser(data);
+}
+
+export async function insertLabUser(u: LabUser): Promise<LabUser | null> {
+  const { data, error } = await supabase
+    .from('lab_users')
+    .insert(toSupabaseRow(u))
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Failed to insert user:', error.message);
+    return null;
+  }
+  return toLabUser(data);
+}
+
+export async function updateLabUser(u: LabUser): Promise<boolean> {
+  const { error } = await supabase
+    .from('lab_users')
+    .update(toSupabaseRow(u))
+    .eq('id', u.id);
+
+  if (error) {
+    console.error('Failed to update user:', error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function deleteLabUser(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('lab_users')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('Failed to delete user:', error.message);
+    return false;
+  }
+  return true;
+}

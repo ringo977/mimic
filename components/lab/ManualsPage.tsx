@@ -101,7 +101,7 @@ export default function ManualsPage() {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${catInfo.color}`}>
                       {catInfo.label.replace(/s$/, '')}
                     </span>
-                    {doc.fileData && (
+                    {doc.fileUrl && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-700">
                         PDF
                       </span>
@@ -114,10 +114,11 @@ export default function ManualsPage() {
                     {doc.instrument && <span className="text-blue-500">Instrument: {doc.instrument}</span>}
                   </div>
                 </div>
-                {doc.fileData ? (
+                {doc.fileUrl ? (
                   <a
-                    href={doc.fileData}
-                    download={doc.fileName || `${doc.title}.pdf`}
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="p-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700 transition-colors shrink-0 flex items-center gap-1"
                     title="Download PDF"
                   >

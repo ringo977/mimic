@@ -9,6 +9,7 @@
       "role": "Coordinator",
       "period": "2026-2029",
       "website": null,
+      "cordisUrl": "https://cordis.europa.eu/project/id/101257934",
       "abstract": "Inherited cardiomyopathies (iCMPs) are a major cause of heart disease and account for a significant percentage of deaths in young patients. While recent advances in next-generation sequencing have enabled testing of a large number of genes related to iCMPs, the rate of identification of pathogenic variants is still below 50%. On the other hand, this unprecedented sequencing power has led to an exponential increase in detecting novel unclassified genetic variants (VUS), for which pathogenicity has not been confirmed. VUS uncertainty of diagnosis poses important problems in clinical evaluations, therapeutic decisions and risk-assessment both for patient and family members. The AI-RITMIA Consortium proposes a breakthrough innovation to establish a conclusive link between specific VUSs and CMP clinical phenotypes, yielding to the development of an unprecedented technological platform: a radically new AI-guided patient-specific heart-on-chip diagnostic tool (AI-RITMIA) will be able to interface for the first time three currently diverging sectors: patient specific in vitro modelling, in silico and artificial intelligence (AI) based data handling and clinical evaluation. AI-RITMIA will be the first clinical grade personalized in vitro-in silico platform enabling faster and unbiased correlations of clinical outcomes with functional in vitro profiling for VUS-carrying patients, returning a pathogenicity score directly to the clinicians to unlock informed diagnosis and therapeutic decisions. The achievement of such innovation will leverage on enabling technologies and resources uniquely available in the Consortium, which brings together excellences from the three interfacing worlds: 1) in vitro models based on OoC and microsensors @POLIMI, @BIOMIMX, @NMI and patient-specific iPSCs @ICH; 2) the largest EU cohort of well characterized CMP patients @COCHIN, and 3) clinical grade AI-based data handling interfaces @TUM, @ADVICE."
     },
     {
@@ -31,6 +32,7 @@
       "role": "Coordinator",
       "period": "2025-2028",
       "website": null,
+      "cordisUrl": "https://cordis.europa.eu/project/id/101205238",
       "abstract": "The tumour microenvironment (TME) constitutes a complex and dynamic ecosystem of different cell types and extracellular matrix with an emerging role in cancer progression and metastasis. At the same time, the TME poses a barrier to the efficient delivery of drugs, contributing to treatment resistance. With the support of the Marie Skłodowska-Curie Actions programme, the MATRIx project focuses on melanoma and aims to develop a 3D tumour-on-a-chip model using patient-derived xenografts. This innovative platform significantly improves on existing technology and facilitates dynamic co-culture, vascularisation and real-time monitoring. The goal is to bridge tumour biology with nanotechnology and use the MATRIx model to develop personalised nanomedicine strategies for melanoma."
     },
     {
@@ -53,6 +55,7 @@
       "role": "Coordinator",
       "period": "2023-2029",
       "website": null,
+      "cordisUrl": "https://cordis.europa.eu/project/id/101077146",
       "abstract": "Many diseases remain untreatable because scientists lack reliable models to study how tissues develop and regenerate. Traditional lab methods fail to replicate the complex mechanical forces that influence tissue formation, limiting progress in regenerative medicine. Although developmental engineering has made advances by mimicking embryonic development, it largely overlooks mechanical forces as a key factor. Current in vitro setups operate in a fixed manner, disregarding how tissues naturally respond to and modify their mechanical environment. The ERC-funded EvOoC project aims to transform this approach by developing intelligent Organs-on-Chip platforms that actively apply, monitor, and adjust mechanical forces. By integrating microfabrication, mechanobiology, and machine learning, EvOoC could pave the way for breakthrough therapies in tissue repair."
     }
   ],

@@ -2,71 +2,277 @@
   "projects": [
     {
       "id": 1,
-      "title": "Cardiac Tissue Modeling",
-      "description": "Development of heart MiMic systems with integrated electrical and mechanical sensors for studying cardiac physiology, drug cardiotoxicity, and disease mechanisms. Our platforms incorporate human iPSC-derived cardiomyocytes in 3D microenvironments.",
-      "tags": ["Heart MiMic", "Cardiology", "Drug Testing"],
-      "image": "/images/research/cardiac.jpg"
+      "slug": "cardiac-tissue",
+      "title": "Cardiac Tissue",
+      "description": "Development of heart-on-chip systems with integrated electrical and mechanical sensors for studying cardiac physiology, drug cardiotoxicity, and disease mechanisms using human iPSC-derived cardiomyocytes in 3D microenvironments.",
+      "tags": ["Heart-on-Chip", "Cardiology", "iPSC-CMs"],
+      "image": "/images/research/cardiac-tissue.jpg",
+      "video": "/images/research/cardiac-tissue.mp4",
+      "sections": [
+        {
+          "title": "Healthy Cardiac Tissue",
+          "text": "Our lab develops advanced heart-on-chip platforms that recapitulate the key features of healthy myocardial tissue. Using human iPSC-derived cardiomyocytes organized in 3D constructs under cyclic mechanical stimulation, we recreate the contractile function, electrophysiology, and calcium handling of the native heart. These models serve as baselines for drug testing and disease studies.",
+          "image": "/images/research/cardiac-healthy.jpg"
+        },
+        {
+          "title": "Cardiac Fibrosis",
+          "text": "We engineer fibrotic heart models by co-culturing cardiomyocytes with activated cardiac fibroblasts in controlled microenvironments. These platforms allow us to study the progressive stiffening and functional impairment caused by fibrosis, and to screen anti-fibrotic compounds in a physiologically relevant setting.",
+          "image": "/images/research/cardiac-fibrosis.jpg"
+        },
+        {
+          "title": "Genetic Diseases",
+          "text": "Leveraging patient-derived iPSCs carrying specific genetic mutations, we create personalized cardiac models of inherited cardiomyopathies. These organ-on-chip systems enable the study of disease phenotypes such as arrhythmogenic cardiomyopathy and hypertrophic cardiomyopathy, paving the way for precision medicine approaches.",
+          "image": "/images/research/cardiac-genetic.jpg"
+        }
+      ],
+      "pubKeywords": ["cardiac", "heart", "cardiomyocyte", "myocard"]
     },
     {
       "id": 2,
-      "title": "Liver Toxicity Platforms",
-      "description": "Advanced liver MiMic models combining hepatocytes, endothelial cells, and Kupffer cells to predict drug-induced liver injury. Our systems enable long-term culture and metabolic profiling for pharmaceutical applications.",
-      "tags": ["Liver MiMic", "Toxicology", "Drug Metabolism"],
-      "image": "/images/research/liver.jpg"
+      "slug": "articular-joints",
+      "title": "Articular Joints",
+      "description": "Microfluidic platforms recreating the articular joint environment, combining cartilage, bone, and synovial tissues to study osteoarthritis, rheumatoid arthritis, and evaluate potential therapeutic interventions.",
+      "tags": ["Joint-on-Chip", "Cartilage", "Osteoarthritis"],
+      "image": "/images/research/articular-joint.jpg",
+      "sections": [
+        {
+          "title": "Osteoarthritis on Chip",
+          "text": "We develop joint-on-chip models that recapitulate the hallmarks of osteoarthritis, including cartilage degradation, subchondral bone remodeling, and synovial inflammation. Using mechanically stimulated osteochondral microtissues, we study disease progression and evaluate disease-modifying drugs in a controlled microfluidic environment.",
+          "image": "/images/research/joints-oa.jpg"
+        },
+        {
+          "title": "Developmental Biology",
+          "text": "Our platforms model the mesenchymal condensation and chondrogenic differentiation processes that drive cartilage and bone development. By recapitulating morphogenetic gradients in microfluidic devices, we investigate the signaling pathways governing skeletal tissue formation and regeneration.",
+          "image": "/images/research/joints-dev.jpg"
+        },
+        {
+          "title": "Shear Stresses",
+          "text": "Mechanical loading is a critical regulator of joint tissue homeostasis. We engineer microfluidic systems that apply controlled compressive and shear forces to cartilage constructs, enabling the study of mechanotransduction pathways and their role in both healthy maintenance and pathological degradation.",
+          "image": "/images/research/joints-shear.jpg"
+        },
+        {
+          "title": "Joint-on-Chip",
+          "text": "Our integrated joint-on-chip platform combines cartilage, bone, synovium, and vascular compartments in a single multi-tissue device. This holistic approach enables the study of inter-tissue crosstalk and systemic drug effects on the complete articular joint unit.",
+          "image": "/images/research/joints-chip.jpg"
+        }
+      ],
+      "pubKeywords": ["joint", "cartilage", "osteochondral", "osteoarthritis", "chondro"]
     },
     {
       "id": 3,
-      "title": "Gut Microbiome Systems",
-      "description": "Microfluidic platforms that co-culture intestinal epithelium with complex microbial communities under physiological oxygen gradients. Applications include studying inflammatory bowel disease and host-microbe interactions.",
-      "tags": ["Gut MiMic", "Microbiome", "IBD"],
-      "image": "/images/research/gut.jpg"
+      "slug": "neuromuscular-circuits",
+      "title": "Neuromuscular Circuits",
+      "description": "Organ-on-chip models of the neuromuscular junction integrating motor neurons, skeletal muscle cells, and supporting tissues to investigate neuromuscular disorders and drug responses.",
+      "tags": ["NMJ-on-Chip", "Motor Neurons", "Muscle"],
+      "image": "/images/research/neuromuscular.jpg",
+      "sections": [
+        {
+          "title": "Neuromuscular Junction on Chip",
+          "text": "We develop compartmentalized microfluidic platforms that recreate the neuromuscular junction by co-culturing motor neurons and skeletal muscle fibers in separate but fluidically connected chambers. Axonal growth through microchannels enables synapse formation and functional neuromuscular coupling, providing a powerful tool for studying ALS, myasthenia gravis, and neurotoxicity.",
+          "image": "/images/research/nmj-chip.jpg"
+        }
+      ],
+      "pubKeywords": ["neuromuscular", "motor neuron", "muscle", "NMJ"]
     },
     {
       "id": 4,
-      "title": "Lung Models for Infection Studies",
-      "description": "Air-liquid interface lung MiMic systems that replicate breathing mechanics and enable infection studies with respiratory pathogens. Relevant for COVID-19 research and inhalation toxicology.",
-      "tags": ["Lung MiMic", "Respiratory", "Infection"],
-      "image": "/images/research/lung.jpg"
+      "slug": "gut-microbiome",
+      "title": "Gut Microbiome",
+      "description": "Microfluidic platforms that co-culture intestinal epithelium with complex microbial communities under physiological oxygen gradients for studying inflammatory bowel disease and host-microbe interactions.",
+      "tags": ["Gut-on-Chip", "Microbiome", "IBD"],
+      "image": "/images/research/gut.jpg",
+      "sections": [
+        {
+          "title": "Healthy Gut",
+          "text": "We develop gut-on-chip systems that replicate the intestinal epithelial barrier, villus architecture, and peristaltic-like mechanical stimulation under controlled oxygen gradients. These platforms support the long-term culture of primary intestinal cells and enable the study of nutrient absorption, barrier integrity, and immune surveillance in healthy conditions.",
+          "image": "/images/research/gut-healthy.jpg"
+        },
+        {
+          "title": "Gut Microbiome",
+          "text": "Our anaerobic-aerobic gut-on-chip platforms enable the co-culture of living microbial communities with human intestinal epithelium. By maintaining physiological oxygen gradients across the epithelial barrier, we study host-microbiome interactions, dysbiosis mechanisms, and the impact of probiotics and dietary compounds on gut health.",
+          "image": "/images/research/gut-microbiome.jpg"
+        }
+      ],
+      "pubKeywords": ["gut", "intestin", "microbiome", "colonic", "bowel"]
     },
     {
       "id": 5,
-      "title": "Vascularized Tissue Engineering",
-      "description": "Creating perfusable vascular networks in MiMic devices using 3D bioprinting and microfabrication. Essential for improving nutrient delivery and tissue viability in complex organ models.",
-      "tags": ["Vascularization", "3D Bioprinting", "Tissue Engineering"],
-      "image": "/images/research/vasculature.jpg"
+      "slug": "bone-marrow",
+      "title": "Bone Marrow",
+      "description": "Engineered bone marrow niches on chip recapitulating hematopoiesis and the marrow microenvironment to study blood cancers, drug toxicity on hematopoietic cells, and stem cell behavior.",
+      "tags": ["Marrow-on-Chip", "Hematopoiesis", "Stem Cells"],
+      "image": "/images/research/bone-marrow.jpg",
+      "sections": [
+        {
+          "title": "Bone Marrow Niche on Chip",
+          "text": "We engineer miniaturized bone marrow niches that recapitulate the perivascular and endosteal microenvironments using mesenchymal stromal cells, endothelial cells, and hematopoietic stem cells in 3D hydrogel scaffolds. These platforms support long-term hematopoiesis and enable the study of stem cell self-renewal, lineage commitment, and the effects of cytotoxic drugs on blood cell production.",
+          "image": "/images/research/bonemarrow-niche.jpg"
+        }
+      ],
+      "pubKeywords": ["bone marrow", "hematopoie", "marrow"]
     },
     {
       "id": 6,
-      "title": "Biosensor Integration",
-      "description": "Development of electrochemical and optical biosensors for real-time monitoring of tissue function, metabolism, and barrier integrity in MiMic systems. Non-invasive and label-free detection methods.",
-      "tags": ["Biosensors", "Real-time Monitoring", "Electrochemistry"],
-      "image": "/images/research/biosensors.jpg"
+      "slug": "brain",
+      "title": "Brain",
+      "description": "Organ-on-chip platforms modelling neural tissue architecture and function, from 3D brain organoid-like constructs to interconnected neuronal circuits, for studying neurodegenerative diseases, brain development, and drug screening.",
+      "tags": ["Brain-on-Chip", "Neuroscience", "Neurodegeneration"],
+      "image": "/images/research/brain.jpg",
+      "sections": [
+        {
+          "title": "3D Brain Models",
+          "text": "We develop three-dimensional brain-on-chip platforms that recapitulate key features of brain tissue architecture, including cellular heterogeneity and spatial organisation. By integrating neurons, astrocytes, and microglia within microfluidic devices, these models enable the study of neurodegenerative processes, neuroinflammation, and the evaluation of neuroprotective compounds in a physiologically relevant context.",
+          "image": "/images/research/brain-3d.jpg"
+        },
+        {
+          "title": "Neuronal Circuits",
+          "text": "Our neuronal circuit-on-chip platforms use compartmentalised microfluidic architectures to guide axonal growth and establish functional synaptic connections between distinct neuronal populations. These systems allow the study of signal propagation, synaptic plasticity, and circuit-level dysfunction relevant to conditions such as Alzheimer's and Parkinson's disease.",
+          "image": "/images/research/brain-circuits.jpg"
+        }
+      ],
+      "pubKeywords": ["brain", "neural", "neuro", "neuron", "astrocyt", "synap"]
     },
     {
       "id": 7,
-      "title": "Tumor Microenvironment Models",
-      "description": "Cancer MiMic platforms that recapitulate the tumor microenvironment including immune cells, vasculature, and extracellular matrix. Used for studying metastasis and immunotherapy responses.",
-      "tags": ["Cancer", "Tumor Models", "Immunotherapy"],
-      "image": "/images/research/cancer.jpg"
+      "slug": "respiratory-system",
+      "title": "Respiratory System",
+      "description": "Air-liquid interface lung-on-chip systems replicating breathing mechanics and alveolar function for infection studies, inhalation toxicology, and respiratory disease modeling.",
+      "tags": ["Lung-on-Chip", "Respiratory", "ALI"],
+      "image": "/images/research/respiratory-system.jpg",
+      "sections": [
+        {
+          "title": "Healthy Lung",
+          "text": "We develop air-liquid interface lung-on-chip systems featuring alveolar epithelial and endothelial cells separated by a porous membrane under cyclic mechanical strain mimicking breathing. These platforms recapitulate gas exchange, surfactant production, and mucociliary clearance, serving as robust baselines for toxicology and drug studies.",
+          "image": "/images/research/lung-healthy.jpg"
+        },
+        {
+          "title": "Idiopathic Pulmonary Fibrosis (IPF)",
+          "text": "Our IPF models incorporate activated fibroblasts and pro-fibrotic stimuli in the lung-on-chip to replicate the progressive scarring and stiffening of pulmonary tissue. We study the fibrotic cascade, extracellular matrix remodeling, and evaluate anti-fibrotic therapeutic candidates in a mechanically active environment.",
+          "image": "/images/research/ipf.jpg"
+        },
+        {
+          "title": "COPD / Asthma",
+          "text": "We model chronic obstructive pulmonary disease and asthma on chip by incorporating airway epithelial cells, smooth muscle, and inflammatory mediators. Mechanical stimulation and exposure to environmental triggers allow us to study airway remodeling, mucus hypersecretion, and bronchial hyperresponsiveness, and to test bronchodilator and anti-inflammatory drugs.",
+          "image": "/images/research/lung-copd.jpg"
+        }
+      ],
+      "pubKeywords": ["lung", "pulmonary", "respir", "alveol", "airway"]
     },
     {
       "id": 8,
-      "title": "Blood-Brain Barrier Platforms",
-      "description": "Microfluidic models of the blood-brain barrier for studying neurodegenerative diseases and evaluating drug permeability. Incorporates brain endothelial cells, pericytes, and astrocytes.",
-      "tags": ["BBB", "Neuroscience", "Drug Delivery"],
-      "image": "/images/research/bbb.jpg"
+      "slug": "liver-functions",
+      "title": "Liver Functions",
+      "description": "Advanced liver-on-chip models combining hepatocytes, endothelial cells, and Kupffer cells to predict drug-induced liver injury, enabling long-term culture and metabolic profiling.",
+      "tags": ["Liver-on-Chip", "Toxicology", "DILI"],
+      "image": "/images/research/liver.jpg",
+      "sections": [
+        {
+          "title": "Liver-on-Chip for Drug Toxicity",
+          "text": "Our liver-on-chip platforms integrate primary hepatocytes or iPSC-derived hepatocyte-like cells with non-parenchymal cells in a perfused microenvironment that maintains metabolic zonation and biliary function for weeks. These systems are optimized for predicting drug-induced liver injury (DILI), enabling long-term metabolic profiling and toxicity assessment under physiological flow conditions.",
+          "image": "/images/research/liver-dili.jpg"
+        }
+      ],
+      "pubKeywords": ["liver", "hepat", "hepatocyte", "DILI"]
     },
     {
       "id": 9,
+      "slug": "microvasculature-systems",
+      "title": "Microvasculature Systems",
+      "description": "Integrating perfusable microvascular networks into organ-on-chip microtissues to more closely approximate in vivo physiology, enabling systemic-like interactions — including immune cell trafficking and paracrine signalling — that are impossible in avascular models.",
+      "tags": ["Vasculature-on-Chip", "Microfabrication", "Perfusion", "Immune System"],
+      "image": "/images/research/microvasculature.jpg",
+      "sections": [
+        {
+          "title": "Vascularized Myocardium",
+          "text": "We engineer vascularized cardiac microtissues on chip by co-culturing cardiomyocytes with endothelial cells within perfusable microfluidic networks. The resulting constructs display improved maturation, enhanced contractile function, and allow the study of drug-induced cardiotoxicity under physiologically relevant perfusion conditions, bridging the gap between simple 2D monolayers and the native heart tissue.",
+          "image": "/images/research/vasculature-myocardium.jpg",
+          "video": "/images/research/vasculature-myocardium.mp4"
+        },
+        {
+          "title": "Vascularized Tumour Models",
+          "text": "Our vascularized tumour-on-chip platforms embed perfusable microvascular networks around 3D tumour constructs, enabling the study of nanoparticle extravasation, immune cell infiltration, and immune evasion mechanisms. These models provide a uniquely relevant setting for evaluating nanomedicine delivery strategies and immunotherapeutic approaches against solid tumours.",
+          "image": "/images/research/vasculature-tumour.jpg"
+        },
+        {
+          "title": "Blood–Brain Barrier",
+          "text": "We develop microfluidic blood–brain barrier (BBB) chips that recapitulate the selective permeability of the cerebral microvasculature by co-culturing brain endothelial cells, pericytes, and astrocytes. These platforms are used to investigate CNS drug delivery, neuroinflammatory responses, and nanoparticle transport across the BBB, supporting the development of new therapies for neurological disorders.",
+          "image": "/images/research/vasculature-bbb.jpg"
+        }
+      ],
+      "pubKeywords": ["vascular", "endotheli", "angiogen", "perfus", "blood-brain", "BBB"]
+    },
+    {
+      "id": 10,
+      "slug": "tumour-models",
+      "title": "Tumour Models",
+      "description": "Cancer-on-chip platforms recapitulating the tumour microenvironment including immune cells, vasculature, and extracellular matrix for studying metastasis and immunotherapy responses.",
+      "tags": ["Tumour-on-Chip", "Oncology", "Immunotherapy"],
+      "image": "/images/research/cancer.jpg",
+      "sections": [
+        {
+          "title": "Tumour Micromasses",
+          "text": "We develop 3D tumour micromass models in microfluidic devices that recapitulate the spatial heterogeneity and nutrient gradients of solid tumours. These platforms allow the study of tumour growth, invasion, and drug resistance mechanisms in a controlled and reproducible microenvironment.",
+          "image": "/images/research/tumour-micromass.jpg"
+        },
+        {
+          "title": "Glioblastoma",
+          "text": "Our glioblastoma-on-chip platforms model the aggressive brain tumour microenvironment including the blood-brain barrier interface, enabling the study of tumour infiltration, angiogenesis, and the evaluation of therapeutic agents that must cross the BBB to reach the tumour site.",
+          "image": "/images/research/tumour-gbm.jpg"
+        },
+        {
+          "title": "Melanoma",
+          "text": "We recreate the melanoma tumour microenvironment on chip, including interactions with dermal stroma and immune cells, to study metastatic potential, immune evasion mechanisms, and to screen immunotherapy and targeted therapy compounds.",
+          "image": "/images/research/tumour-melanoma.jpg"
+        },
+        {
+          "title": "Cholangiocarcinoma",
+          "text": "Our biliary cancer-on-chip platforms model the unique microenvironment of cholangiocarcinoma, incorporating bile duct epithelial cells, tumour organoids, and the surrounding desmoplastic stroma to study this aggressive and difficult-to-treat malignancy.",
+          "image": "/images/research/tumour-cca.jpg"
+        }
+      ],
+      "pubKeywords": ["tumour", "tumor", "cancer", "glioblastoma", "melanoma", "cholangiocarcinoma", "oncol"]
+    },
+    {
+      "id": 11,
+      "slug": "multi-organ",
       "title": "Multi-Organ Platforms",
-      "description": "Body MiMic systems connecting multiple organ modules to study inter-organ communication, systemic drug effects, and pharmacokinetics. Enables more predictive preclinical testing.",
-      "tags": ["Multi-Organ", "Systems Biology", "PBPK"],
-      "image": "/images/research/multi-organ.jpg"
+      "description": "Body-on-chip systems connecting multiple organ modules to study inter-organ communication, systemic drug effects, and pharmacokinetics for more predictive preclinical testing.",
+      "tags": ["Body-on-Chip", "Multi-Organ", "PK/PD"],
+      "image": "/images/research/multi-organ.jpg",
+      "sections": [
+        {
+          "title": "Liver / Heart",
+          "text": "Our liver-heart multi-organ platform connects hepatic and cardiac compartments through a shared microfluidic circulation, enabling the study of drug metabolite cardiotoxicity. The liver module metabolizes compounds into active or toxic metabolites that then reach the cardiac tissue, mimicking systemic pharmacokinetics and revealing toxicity risks missed by single-organ assays.",
+          "image": "/images/research/multi-liver-heart.jpg"
+        },
+        {
+          "title": "Liver / Tumour",
+          "text": "We develop liver-tumour coupled systems to study how hepatic drug metabolism affects anti-cancer drug efficacy. By connecting a metabolically active liver module with a tumour compartment, we evaluate the pharmacokinetic-pharmacodynamic relationship of chemotherapeutic agents in a more physiologically predictive setting.",
+          "image": "/images/research/multi-liver-tumour.jpg"
+        }
+      ],
+      "pubKeywords": ["multi-organ", "body-on-chip", "interconnect", "multi-tissue"]
+    },
+    {
+      "id": 12,
+      "slug": "technological-innovations",
+      "title": "Technological Innovations",
+      "description": "Development of advanced biosensors, microfluidic fabrication techniques, and automation tools to enable next-generation organ-on-chip systems with real-time monitoring and high-throughput capabilities.",
+      "tags": ["Biosensors", "Microfabrication", "Automation"],
+      "image": "/images/research/technology.jpg",
+      "sections": [
+        {
+          "title": "Biosensors & Real-Time Monitoring",
+          "text": "We develop electrochemical and optical biosensors for non-invasive, real-time monitoring of tissue function, metabolism, and barrier integrity within organ-on-chip systems. Our label-free detection methods enable continuous data acquisition without disrupting cell cultures, providing rich longitudinal datasets for drug response and disease progression studies.",
+          "image": "/images/research/tech-sensors.jpg"
+        }
+      ],
+      "pubKeywords": ["biosensor", "fabricat", "microfluidic device", "automation", "electrochemi"]
     }
   ],
   "keywords": [
     "Microfluidics",
-    "MiMic",
+    "Organ-on-Chip",
     "Lab-on-Chip",
     "Tissue Engineering",
     "Drug Discovery",

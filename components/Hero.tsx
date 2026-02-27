@@ -8,7 +8,7 @@ import { ArrowDown } from 'lucide-react';
 import grantsData from '@/data/grants.json';
 import publicationsData from '@/data/publications.json';
 import teamData from '@/data/team.json';
-import collaborationsData from '@/data/collaborations.json';
+import networkData from '@/data/network.json';
 
 export default function Hero() {
   // Calculate stats dynamically and round DOWN to nearest 5
@@ -23,10 +23,7 @@ export default function Hero() {
     teamData.members.length
     // alumni array exists but is NOT counted
   );
-  const totalPartners = roundTo5(
-    collaborationsData.academic.length + 
-    collaborationsData.industry.length
-  );
+  const totalPartners = roundTo5(networkData.collaborators.length);
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background Image */}
@@ -75,15 +72,9 @@ export default function Hero() {
             <div className="flex flex-col sm:flex-row items-start gap-4 mb-16">
               <Link 
                 href="/research" 
-                className="bg-polimi-bright-blue hover:bg-polimi-alpha-blue text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-              >
-                Explore Our Research
-              </Link>
-              <Link 
-                href="/join" 
                 className="border-2 border-white hover:bg-white hover:text-polimi-blue-heritage text-white px-8 py-4 rounded-lg font-manrope font-semibold transition-all duration-300"
               >
-                Join Our Team
+                Explore Our Research
               </Link>
             </div>
 
@@ -95,16 +86,16 @@ export default function Hero() {
               transition={{ duration: 0.8, delay: 0.3 }}
             >
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalGrants}+</div>
-                <div className="text-sm text-gray-600">Research Projects</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalTeam}+</div>
+                <div className="text-sm text-gray-600">Team Members</div>
               </div>
               <div className="text-center">
                 <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalPublications}+</div>
                 <div className="text-sm text-gray-600">Publications</div>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalTeam}+</div>
-                <div className="text-sm text-gray-600">Team Members</div>
+                <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalGrants}+</div>
+                <div className="text-sm text-gray-600">Financed Projects</div>
               </div>
               <div className="text-center">
                 <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">{totalPartners}+</div>

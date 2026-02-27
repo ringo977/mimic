@@ -57,7 +57,7 @@ export default function JoinPage() {
   ];
 
   return (
-    <div className="relative z-10 pt-32 pb-20">
+    <div className="relative z-10 pb-20">
       {/* Header */}
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">

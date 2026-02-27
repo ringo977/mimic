@@ -4,7 +4,8 @@ import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangl
 import { useLabContext } from './LabContext';
 import { rolePermissions, formatTime, formatDate } from '@/data/lab-data';
 
-function getInitials(name: string): string {
+function getInitials(name: string, abbreviation?: string): string {
+  if (abbreviation) return abbreviation;
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return name.substring(0, 3).toUpperCase();
   return parts[0][0].toUpperCase() + parts[parts.length - 1].substring(0, 2).toUpperCase();
@@ -38,7 +39,7 @@ export default function DashboardPage({ onNavigate }: Props) {
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-[#102C53] flex items-center justify-center text-white text-xl font-bold font-manrope shrink-0">
-            {getInitials(user.name)}
+            {getInitials(user.name, user.abbreviation)}
           </div>
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-gray-900 font-manrope">Welcome back, {user.name.split(' ')[0]}!</h1>
@@ -148,18 +149,19 @@ export default function DashboardPage({ onNavigate }: Props) {
       </div>
 
       {/* Available Documents (with PDF) */}
-      {manuals.filter(m => m.fileData).length > 0 && (
+      {manuals.filter(m => m.fileUrl).length > 0 && (
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
           <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2 mb-4">
             <FileText size={16} className="text-purple-500" />
             Documents Available
           </h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {manuals.filter(m => m.fileData).map(doc => (
+            {manuals.filter(m => m.fileUrl).map(doc => (
               <a
                 key={doc.id}
-                href={doc.fileData}
-                download={doc.fileName || `${doc.title}.pdf`}
+                href={doc.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex items-center gap-3 p-3 bg-purple-50 rounded-xl hover:bg-purple-100 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center text-purple-600">
@@ -167,7 +169,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-gray-900 font-manrope truncate">{doc.title}</p>
-                  <p className="text-[10px] text-gray-500 font-manrope">{doc.fileName || 'PDF'} · {formatDate(doc.lastUpdated)}</p>
+                  <p className="text-[10px] text-gray-500 font-manrope">{doc.fileName || 'PDF'} &middot; {formatDate(doc.lastUpdated)}</p>
                 </div>
               </a>
             ))}

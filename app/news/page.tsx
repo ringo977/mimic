@@ -7,14 +7,14 @@ import newsData from '@/data/news.json';
 export default function NewsPage() {
   const [selectedTag, setSelectedTag] = useState<string>('all');
 
-  const tags = ['all', 'News', 'Event', 'Conference', 'Award'];
+  const tags = ['all', 'News', 'Conference', 'Award', 'Event', 'Outreach'];
 
   const filteredNews = selectedTag === 'all' 
     ? newsData.news 
     : newsData.news.filter(item => item.tag === selectedTag);
 
   return (
-    <div className="relative z-10 pt-32 pb-20">
+    <div className="relative z-10 pb-20">
       {/* Header */}
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">
@@ -91,7 +91,7 @@ export default function NewsPage() {
               />
               <button
                 type="submit"
-                className="px-6 py-3 bg-polimi-bright-blue hover:bg-polimi-alpha-blue text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+                className="px-6 py-3 bg-polimi-bright-blue hover:bg-polimi-blue-heritage text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
               >
                 Subscribe
               </button>

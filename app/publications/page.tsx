@@ -1,22 +1,51 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { Download } from 'lucide-react';
 import PublicationCard from '@/components/PublicationCard';
 import publicationsData from '@/data/publications.json';
+import teamData from '@/data/team.json';
+import { exportAllBibTeX, exportAllRIS, Publication } from '@/lib/citations';
 
 export default function PublicationsPage() {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedAuthor, setSelectedAuthor] = useState<string>('all');
 
   // Get unique years and types
   const years = ['all', ...Array.from(new Set(publicationsData.publications.map(p => p.year))).sort((a, b) => b - a)];
   const types = ['all', ...Array.from(new Set(publicationsData.publications.map(p => p.type)))];
 
+  // Build author filter from team members only (match last name + first initial)
+  const teamAuthors = useMemo(() => {
+    const teamKeys = new Set(
+      [...teamData.pis, ...teamData.members].map(m => {
+        const clean = m.name.replace(/^(Prof\.|Dr\.)\s*/i, '').trim();
+        const parts = clean.split(/\s+/);
+        const lastName = parts[parts.length - 1].toLowerCase();
+        const firstInitial = parts[0][0].toLowerCase();
+        return `${lastName}|${firstInitial}`;
+      })
+    );
+    const pubAuthors = new Set(
+      publicationsData.publications.flatMap(p => p.authors)
+    );
+    return Array.from(pubAuthors)
+      .filter(a => {
+        const [last, rest] = a.split(',').map(s => s.trim());
+        if (!last || !rest) return false;
+        const initial = rest[0].toLowerCase();
+        return teamKeys.has(`${last.toLowerCase()}|${initial}`);
+      })
+      .sort((a, b) => a.localeCompare(b));
+  }, []);
+
   // Filter publications
   const filteredPublications = publicationsData.publications.filter(pub => {
     const yearMatch = selectedYear === 'all' || pub.year === selectedYear;
     const typeMatch = selectedType === 'all' || pub.type === selectedType;
-    return yearMatch && typeMatch;
+    const authorMatch = selectedAuthor === 'all' || pub.authors.includes(selectedAuthor);
+    return yearMatch && typeMatch && authorMatch;
   });
 
   // Group by year
@@ -29,7 +58,7 @@ export default function PublicationsPage() {
   const sortedYears = Object.keys(publicationsByYear).sort((a, b) => Number(b) - Number(a));
 
   return (
-    <div className="relative z-10 pt-32 pb-20">
+    <div className="relative z-10 pb-20">
       {/* Header */}
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">
@@ -47,9 +76,9 @@ export default function PublicationsPage() {
         <div className="container-polimi">
           {/* Filters */}
           <div className="bg-gray-50 rounded-xl p-6 mb-12">
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Year Filter */}
-              <div className="flex-1">
+              <div>
                 <label className="block text-sm font-semibold text-polimi-blue-heritage mb-2">
                   Filter by Year
                 </label>
@@ -67,7 +96,7 @@ export default function PublicationsPage() {
               </div>
 
               {/* Type Filter */}
-              <div className="flex-1">
+              <div>
                 <label className="block text-sm font-semibold text-polimi-blue-heritage mb-2">
                   Filter by Type
                 </label>
@@ -83,10 +112,47 @@ export default function PublicationsPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Author Filter */}
+              <div>
+                <label className="block text-sm font-semibold text-polimi-blue-heritage mb-2">
+                  Filter by Author
+                </label>
+                <select
+                  value={selectedAuthor}
+                  onChange={(e) => setSelectedAuthor(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:border-polimi-bright-blue focus:ring-2 focus:ring-polimi-bright-blue/20 outline-none transition-all"
+                >
+                  <option value="all">All Authors</option>
+                  {teamAuthors.map(author => (
+                    <option key={author} value={author}>
+                      {author}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="mt-4 text-sm text-gray-600">
-              Showing {filteredPublications.length} publication{filteredPublications.length !== 1 ? 's' : ''}
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <span className="text-sm text-gray-600">
+                Showing {filteredPublications.length} publication{filteredPublications.length !== 1 ? 's' : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => exportAllBibTeX(filteredPublications as Publication[])}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-polimi-bright-blue hover:text-polimi-alpha-blue border border-polimi-bright-blue/30 hover:border-polimi-bright-blue rounded-md px-3 py-1.5 transition-colors hover:bg-polimi-bright-blue/5"
+                >
+                  <Download size={13} />
+                  Export all (BibTeX)
+                </button>
+                <button
+                  onClick={() => exportAllRIS(filteredPublications as Publication[])}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-polimi-bright-blue hover:text-polimi-alpha-blue border border-polimi-bright-blue/30 hover:border-polimi-bright-blue rounded-md px-3 py-1.5 transition-colors hover:bg-polimi-bright-blue/5"
+                >
+                  <Download size={13} />
+                  Export all (RIS)
+                </button>
+              </div>
             </div>
           </div>
 
@@ -132,9 +198,9 @@ export default function PublicationsPage() {
             </div>
             <div>
               <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">
-                {publicationsData.publications.filter(p => p.type === 'Conference').length}
+                {publicationsData.publications.filter(p => p.type === 'Book Chapter').length}
               </div>
-              <div className="text-gray-600">Conference Papers</div>
+              <div className="text-gray-600">Book Chapters</div>
             </div>
             <div>
               <div className="text-4xl font-frank font-bold text-polimi-bright-blue mb-2">

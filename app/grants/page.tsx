@@ -14,6 +14,7 @@ interface Project {
   role: string;
   period: string;
   website: string | null;
+  cordisUrl?: string;
   abstract?: string;
   yearGranted?: string;
   totalGrant?: string;
@@ -30,7 +31,7 @@ export default function GrantsPage() {
   };
 
   return (
-    <div className="relative z-10 pt-32 pb-20">
+    <div className="relative z-10 pb-20">
       {/* Header */}
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">
@@ -84,17 +85,22 @@ export default function GrantsPage() {
                     </span>
                   </div>
 
-                  {/* Website */}
-                  {project.website && (
-                    <a
-                      href={`https://${project.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm mb-4"
-                    >
-                      <ExternalLink size={16} />
-                      {project.website}
-                    </a>
+                  {/* Website / CORDIS link */}
+                  {(project.website || project.cordisUrl) && (
+                    <div className="flex flex-wrap gap-4 mb-4">
+                      {project.website && (
+                        <a href={`https://${project.website}`} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm">
+                          <ExternalLink size={16} /> {project.website}
+                        </a>
+                      )}
+                      {project.cordisUrl && (
+                        <a href={project.cordisUrl} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm">
+                          <ExternalLink size={16} /> CORDIS Fact Sheet
+                        </a>
+                      )}
+                    </div>
                   )}
 
                   {/* Abstract */}

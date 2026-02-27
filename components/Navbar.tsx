@@ -8,11 +8,11 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/team', label: 'Team' },
   { href: '/research', label: 'Research' },
-  { href: '/grants', label: 'Grants' },
-  { href: '/collaborations', label: 'Collaborations' },
+  { href: '/technology-facilities', label: 'Technology' },
   { href: '/publications', label: 'Publications' },
+  { href: '/grants', label: 'Grants' },
   { href: '/news', label: 'News' },
-  { href: '/join', label: 'Join Us' },
+  { href: '/network', label: 'Network' },
   { href: '/contact', label: 'Contact' },
 ];
 

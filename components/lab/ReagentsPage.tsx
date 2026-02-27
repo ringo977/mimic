@@ -3,9 +3,10 @@
 import { useState, useMemo } from 'react';
 import { Search, AlertTriangle, Plus, Minus, X, Package } from 'lucide-react';
 import { useLabContext } from './LabContext';
+import { storageUnitTypes } from '@/data/lab-data';
 
 export default function ReagentsPage() {
-  const { user, permissions, reagents, withdrawReagent, addReagentStock } = useLabContext();
+  const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [modal, setModal] = useState<{ type: 'withdraw' | 'add'; reagentId: string } | null>(null);
@@ -111,8 +112,14 @@ export default function ReagentsPage() {
             </div>
 
             {/* Info */}
-            <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-400 font-manrope">
-              <span className="flex items-center gap-1"><Package size={10} />{r.location}</span>
+            <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-400 font-manrope flex-wrap">
+              <span className="flex items-center gap-1"><Package size={10} />{(() => {
+                if (r.storageUnitId) {
+                  const su = storageUnits.find(s => s.id === r.storageUnitId);
+                  return su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : r.location;
+                }
+                return r.location;
+              })()}</span>
               <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
                 Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
               </span>

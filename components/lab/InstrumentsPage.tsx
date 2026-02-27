@@ -3,12 +3,14 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search } from 'lucide-react';
 import { useLabContext } from './LabContext';
+import { useConfirm } from './ConfirmDialog';
 import { formatTime } from '@/data/lab-data';
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8:00 - 20:00
 
 export default function InstrumentsPage() {
   const { user, bookings, addBooking, removeBooking, instruments: mockInstruments } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedInstrument, setSelectedInstrument] = useState<string | null>(null);
@@ -115,6 +117,7 @@ export default function InstrumentsPage() {
                 </div>
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope">{inst.name}</h3>
                 <p className="text-xs text-gray-500 font-manrope mt-0.5">{inst.description}</p>
+                {inst.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{inst.manufacturer}{inst.model ? ` ${inst.model}` : ''}{inst.serialNumber ? ` · S/N ${inst.serialNumber}` : ''}</p>}
                 <div className="flex items-center gap-3 mt-2.5 text-xs text-gray-400 font-manrope">
                   <span className="flex items-center gap-1"><MapPin size={10} />{inst.location}</span>
                   {todayBookings.length > 0 && (
@@ -150,6 +153,7 @@ export default function InstrumentsPage() {
             <h1 className="text-lg font-bold text-gray-900 font-manrope">{instrument?.name}</h1>
           </div>
           <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument?.location} &middot; {instrument?.description}</p>
+          {instrument?.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{instrument.manufacturer}{instrument.model ? ` ${instrument.model}` : ''}{instrument.serialNumber ? ` · S/N ${instrument.serialNumber}` : ''}</p>}
         </div>
         {isCertified && (
           <button
@@ -249,7 +253,7 @@ export default function InstrumentsPage() {
                           </div>
                           {myBooking && (
                             <button
-                              onClick={() => removeBooking(booking.id)}
+                              onClick={() => confirmDelete('Cancel Booking?', `Your booking on ${booking.date} (${formatTime(booking.startHour)}-${formatTime(booking.endHour)}) will be removed.`, () => removeBooking(booking.id))}
                               className="p-1 rounded hover:bg-blue-600 transition-colors shrink-0 ml-2"
                               title="Cancel booking"
                             >
@@ -350,6 +354,7 @@ export default function InstrumentsPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }
