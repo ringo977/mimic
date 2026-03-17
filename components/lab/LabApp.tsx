@@ -606,6 +606,36 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
 }
 
 // ============================================================
+// Loading Screen — shown while connecting to Supabase
+// ============================================================
+function LoadingScreen() {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const message = elapsed < 3
+    ? 'Connecting...'
+    : elapsed < 8
+      ? 'Connecting to database...'
+      : 'The database is waking up, please wait...';
+
+  return (
+    <AuthShell>
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative w-12 h-12">
+          <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+          <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-[#4DC9FF] animate-spin" />
+        </div>
+        <p className="text-white/70 text-sm font-manrope animate-pulse">{message}</p>
+      </div>
+    </AuthShell>
+  );
+}
+
+// ============================================================
 // Main Export
 // ============================================================
 type AuthStep = 'loading' | 'login' | 'enroll_mfa' | 'verify_mfa' | 'ready';
@@ -707,11 +737,7 @@ export default function LabApp() {
   };
 
   if (step === 'loading') {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-50">
-        <div className="animate-pulse text-gray-400 font-manrope">Loading...</div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (step === 'login') {
