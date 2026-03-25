@@ -49,10 +49,11 @@ set ftp:ssl-protect-data true
 set ftp:use-site-chmod no
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
-mirror -R --parallel=4 --verbose --no-perms out .
+mirror -R --parallel=2 --verbose --no-perms --continue out .
 bye
 EOF
 
 echo "→ Uploading to ${FTP_HOST}:${FTP_PORT}/${FTP_REMOTE_DIR} …"
-lftp -f "$LFTP_SCRIPT"
+# --norc: ignore ~/.lftprc so nothing re-enables SITE CHMOD (fixes 500 Unknown SITE command)
+lftp --norc -f "$LFTP_SCRIPT"
 echo "Done."
