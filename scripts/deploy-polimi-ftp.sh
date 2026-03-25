@@ -46,9 +46,10 @@ cat >"$LFTP_SCRIPT" <<EOF
 set ssl:verify-certificate no
 set ftp:ssl-force true
 set ftp:ssl-protect-data true
+set ftp:use-site-chmod no
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
-mirror -R --parallel=4 --verbose out .
+mirror -R --parallel=4 --verbose --no-perms out .
 bye
 EOF
 
