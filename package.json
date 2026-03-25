@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:polimi": "env BASE_PATH= next build",
     "start": "next start",
     "lint": "next lint",
-    "deploy": "gh-pages -d out --dotfiles"
+    "deploy": "gh-pages -d out --dotfiles",
+    "deploy:polimi": "bash scripts/deploy-polimi-ftp.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",
