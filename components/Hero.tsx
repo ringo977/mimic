@@ -9,6 +9,7 @@ import grantsData from '@/data/grants.json';
 import publicationsData from '@/data/publications.json';
 import teamData from '@/data/team.json';
 import networkData from '@/data/network.json';
+import { siteBasePath } from '@/lib/site-base-path';
 
 export default function Hero() {
   // Calculate stats dynamically and round DOWN to nearest 5
@@ -30,7 +31,7 @@ export default function Hero() {
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: `url(/mimic/images/home/wafer-electrodes.jpg)`,
+          backgroundImage: `url(${siteBasePath}/images/home/wafer-electrodes.jpg)`,
         }}
       />
 

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import FooterLinks from './FooterLinks';
+import { siteBasePath } from '@/lib/site-base-path';
 
 const quickLinks = [
   { href: '/', label: 'Home' },
@@ -30,7 +31,7 @@ export default function Footer() {
           <div className="lg:col-span-5">
             <div className="mb-6">
               <img
-                src="/mimic/images/logos/LogoMiMicLab_trasp_footer_vertical.png"
+                src={`${siteBasePath}/images/logos/LogoMiMicLab_trasp_footer_vertical.png`}
                 alt="MiMic Laboratory - Politecnico di Milano"
                 className="max-w-full h-auto"
                 style={{ maxHeight: '240px' }}

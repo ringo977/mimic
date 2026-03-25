@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Mail, X, FileText, ExternalLink, Linkedin } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import publicationsData from '@/data/publications.json';
+import { siteBasePath } from '@/lib/site-base-path';
 
 interface PI {
   name: string;
@@ -35,7 +36,7 @@ interface Publication {
 
 export default function PICard({ pi }: PICardProps) {
   const [showModal, setShowModal] = useState(false);
-  const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+  const prefix = siteBasePath;
 
   // Extract last name and first initial (e.g., "Prof. Marco Rasponi" -> "Rasponi, M.")
   const getAuthorPattern = (fullName: string): string => {

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Menu, X, FlaskConical } from 'lucide-react';
+import { siteBasePath } from '@/lib/site-base-path';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -25,7 +26,7 @@ export default function Navbar() {
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center h-12 px-4">
           <img
-            src="/mimic/images/logos/Logotipo_POLIMI_Blu.png"
+            src={`${siteBasePath}/images/logos/Logotipo_POLIMI_Blu.png`}
             alt="Politecnico di Milano"
             className="w-auto h-auto"
             style={{ maxWidth: '50%', maxHeight: '32px' }}
@@ -56,7 +57,7 @@ export default function Navbar() {
                 aria-label="Homepage MiMic Laboratory"
               >
                 <img
-                  src="/mimic/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png"
+                  src={`${siteBasePath}/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png`}
                   alt="MiMic Laboratory - Politecnico di Milano"
                   className="h-14 w-auto"
                 />
@@ -69,7 +70,7 @@ export default function Navbar() {
                 aria-label="Homepage MiMic Laboratory"
               >
                 <img
-                  src="/mimic/images/logos/LogoMiMicLab_solo_blu_trasp.png"
+                  src={`${siteBasePath}/images/logos/LogoMiMicLab_solo_blu_trasp.png`}
                   alt="MiMic Lab"
                   className="h-10 w-auto"
                 />

@@ -5,6 +5,7 @@ import researchData from '@/data/research.json';
 import publicationsData from '@/data/publications.json';
 import fs from 'fs';
 import path from 'path';
+import { siteBasePath } from '@/lib/site-base-path';
 
 // Generate static paths for all research topics
 export function generateStaticParams() {
@@ -109,7 +110,7 @@ export default function ResearchTopicPage({ params }: { params: { slug: string }
                 {/* Image or Video */}
                 <div className={idx % 2 === 1 ? 'lg:order-1' : ''}>
                   {(() => {
-                    const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+                    const prefix = siteBasePath;
                     const sectionAny = section as Record<string, string>;
                     const videoPath = sectionAny.video || '';
                     const videoFile = videoPath ? path.join(process.cwd(), 'public', videoPath) : '';

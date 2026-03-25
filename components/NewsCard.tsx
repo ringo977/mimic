@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, X, ChevronLeft, ChevronRight, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import Card from './ui/Card';
+import { siteBasePath } from '@/lib/site-base-path';
 
 interface NewsItem {
   id: number;
@@ -32,7 +33,7 @@ const tagColors: Record<string, string> = {
 export default function NewsCard({ news }: NewsCardProps) {
   const [showModal, setShowModal] = useState(false);
   const [currentImage, setCurrentImage] = useState(0);
-  const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+  const prefix = siteBasePath;
 
   const hasGallery = news.gallery && news.gallery.length > 1;
 

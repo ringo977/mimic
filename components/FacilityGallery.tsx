@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { siteBasePath } from '@/lib/site-base-path';
 
 interface FacilityGalleryProps {
   images: string[];
@@ -9,7 +10,7 @@ interface FacilityGalleryProps {
 
 export default function FacilityGallery({ images, alt }: FacilityGalleryProps) {
   const [current, setCurrent] = useState(0);
-  const basePath = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+  const basePath = siteBasePath;
 
   const next = useCallback(() => {
     setCurrent((prev) => (prev + 1) % images.length);

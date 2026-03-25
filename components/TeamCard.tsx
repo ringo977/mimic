@@ -5,6 +5,7 @@ import { Mail, X, FileText, ExternalLink } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import Card from './ui/Card';
 import publicationsData from '@/data/publications.json';
+import { siteBasePath } from '@/lib/site-base-path';
 
 interface TeamMember {
   id: number;
@@ -36,7 +37,7 @@ interface Publication {
 
 export default function TeamCard({ member }: TeamCardProps) {
   const [showModal, setShowModal] = useState(false);
-  const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+  const prefix = siteBasePath;
 
   // Extract last name and first initial (e.g., "Dr. Cecilia Palma" -> "Palma, C.")
   const getAuthorPattern = (fullName: string): string => {

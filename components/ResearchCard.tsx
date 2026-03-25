@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Card from './ui/Card';
 import { ArrowRight } from 'lucide-react';
+import { siteBasePath } from '@/lib/site-base-path';
 
 interface ResearchCardProps {
   title: string;
@@ -15,7 +16,7 @@ interface ResearchCardProps {
 }
 
 export default function ResearchCard({ title, description, image, video, tags, link }: ResearchCardProps) {
-  const prefix = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+  const prefix = siteBasePath;
   const content = (
     <Card className="h-full overflow-hidden group cursor-pointer">
       {(image || video) && (

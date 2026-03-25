@@ -29,7 +29,7 @@ if ! command -v lftp >/dev/null 2>&1; then
 fi
 
 echo "→ Building for Polimi (root basePath, no /mimic)…"
-BASE_PATH= npm run build
+npm run build:polimi
 
 if [[ ! -d out ]]; then
   echo "Build did not produce out/"

@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 import researchData from '@/data/research.json';
 import newsData from '@/data/news.json';
 import { BookOpen, Cpu, Award, ExternalLink } from 'lucide-react';
+import { siteBasePath } from '@/lib/site-base-path';
 
 // Show first 3 research topics on homepage
 const researchAreas = researchData.projects.slice(0, 3);
@@ -47,7 +48,7 @@ export default function HomePage() {
             {/* Team Photo */}
             <div className="relative aspect-[4/3] rounded-2xl overflow-hidden shadow-xl">
               <img
-                src={`${process.env.NODE_ENV === 'production' ? '/mimic' : ''}/images/home/team-photo.png`}
+                src={`${siteBasePath}/images/home/team-photo.png`}
                 alt="MiMic Lab Team at EUROoCS 2024 Annual Meeting"
                 className="w-full h-full object-cover"
               />

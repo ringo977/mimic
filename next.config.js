@@ -15,6 +15,9 @@ const nextConfig = {
   },
   basePath,
   assetPrefix: basePath ? `${basePath}/` : '',
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
 }
 
 module.exports = nextConfig

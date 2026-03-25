@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import networkData from '@/data/network.json';
 import { ExternalLink, ArrowRight } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import { siteBasePath } from '@/lib/site-base-path';
 
 const NetworkMap = dynamic(() => import('@/components/NetworkMap'), { ssr: false });
 
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   description: 'Our network of EU-funded projects, scientific societies, spin-offs, and international collaborators.',
 };
 
-const basePath = process.env.NODE_ENV === 'production' ? '/mimic' : '';
+const basePath = siteBasePath;
 
 export default function NetworkPage() {
   return (

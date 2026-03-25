@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import GridBackground from "@/components/GridBackground";
 import ScrollToTop from "@/components/ScrollToTop";
 import CookieConsent from "@/components/CookieConsent";
+import { siteBasePath } from "@/lib/site-base-path";
 
 const manrope = Manrope({ 
   subsets: ['latin'],
@@ -21,16 +22,14 @@ const frankRuhl = Frank_Ruhl_Libre({
   display: 'swap',
 });
 
-const basePath = process.env.NODE_ENV === 'production' ? '/mimic' : '';
-
 export const metadata: Metadata = {
   title: "MiMic Lab | Politecnico di Milano",
   description: "Advanced microfluidic systems and MiMic research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
   keywords: ["MiMic", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],
   authors: [{ name: "MiMic Lab, PoliMi" }],
   icons: {
-    icon: `${basePath}/icon.svg`,
-    apple: `${basePath}/icon.svg`,
+    icon: `${siteBasePath}/icon.svg`,
+    apple: `${siteBasePath}/icon.svg`,
   },
   openGraph: {
     title: "MiMic Lab | Politecnico di Milano",
