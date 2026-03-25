@@ -37,12 +37,15 @@ if [[ ! -d out ]]; then
 fi
 
 PWENC=$(FTP_PASS="$FTP_PASS" python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['FTP_PASS'], safe=''))")
-OPEN_URL="ftps://${FTP_USER}:${PWENC}@${FTP_HOST}:${FTP_PORT}"
+# Explicit TLS (AUTH TLS) like curl --ssl-reqd; ftps:// is implicit SSL and breaks with "wrong version number"
+OPEN_URL="ftp://${FTP_USER}:${PWENC}@${FTP_HOST}:${FTP_PORT}"
 
 LFTP_SCRIPT=$(mktemp)
 trap 'rm -f "$LFTP_SCRIPT"' EXIT
 cat >"$LFTP_SCRIPT" <<EOF
 set ssl:verify-certificate no
+set ftp:ssl-force true
+set ftp:ssl-protect-data true
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
 mirror -R --parallel=4 --verbose out .
