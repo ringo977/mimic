@@ -22,25 +22,99 @@ export async function exportDatabaseJSON(): Promise<string> {
   }, null, 2);
 }
 
-export async function importDatabaseJSON(json: string): Promise<{ ok: boolean; errors: string[] }> {
-  const errors: string[] = [];
+/**
+ * Validate a backup JSON before importing.
+ * Returns a summary of what will be imported so the user can confirm.
+ */
+export function validateBackupJSON(json: string): {
+  valid: boolean;
+  errors: string[];
+  summary: Record<string, number>;
+  meta?: { version: number; exportedAt: string; tables: number };
+} {
   let parsed: Record<string, unknown>;
-  try { parsed = JSON.parse(json); } catch { return { ok: false, errors: ['Invalid JSON file'] }; }
+  try { parsed = JSON.parse(json); } catch { return { valid: false, errors: ['Invalid JSON file — could not parse.'], summary: {} }; }
 
+  const errors: string[] = [];
+  const summary: Record<string, number> = {};
+  const meta = parsed._meta as { version: number; exportedAt: string; tables: number } | undefined;
+
+  if (!meta || typeof meta.version !== 'number') {
+    errors.push('Missing or invalid _meta block. This may not be a MiMic backup file.');
+  }
+
+  let hasData = false;
+  for (const table of TABLES) {
+    const rows = parsed[table];
+    if (rows === undefined) continue;
+    if (!Array.isArray(rows)) {
+      errors.push(`"${table}" is not an array — expected an array of rows.`);
+      continue;
+    }
+    summary[table] = rows.length;
+    if (rows.length > 0) hasData = true;
+    // Basic row validation: each row should have an id
+    const badRows = rows.filter((r: unknown) => typeof r !== 'object' || r === null || !('id' in (r as Record<string, unknown>)));
+    if (badRows.length > 0) {
+      errors.push(`"${table}" has ${badRows.length} row(s) without an "id" field.`);
+    }
+  }
+
+  if (!hasData && errors.length === 0) {
+    errors.push('Backup file contains no data rows.');
+  }
+
+  return { valid: errors.length === 0, errors, summary, meta };
+}
+
+/**
+ * Import a validated backup JSON. Clears tables one-by-one and re-inserts.
+ * If a table fails to clear or insert, it is skipped but others continue.
+ * Returns detailed results per table.
+ */
+export async function importDatabaseJSON(json: string): Promise<{
+  ok: boolean;
+  errors: string[];
+  imported: Record<string, number>;
+}> {
+  const errors: string[] = [];
+  const imported: Record<string, number> = {};
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(json); } catch { return { ok: false, errors: ['Invalid JSON file'], imported: {} }; }
+
+  // Phase 1: Validate before touching anything
+  const validation = validateBackupJSON(json);
+  if (!validation.valid) {
+    return { ok: false, errors: ['Validation failed: ' + validation.errors.join('; ')], imported: {} };
+  }
+
+  // Phase 2: Import table by table
   for (const table of TABLES) {
     const rows = parsed[table];
     if (!Array.isArray(rows) || rows.length === 0) continue;
+
     // Clear existing rows
     const { error: delErr } = await supabase.from(table).delete().neq('id', '__never__');
-    if (delErr) { errors.push(`Failed to clear ${table}: ${delErr.message}`); continue; }
+    if (delErr) {
+      errors.push(`Failed to clear ${table}: ${delErr.message}. Skipping this table.`);
+      continue;
+    }
+
     // Insert in batches of 500
+    let tableInserted = 0;
     for (let i = 0; i < rows.length; i += 500) {
       const batch = rows.slice(i, i + 500);
       const { error: insErr } = await supabase.from(table).insert(batch);
-      if (insErr) errors.push(`Failed to insert into ${table} (batch ${Math.floor(i / 500) + 1}): ${insErr.message}`);
+      if (insErr) {
+        errors.push(`Failed to insert into ${table} (batch ${Math.floor(i / 500) + 1}): ${insErr.message}`);
+      } else {
+        tableInserted += batch.length;
+      }
     }
+    imported[table] = tableInserted;
   }
-  return { ok: errors.length === 0, errors };
+
+  return { ok: errors.length === 0, errors, imported };
 }
 
 // ============================================================

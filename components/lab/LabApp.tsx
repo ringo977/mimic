@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone } from 'lucide-react';
-import { LabUser, rolePermissions, getStoredUsers } from '@/data/lab-data';
+import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
 import { findLabUserByEmail } from '@/lib/supabase-users';
@@ -44,17 +44,19 @@ function LoginScreen({ authError }: { authError?: string }) {
 
     const labUser = await findLabUserByEmail(email);
     if (!labUser) {
-      const localUser = getStoredUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (!localUser) {
-        setError('This email is not authorized. Contact the lab admin to get access.');
-        setLoading(false);
-        return;
-      }
+      setError('This email is not authorized. Contact the lab admin to get access.');
+      setLoading(false);
+      return;
     }
 
     if (isSignUp) {
-      if (password.length < 6) {
-        setError('Password must be at least 6 characters.');
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters.');
+        setLoading(false);
+        return;
+      }
+      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+        setError('Password must contain uppercase, lowercase, and a number.');
         setLoading(false);
         return;
       }
@@ -117,7 +119,7 @@ function LoginScreen({ authError }: { authError?: string }) {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder={isSignUp ? 'Choose a password (min 6 chars)' : 'Enter your password'}
+              placeholder={isSignUp ? 'Min 8 chars, upper + lower + number' : 'Enter your password'}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
               required
               disabled={loading}
@@ -165,7 +167,7 @@ function LoginScreen({ authError }: { authError?: string }) {
 // ============================================================
 // TOTP Enrollment Screen (first-time MFA setup)
 // ============================================================
-function EnrollMFAScreen({ onEnrolled, onSkip }: { onEnrolled: () => void; onSkip: () => void }) {
+function EnrollMFAScreen({ onEnrolled, onSkip, canSkip = true }: { onEnrolled: () => void; onSkip: () => void; canSkip?: boolean }) {
   const [factorId, setFactorId] = useState('');
   const [qr, setQR] = useState('');
   const [verifyCode, setVerifyCode] = useState('');
@@ -197,27 +199,28 @@ function EnrollMFAScreen({ onEnrolled, onSkip }: { onEnrolled: () => void; onSki
         return;
       }
 
-      const verifyPromise = supabase.auth.mfa.verify({
+      const result = await supabase.auth.mfa.verify({
         factorId,
         challengeId: challenge.data.id,
         code: verifyCode,
       });
 
-      // Race against a timeout — verify can hang due to session refresh
-      const timeout = new Promise<{ error: { message: string } | null }>((resolve) =>
-        setTimeout(() => resolve({ error: null }), 4000)
-      );
-
-      const result = await Promise.race([verifyPromise, timeout]);
-
-      if (result?.error) {
+      if (result.error) {
         setError('Invalid code. Please try again.');
         setVerifyCode('');
         setLoading(false);
         return;
       }
-    } catch {
-      // Session refresh during verify — likely succeeded
+    } catch (err) {
+      // AuthSessionMissingError can occur when Supabase refreshes the session
+      // after successful verification. If the factor is now verified, proceed.
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (!data || data.currentLevel !== 'aal2') {
+        setError('Verification failed. Please try again.');
+        setVerifyCode('');
+        setLoading(false);
+        return;
+      }
     }
 
     onEnrolled();
@@ -279,14 +282,23 @@ function EnrollMFAScreen({ onEnrolled, onSkip }: { onEnrolled: () => void; onSki
           </button>
         </form>
 
-        <div className="mt-4 text-center">
-          <button
-            onClick={onSkip}
-            className="text-xs text-gray-400 hover:text-gray-600 font-manrope transition-colors"
-          >
-            Skip for now
-          </button>
-        </div>
+        {canSkip && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={onSkip}
+              className="text-xs text-gray-400 hover:text-gray-600 font-manrope transition-colors"
+            >
+              Skip for now
+            </button>
+          </div>
+        )}
+        {!canSkip && (
+          <div className="mt-4">
+            <p className="text-xs text-amber-600 text-center font-manrope bg-amber-50 px-3 py-2 rounded-lg">
+              Two-factor authentication is required for your role.
+            </p>
+          </div>
+        )}
       </div>
     </AuthShell>
   );
@@ -327,26 +339,28 @@ function VerifyMFAScreen({ onVerified }: { onVerified: () => void }) {
         return;
       }
 
-      const verifyPromise = supabase.auth.mfa.verify({
+      const result = await supabase.auth.mfa.verify({
         factorId: totpFactor.id,
         challengeId: challenge.data.id,
         code: verifyCode,
       });
 
-      const timeout = new Promise<{ error: { message: string } | null }>((resolve) =>
-        setTimeout(() => resolve({ error: null }), 4000)
-      );
-
-      const result = await Promise.race([verifyPromise, timeout]);
-
-      if (result?.error) {
+      if (result.error) {
         setError('Invalid code. Please try again.');
         setVerifyCode('');
         setLoading(false);
         return;
       }
-    } catch {
-      // Session refresh during verify — likely succeeded
+    } catch (err) {
+      // AuthSessionMissingError can occur when Supabase refreshes the session
+      // after successful verification. Check if MFA actually succeeded.
+      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (!data || data.currentLevel !== 'aal2') {
+        setError('Verification failed. Please try again.');
+        setVerifyCode('');
+        setLoading(false);
+        return;
+      }
     }
 
     onVerified();
@@ -638,11 +652,7 @@ export default function LabApp() {
   }, []);
 
   const resolveLabUser = useCallback(async (email: string): Promise<LabUser | null> => {
-    const sbUser = await findLabUserByEmail(email);
-    if (sbUser) return sbUser;
-    return getStoredUsers().find(
-      u => u.email.toLowerCase() === email.toLowerCase()
-    ) || null;
+    return findLabUserByEmail(email);
   }, []);
 
   const evaluateMFA = useCallback(async (): Promise<AuthStep> => {
@@ -731,10 +741,13 @@ export default function LabApp() {
   }
 
   if (step === 'enroll_mfa') {
+    // Admins and PIs must set up 2FA — no skip allowed
+    const mfaRequired = user?.role === 'admin' || user?.role === 'pi' || user?.role === 'lab_manager' || user?.isAdmin;
     return (
       <EnrollMFAScreen
         onEnrolled={() => updateStep('ready')}
         onSkip={() => updateStep('ready')}
+        canSkip={!mfaRequired}
       />
     );
   }
