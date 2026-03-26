@@ -2,6 +2,12 @@
 # Build static site for Polimi root URL, then upload via FTPS (mirror).
 # Prerequisites: brew install lftp
 # Credentials: copy deploy.polimi.env.example → deploy.polimi.env (never commit)
+#
+# Incremental upload: by default mirror uses --ignore-time so lftp skips files
+# whose remote size already matches local (Next rebuild touches mtimes on all files).
+# Set FTP_MIRROR_RESPECT_TIME=1 in deploy.polimi.env to compare by time again.
+#
+# Skip rebuild: SKIP_BUILD=1 npm run sync:polimi  (out/ must be from npm run build:polimi)
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -22,14 +28,22 @@ set +a
 : "${FTP_PASS:?Set FTP_PASS in deploy.polimi.env}"
 FTP_PORT="${FTP_PORT:-2121}"
 FTP_REMOTE_DIR="${FTP_REMOTE_DIR:-htdocs-SSL}"
+MIRROR_FLAGS="--parallel=2 --verbose --no-perms --continue"
+if [[ "${FTP_MIRROR_RESPECT_TIME:-}" != "1" ]]; then
+  MIRROR_FLAGS="${MIRROR_FLAGS} --ignore-time"
+fi
 
 if ! command -v lftp >/dev/null 2>&1; then
   echo "Install lftp: brew install lftp"
   exit 1
 fi
 
-echo "→ Building for Polimi (root basePath, no /mimic)…"
-npm run build:polimi
+if [[ "${SKIP_BUILD:-}" == "1" ]]; then
+  echo "→ Skipping build (SKIP_BUILD=1); using existing out/"
+else
+  echo "→ Building for Polimi (root basePath, no /mimic)…"
+  npm run build:polimi
+fi
 
 if [[ ! -d out ]]; then
   echo "Build did not produce out/"
@@ -49,7 +63,7 @@ set ftp:ssl-protect-data true
 set ftp:use-site-chmod no
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
-mirror -R --parallel=2 --verbose --no-perms --continue out .
+mirror -R ${MIRROR_FLAGS} out .
 bye
 EOF
 
