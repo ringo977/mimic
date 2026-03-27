@@ -10,14 +10,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { KeyRound, Lock, ArrowLeft } from 'lucide-react';
+import { KeyRound, Lock, ArrowLeft, ShieldCheck } from 'lucide-react';
 import AuthShell from './AuthShell';
 import { supabase } from '@/lib/supabase';
 import { findLabUserByEmail } from '@/lib/supabase-users';
 import { getStoredUsers } from '@/data/lab-data';
 import { siteBasePath } from '@/lib/site-base-path';
 
-type Phase = 'loading' | 'request' | 'set-password' | 'email-sent' | 'password-updated';
+type Phase = 'loading' | 'request' | 'verify-mfa' | 'set-password' | 'email-sent' | 'password-updated';
 
 function recoveryRedirectUrl(): string {
   if (typeof window === 'undefined') return '';
@@ -35,8 +35,34 @@ export default function LabPasswordResetPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  /** Check if user has MFA enrolled and needs AAL2 elevation */
+  const checkMfaAndProceed = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setPhase('request'); return; }
+
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+        // User has MFA — need TOTP verification before password change
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const totp = factors?.totp?.find(f => f.status === 'verified');
+        if (totp) {
+          setMfaFactorId(totp.id);
+          setPhase('verify-mfa');
+          return;
+        }
+      }
+      // No MFA or already AAL2
+      setPhase('set-password');
+    } catch {
+      setPhase('set-password');
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -54,20 +80,20 @@ export default function LabPasswordResetPage() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (event === 'PASSWORD_RECOVERY' && session) {
-        setPhase('set-password');
         setError('');
+        checkMfaAndProceed();
       }
     });
 
     (async () => {
       if (await tryRecoverySession()) {
-        if (mounted) setPhase('set-password');
+        if (mounted) await checkMfaAndProceed();
         return;
       }
       const { data: { session } } = await supabase.auth.getSession();
       if (!mounted) return;
       if (session && hashLooksLikeRecovery()) {
-        setPhase('set-password');
+        await checkMfaAndProceed();
       } else {
         setPhase('request');
       }
@@ -104,6 +130,41 @@ export default function LabPasswordResetPage() {
     }
 
     setPhase('email-sent');
+    setLoading(false);
+  };
+
+  const verifyMfaCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const { data: challenge, error: challengeErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+      if (challengeErr || !challenge) {
+        setError(challengeErr?.message || 'Failed to create MFA challenge.');
+        setLoading(false);
+        return;
+      }
+
+      const { error: verifyErr } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challenge.id,
+        code: totpCode.trim(),
+      });
+
+      if (verifyErr) {
+        setError('Invalid code. Please try again.');
+        setTotpCode('');
+        setLoading(false);
+        return;
+      }
+
+      // Session is now AAL2 — proceed to password form
+      setPhase('set-password');
+      setError('');
+    } catch {
+      setError('MFA verification failed. Please try again.');
+    }
     setLoading(false);
   };
 
@@ -186,6 +247,61 @@ export default function LabPasswordResetPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to sign in
           </Link>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  if (phase === 'verify-mfa') {
+    return (
+      <AuthShell>
+        <div className="bg-white rounded-2xl shadow-2xl p-8">
+          <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <ShieldCheck className="w-6 h-6 text-[#102C53]" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-900 font-manrope mb-1 text-center">Two-factor verification</h2>
+          <p className="text-center text-sm text-gray-600 mb-6 font-manrope">
+            Enter the 6-digit code from your authenticator app to continue.
+          </p>
+
+          {error && (
+            <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-xl font-manrope mb-5">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={verifyMfaCode} className="space-y-4">
+            <div>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={totpCode}
+                onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="000000"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm text-center tracking-[0.3em] text-lg"
+                required
+                disabled={loading}
+                autoFocus
+                autoComplete="one-time-code"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading || totpCode.length < 6}
+              className="w-full py-3.5 bg-[#102C53] text-white rounded-xl font-semibold hover:bg-[#1a3d6e] transition-colors font-manrope flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              {loading ? 'Verifying…' : 'Verify & continue'}
+            </button>
+          </form>
+
+          <div className="mt-5 text-center">
+            <Link href="/lab" className="text-xs text-[#4DC9FF] hover:text-[#102C53] font-manrope font-medium">
+              Cancel, back to sign in
+            </Link>
+          </div>
         </div>
       </AuthShell>
     );
