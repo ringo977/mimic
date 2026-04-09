@@ -12,7 +12,8 @@
     "publish:github": "npm run build && npm run deploy",
     "deploy:polimi": "bash scripts/deploy-polimi-ftp.sh",
     "sync:polimi": "SKIP_BUILD=1 bash scripts/deploy-polimi-ftp.sh",
-    "publish:all": "npm run publish:github && npm run deploy:polimi"
+    "sync:gitlab": "bash scripts/sync-gitlab.sh",
+    "publish:all": "npm run publish:github && npm run deploy:polimi && npm run sync:gitlab"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.97.0",

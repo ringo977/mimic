@@ -307,7 +307,7 @@ function EnrollMFAScreen({ onEnrolled, onSkip, canSkip = true }: { onEnrolled: (
 // ============================================================
 // TOTP Verification Screen (returning users with MFA)
 // ============================================================
-function VerifyMFAScreen({ onVerified }: { onVerified: () => void }) {
+function VerifyMFAScreen({ onVerified, onLogout }: { onVerified: () => void; onLogout: () => void }) {
   const [verifyCode, setVerifyCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -366,10 +366,6 @@ function VerifyMFAScreen({ onVerified }: { onVerified: () => void }) {
     onVerified();
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   return (
     <AuthShell>
       <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -415,7 +411,7 @@ function VerifyMFAScreen({ onVerified }: { onVerified: () => void }) {
 
         <div className="mt-4 text-center">
           <button
-            onClick={handleLogout}
+            onClick={onLogout}
             className="text-xs text-gray-400 hover:text-gray-600 font-manrope transition-colors"
           >
             Use a different account
@@ -753,7 +749,7 @@ export default function LabApp() {
   }
 
   if (step === 'verify_mfa') {
-    return <VerifyMFAScreen onVerified={() => updateStep('ready')} />;
+    return <VerifyMFAScreen onVerified={() => updateStep('ready')} onLogout={handleLogout} />;
   }
 
   if (!user) {

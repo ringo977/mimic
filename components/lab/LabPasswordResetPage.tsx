@@ -40,26 +40,34 @@ export default function LabPasswordResetPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  /** Check if user has MFA enrolled and needs AAL2 elevation */
+  /** Check if user has MFA enrolled and needs AAL2 elevation.
+   *  Recovery sessions may report AAL level incorrectly, so we check
+   *  directly for enrolled TOTP factors instead of relying on AAL data. */
   const checkMfaAndProceed = async () => {
+    const dbg: string[] = [];
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setPhase('request'); return; }
+      dbg.push(`session: ${!!session} ${session?.user?.email || 'no-email'}`);
+      if (!session) { dbg.push('→ no session, going to request'); localStorage.setItem('RESET_DBG', dbg.join(' | ')); setPhase('request'); return; }
 
-      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
-        // User has MFA — need TOTP verification before password change
-        const { data: factors } = await supabase.auth.mfa.listFactors();
-        const totp = factors?.totp?.find(f => f.status === 'verified');
-        if (totp) {
-          setMfaFactorId(totp.id);
-          setPhase('verify-mfa');
-          return;
-        }
+      const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors();
+      dbg.push(`listFactors: ${JSON.stringify(factors)} err: ${fErr?.message || 'none'}`);
+      const totp = factors?.totp?.find(f => f.status === 'verified');
+      dbg.push(`totp: ${totp?.id || 'NONE'}`);
+      if (totp) {
+        setMfaFactorId(totp.id);
+        setPhase('verify-mfa');
+        dbg.push('→ verify-mfa');
+        localStorage.setItem('RESET_DBG', dbg.join(' | '));
+        return;
       }
-      // No MFA or already AAL2
+
+      dbg.push('→ set-password (no totp)');
+      localStorage.setItem('RESET_DBG', dbg.join(' | '));
       setPhase('set-password');
-    } catch {
+    } catch (err: any) {
+      dbg.push(`CAUGHT: ${err?.message || err}`);
+      localStorage.setItem('RESET_DBG', dbg.join(' | '));
       setPhase('set-password');
     }
   };
@@ -159,6 +167,17 @@ export default function LabPasswordResetPage() {
         return;
       }
 
+      // Force session refresh so the AAL2 token is persisted in the client
+      await supabase.auth.refreshSession();
+
+      // Confirm we actually reached AAL2
+      const { data: aalCheck } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalCheck?.currentLevel !== 'aal2') {
+        setError('Could not elevate session to AAL2. Please sign in normally and change your password from account settings.');
+        setLoading(false);
+        return;
+      }
+
       // Session is now AAL2 — proceed to password form
       setPhase('set-password');
       setError('');
@@ -182,6 +201,10 @@ export default function LabPasswordResetPage() {
     }
 
     setLoading(true);
+
+    // Ensure AAL2 session token is fresh before the update call
+    await supabase.auth.refreshSession();
+
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
     if (updateError) {

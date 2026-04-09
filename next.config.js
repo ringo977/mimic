@@ -10,6 +10,8 @@ const basePath =
 
 const nextConfig = {
   output: 'export',
+  // Apache: /lab/ needs lab/index.html (see static export layout).
+  trailingSlash: true,
   images: {
     unoptimized: true,
   },

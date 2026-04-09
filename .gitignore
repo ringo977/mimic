@@ -30,9 +30,17 @@ yarn-error.log*
 # Polimi FTP deploy credentials (never commit)
 deploy.polimi.env
 
+# GitLab deploy credentials and cached clone (never commit)
+deploy.gitlab.env
+.gitlab-clone/
+
+# Credentials file
+mimic passwd.txt
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.claude/

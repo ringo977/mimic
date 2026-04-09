@@ -3,9 +3,13 @@
 # Prerequisites: brew install lftp
 # Credentials: copy deploy.polimi.env.example → deploy.polimi.env (never commit)
 #
-# Incremental upload: by default mirror uses --ignore-time so lftp skips files
-# whose remote size already matches local (Next rebuild touches mtimes on all files).
-# Set FTP_MIRROR_RESPECT_TIME=1 in deploy.polimi.env to compare by time again.
+# Smart incremental deploy (2-step):
+#   Step 1: Force-upload HTML/txt/json (small, always change when chunks change)
+#   Step 2: Upload static assets only if new (JS/CSS have content hashes in filename)
+# This avoids re-uploading hundreds of unchanged assets while ensuring HTML
+# always references the correct chunk hashes.
+#
+# Set FTP_FULL_SYNC=1 to force upload everything (useful for first deploy or debugging).
 #
 # Skip rebuild: SKIP_BUILD=1 npm run sync:polimi  (out/ must be from npm run build:polimi)
 
@@ -28,10 +32,6 @@ set +a
 : "${FTP_PASS:?Set FTP_PASS in deploy.polimi.env}"
 FTP_PORT="${FTP_PORT:-2121}"
 FTP_REMOTE_DIR="${FTP_REMOTE_DIR:-htdocs-SSL}"
-MIRROR_FLAGS="--parallel=2 --verbose --no-perms --continue"
-if [[ "${FTP_MIRROR_RESPECT_TIME:-}" != "1" ]]; then
-  MIRROR_FLAGS="${MIRROR_FLAGS} --ignore-time"
-fi
 
 if ! command -v lftp >/dev/null 2>&1; then
   echo "Install lftp: brew install lftp"
@@ -54,18 +54,45 @@ PWENC=$(FTP_PASS="$FTP_PASS" python3 -c "import os, urllib.parse; print(urllib.p
 # Explicit TLS (AUTH TLS) like curl --ssl-reqd; ftps:// is implicit SSL and breaks with "wrong version number"
 OPEN_URL="ftp://${FTP_USER}:${PWENC}@${FTP_HOST}:${FTP_PORT}"
 
+COMMON_FLAGS="--parallel=2 --verbose --no-perms --continue"
+
 LFTP_SCRIPT=$(mktemp)
 trap 'rm -f "$LFTP_SCRIPT"' EXIT
-cat >"$LFTP_SCRIPT" <<EOF
+
+if [[ "${FTP_FULL_SYNC:-}" == "1" ]]; then
+  echo "→ Full sync: uploading ALL files…"
+  cat >"$LFTP_SCRIPT" <<EOF
 set ssl:verify-certificate no
 set ftp:ssl-force true
 set ftp:ssl-protect-data true
 set ftp:use-site-chmod no
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
-mirror -R ${MIRROR_FLAGS} out .
+mirror -R ${COMMON_FLAGS} out .
 bye
 EOF
+else
+  echo "→ Smart deploy: Step 1 — force-uploading HTML/txt/json pages…"
+  echo "→ Smart deploy: Step 2 — uploading new static assets (size-based skip)…"
+  cat >"$LFTP_SCRIPT" <<EOF
+set ssl:verify-certificate no
+set ftp:ssl-force true
+set ftp:ssl-protect-data true
+set ftp:use-site-chmod no
+open ${OPEN_URL}
+cd ${FTP_REMOTE_DIR}
+
+# Step 1: Force-upload all HTML, txt, json, xml files (pages that reference chunk hashes).
+# These are small and MUST be updated every deploy to point to the correct JS chunks.
+mirror -R ${COMMON_FLAGS} --include-glob=*.html --include-glob=*.txt --include-glob=*.json --include-glob=*.xml --include-glob=*.rss out .
+
+# Step 2: Upload remaining static assets (JS/CSS/images/fonts).
+# --ignore-time: skip files whose size matches (Next.js JS chunks have content hashes
+# in the filename, so a changed file = new filename = always uploaded as new).
+mirror -R ${COMMON_FLAGS} --ignore-time --exclude-glob=*.html --exclude-glob=*.txt --exclude-glob=*.json --exclude-glob=*.xml --exclude-glob=*.rss out .
+bye
+EOF
+fi
 
 echo "→ Uploading to ${FTP_HOST}:${FTP_PORT}/${FTP_REMOTE_DIR} …"
 # --norc: ignore ~/.lftprc so nothing re-enables SITE CHMOD (fixes 500 Unknown SITE command)
