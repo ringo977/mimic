@@ -1,0 +1,77 @@
+---
+description: MiMic Lab website operations — data editing, deploy workflow, and constraints
+alwaysApply: true
+---
+
+# MiMic Lab Site Operations
+
+## Project overview
+
+Next.js 14 static site (`output: 'export'`). All public content lives in `data/*.json`. See `SITE_UPDATE_GUIDE.md` for full reference.
+
+## Data files
+
+| File | Key arrays | What it stores |
+|------|-----------|----------------|
+| `data/publications.json` | `publications` | Papers: `id`, `authors[]`, `title`, `journal`, `year`, `doi`, `type` |
+| `data/news.json` | `news` | News: `id`, `date`, `title`, `excerpt`, `tag`, `image`, `gallery[]`, `captions[]` |
+| `data/team.json` | `pis`, `members`, `alumni` | People: `name`, `role`, `email`, `bio`, `image`, `scopusId`, `orcid` |
+| `data/grants.json` | `current`, `past` | Grants: `id`, `acronym`, `title`, `program`, `role`, `period` |
+| `data/network.json` | `projects`, `societies`, `spinoff`, `collaborators` | Collaborations, map pins (lat/lng) |
+| `data/research.json` | `projects`, `keywords` | Research topics with `slug`, `sections[]`, `pubKeywords[]` |
+
+## Adding content — rules
+
+- **Publications:** add at the BEGINNING of the array (newest first). Author format: `"Surname, Initials."`. Use next available integer `id`.
+- **News:** add at the BEGINNING. Date format: `"YYYY-MM-DD"`. Tags: `News`, `Award`, `Conference`, `Event`, `Outreach`. Gallery + captions arrays must match in length.
+- **Team:** place in order of seniority. Photo: 800x800px, `public/images/team/firstname-lastname.jpg`.
+- Always validate JSON after editing: `node -e "JSON.parse(require('fs').readFileSync('data/FILE.json','utf8')); console.log('OK')"`
+
+## Images
+
+- Team photos: ~800x800px, <200KB
+- News images: ~1200px wide, <300KB
+- Optimize with: `sips -Z 1200 public/images/news/photo.jpg`
+- **CRITICAL:** total `out/` build must be <100 MB (GitLab Pages limit). Currently ~33 MB. Never commit multi-MB uncompressed photos.
+
+## Deploy workflow (3 channels)
+
+After editing data files:
+
+```bash
+# 1. Commit + push to GitHub
+git add data/FILE.json public/images/...
+git commit -m "Description"
+git push origin main
+
+# 2. Sync to GitLab (auto-deploys via CI)
+bash scripts/sync-gitlab.sh "Description"
+
+# 3. (Optional) Deploy to Polimi FTP
+npm run deploy:polimi
+
+# Or all at once:
+npm run publish:all
+```
+
+### Channel details
+
+- **GitHub:** remote `origin`, branch `main`. Pages at `/mimic` basePath.
+- **GitLab:** monorepo at `gitlab.polimi.it/DEIB/mimic`. Website lives in `mimic-website/` subfolder. Do NOT `git push` directly — always use `scripts/sync-gitlab.sh`. CI builds with empty basePath. Credentials in `deploy.gitlab.env`.
+- **Polimi FTP:** uses `lftp` via `scripts/deploy-polimi-ftp.sh`. Credentials in `deploy.polimi.env`.
+
+## basePath
+
+GitHub Pages builds use `/mimic`. GitLab and Polimi use empty basePath. This is controlled by `BASE_PATH` env var in `next.config.js`. Components use `siteBasePath` from `lib/site-base-path.ts`.
+
+## Lab app (`/lab`)
+
+Internal lab management tool using Supabase. Completely separate from public content. Do not modify unless specifically asked. Config via `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+
+## Files excluded from git/deploy
+
+These are in `.gitignore` AND excluded in `scripts/sync-gitlab.sh`:
+- `public/images/news/Post/`
+- `Pennati_MPS2025_award.jpg`, `Bianca Aterini EUROTOX2025 Ecopa.jpg`, `sofia_belardinelli_originale.jpg`
+
+If adding new large images that shouldn't be deployed, add them to both `.gitignore` and the `rsync --exclude` list in `sync-gitlab.sh`.
