@@ -44,3 +44,9 @@ mimic passwd.txt
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# Original uncompressed photos (keep locally, exclude from repo/deploy)
+public/images/news/Post/
+public/images/news/Pennati_MPS2025_award.jpg
+public/images/news/Bianca Aterini EUROTOX2025 Ecopa.jpg
+public/images/team/sofia_belardinelli_originale.jpg
