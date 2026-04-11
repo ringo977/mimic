@@ -172,16 +172,13 @@ Pages import JSON files from `data/` directly. The site is fully static (no serv
 # 2. Validate JSON
 node -e "JSON.parse(require('fs').readFileSync('data/FILE.json','utf8')); console.log('OK')"
 
-# 3. Commit and push to GitHub
+# 3. Commit and push to GitHub (source backup)
 git add data/FILE.json public/images/...
 git commit -m "Description of what changed"
 git push origin main
 
-# 4. Sync to GitLab (triggers automatic Pages deploy)
+# 4. Sync to GitLab → auto-deploys to www.mimic.polimi.it
 bash scripts/sync-gitlab.sh "Same description"
-
-# 5. (Optional) Deploy to Polimi FTP
-npm run deploy:polimi
 ```
 
 ### Step-by-step
@@ -206,38 +203,21 @@ npm run deploy:polimi
    git push origin main
    ```
 
-5. **Sync to GitLab** (pushes source files to `mimic-website/` subfolder in the GitLab monorepo; GitLab CI then builds and deploys to Pages automatically):
+5. **Sync to GitLab** (pushes source files to `mimic-website/` subfolder in the GitLab monorepo; GitLab CI then builds and deploys to GitLab Pages → `www.mimic.polimi.it`):
    ```bash
    bash scripts/sync-gitlab.sh "Add new publication: Author et al. (Journal)"
-   ```
-
-6. **Deploy to Polimi FTP** (optional — builds with root basePath and uploads via FTPS):
-   ```bash
-   npm run deploy:polimi
-   ```
-
-7. **Or do everything at once:**
-   ```bash
-   npm run publish:all
    ```
 
 ---
 
 ## 4. Deploy Channels
 
-The site is deployed to **3 independent channels**. Each can be updated separately.
+The site is deployed to **2 channels**. GitLab Pages is the **primary production channel**.
 
-### 4.1 GitHub (source repo)
-
-- **Repo:** `https://github.com/ringo977/mimic.git` (remote `origin`)
-- **Branch:** `main`
-- **Push:** `git push origin main`
-- **GitHub Pages:** available at `https://ringo977.github.io/mimic/` (basePath `/mimic`)
-- **Deploy Pages:** `npm run publish:github` (builds + pushes `out/` to `gh-pages` branch)
-
-### 4.2 GitLab (monorepo + Pages)
+### 4.1 GitLab Pages (PRIMARY — `www.mimic.polimi.it`)
 
 - **Repo:** `https://gitlab.polimi.it/DEIB/mimic.git`
+- **Production URL:** `www.mimic.polimi.it` (CNAME pointing to GitLab Pages)
 - **Structure:** monorepo with `mimic-website/` (site) and `cardiac-video/` (separate tool)
 - **Sync script:** `bash scripts/sync-gitlab.sh "commit message"`
   - Clones/updates the GitLab repo in `.gitlab-clone/` (cached)
@@ -249,17 +229,18 @@ The site is deployed to **3 independent channels**. Each can be updated separate
 - **CRITICAL LIMIT: artifact size must be under 100 MB.** See [Images](#11-images-rules-sizes--limits).
 - **Credentials:** `deploy.gitlab.env` (Personal Access Token with `read_repository` + `write_repository` scopes)
 
-### 4.3 Polimi FTP
+### 4.2 GitHub (source backup)
 
-- **Target:** Polimi web server via FTPS (explicit TLS)
-- **Script:** `scripts/deploy-polimi-ftp.sh` (or `npm run deploy:polimi`)
-- **Requires:** `lftp` (`brew install lftp`) + `deploy.polimi.env`
-- **Build:** `npm run build:polimi` (basePath empty — root URL)
-- **Smart deploy:** by default uploads only changed files:
-  - Step 1: force-upload HTML/txt/json/xml (reference chunk hashes)
-  - Step 2: upload static assets only if size differs (JS/CSS have content hashes in filenames)
-- **Full sync:** `FTP_FULL_SYNC=1 npm run deploy:polimi`
-- **Skip rebuild:** `SKIP_BUILD=1 npm run sync:polimi` (uses existing `out/`)
+- **Repo:** `https://github.com/ringo977/mimic.git` (remote `origin`)
+- **Branch:** `main`
+- **Push:** `git push origin main`
+- **GitHub Pages:** available at `https://ringo977.github.io/mimic/` (basePath `/mimic`) — secondary/legacy, not the production URL
+- **Deploy Pages:** `npm run publish:github` (builds + pushes `out/` to `gh-pages` branch)
+
+### 4.3 Polimi FTP (DEPRECATED)
+
+> FTP deployment is no longer used. GitLab Pages with the CNAME `www.mimic.polimi.it` replaces it.
+> The scripts `deploy-polimi-ftp.sh` and `deploy.polimi.env` remain in the repo for reference but are not part of the active workflow.
 
 ### npm scripts summary
 
@@ -267,13 +248,9 @@ The site is deployed to **3 independent channels**. Each can be updated separate
 |--------|-------------|
 | `npm run dev` | Start dev server at localhost:3000 |
 | `npm run build` | Build for GitHub Pages (basePath `/mimic`) |
-| `npm run build:polimi` | Build for Polimi/GitLab (basePath empty) |
-| `npm run deploy` | Push `out/` to GitHub Pages `gh-pages` branch |
-| `npm run publish:github` | `build` + `deploy` |
-| `npm run deploy:polimi` | Build Polimi + FTP upload |
-| `npm run sync:polimi` | FTP upload only (skip build, use existing `out/`) |
-| `npm run sync:gitlab` | Sync source to GitLab monorepo |
-| `npm run publish:all` | `publish:github` + `deploy:polimi` + `sync:gitlab` |
+| `npm run build:polimi` | Build with empty basePath (used by GitLab CI) |
+| `npm run sync:gitlab` | Sync source to GitLab monorepo → auto-deploy |
+| `npm run publish:github` | Build + push to GitHub Pages `gh-pages` branch |
 
 ---
 
@@ -597,9 +574,8 @@ The site uses different base paths depending on the deployment target.
 
 | Target | basePath | How to build |
 |--------|----------|-------------|
+| GitLab Pages (`www.mimic.polimi.it`) | `` (empty) | `BASE_PATH= npm run build` (done by CI) |
 | GitHub Pages | `/mimic` | `npm run build` (default) |
-| GitLab Pages | `` (empty) | `BASE_PATH= npm run build` |
-| Polimi FTP | `` (empty) | `npm run build:polimi` |
 | Local dev | `` (empty) | `npm run dev` |
 
 This is configured in `next.config.js`:
@@ -692,9 +668,8 @@ The `out/` directory exceeds 100 MB. Fix:
 
 ### Changes not visible after deploy
 
+- GitLab Pages (`www.mimic.polimi.it`): wait for CI pipeline to complete (~1 min), check pipeline status at `gitlab.polimi.it/DEIB/mimic/-/pipelines`, then hard-refresh (Cmd+Shift+R)
 - GitHub Pages: wait 1-2 minutes, then hard-refresh (Cmd+Shift+R)
-- GitLab Pages: wait for CI pipeline to complete (~1 min), check pipeline status at `gitlab.polimi.it/DEIB/mimic/-/pipelines`
-- Polimi FTP: changes are immediate, but browser cache may need clearing
 - Try incognito/private window
 
 ### GitLab sync fails
@@ -711,18 +686,9 @@ rm -rf .gitlab-clone
 bash scripts/sync-gitlab.sh "message"
 ```
 
-### Polimi FTP fails
+### Polimi FTP (deprecated)
 
-```bash
-# Check lftp is installed
-which lftp || brew install lftp
-
-# Check credentials
-cat deploy.polimi.env
-
-# Try full sync if smart deploy behaves oddly
-FTP_FULL_SYNC=1 npm run deploy:polimi
-```
+FTP deployment is no longer used. If ever needed for reference, scripts and credentials templates are still in the repo (`scripts/deploy-polimi-ftp.sh`, `deploy.polimi.env.example`).
 
 ---
 
