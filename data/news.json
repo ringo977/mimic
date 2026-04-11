@@ -1,6 +1,23 @@
 {
   "news": [
     {
+      "id": 29,
+      "date": "2026-03-25",
+      "title": "PHOENIX Consortium at THE 3R LÄND Conference in Tübingen",
+      "excerpt": "Members of the PHOENIX consortium gathered at THE 3R LÄND Conference, held March 24–26, 2026, at the University of Tübingen, Germany. Organized by the 3R-Center Tübingen and NMI — the latter being a PHOENIX partner — the conference brought together leading experts to discuss the latest advances in organoids, organ-on-chip, and in silico models for reducing animal testing. The PHOENIX team presented a poster showcasing the first results of the project on next-generation cardiac and neuro-muscular organs-on-chip. Victoria Rabsiun Aramburu (BiomimX) delivered a talk on human 3D cardiac organ-on-chip as advanced preclinical models within the Innovation in Organ-on-Chip session. The event was also a valuable opportunity for the consortium partners to meet and strengthen their collaboration.",
+      "tag": "Conference",
+      "link": "https://www.the3rs.uni-tuebingen.de/en/the-3r-laend-conference/",
+      "image": "/images/news/tubingen-3r-conference.jpg",
+      "gallery": [
+        "/images/news/tubingen-3r-conference.jpg",
+        "/images/news/phoenix-3r-poster.jpg"
+      ],
+      "captions": [
+        "Tübingen, Germany — host city of THE 3R LÄND Conference 2026",
+        "The PHOENIX consortium in front of the poster presenting the project's first results"
+      ]
+    },
+    {
       "id": 15,
       "date": "2026-01-15",
       "title": "EUROoCS 2026 — Call for Abstracts Open",
