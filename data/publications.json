@@ -1,6 +1,43 @@
 {
   "publications": [
     {
+      "id": 104,
+      "authors": [
+        "Pereira-Sousa, D.",
+        "Guillamat, P.",
+        "Niro, F.",
+        "Vinarský, V.",
+        "Fernandes, S.",
+        "Cassani, M.",
+        "Pagliari, S.",
+        "Trepat, X.",
+        "Rasponi, M.",
+        "Oliver-De La Cruz, J.",
+        "Forte, G."
+      ],
+      "title": "Cardiac fibroblast anisotropy is determined by YAP-dependent cellular contractility and ECM production",
+      "journal": "Biomaterials",
+      "year": 2026,
+      "doi": "10.1016/j.biomaterials.2026.124205",
+      "type": "Journal Article"
+    },
+    {
+      "id": 105,
+      "authors": [
+        "Mantegazza, A.",
+        "Materne, S.",
+        "Rasponi, M.",
+        "Occhetta, P."
+      ],
+      "title": "Advances in sensor integration for real-time monitoring of joint-on-chips",
+      "journal": "Biophysics Reviews",
+      "year": 2026,
+      "volume": "7",
+      "pages": "011308",
+      "doi": "10.1063/5.0287852",
+      "type": "Journal Article"
+    },
+    {
       "id": 1,
       "authors": [
         "Constantinescu-Bercu, A.",
