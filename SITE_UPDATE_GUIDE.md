@@ -177,8 +177,12 @@ git add data/FILE.json public/images/...
 git commit -m "Description of what changed"
 git push origin main
 
-# 4. Sync to GitLab → auto-deploys to www.mimic.polimi.it
+# 4. Sync to GitLab (mirror + GitLab Pages backup)
 bash scripts/sync-gitlab.sh "Same description"
+
+# 5. Deploy to mimic.polimi.it via FTPS (PRIMARY production channel, ~5 min)
+#    Requires Polimi network or GlobalProtect VPN active.
+npm run deploy:polimi
 ```
 
 ### Step-by-step
@@ -203,44 +207,64 @@ bash scripts/sync-gitlab.sh "Same description"
    git push origin main
    ```
 
-5. **Sync to GitLab** (pushes source files to `mimic-website/` subfolder in the GitLab monorepo; GitLab CI then builds and deploys to GitLab Pages → `www.mimic.polimi.it`):
+5. **Sync to GitLab** (pushes source files to `mimic-website/` subfolder in the GitLab monorepo; GitLab CI then builds and serves the site as backup at `mimic-XXXXXX.pages.gitlab.polimi.it`):
    ```bash
    bash scripts/sync-gitlab.sh "Add new publication: Author et al. (Journal)"
    ```
+
+6. **Deploy to `mimic.polimi.it` via FTPS** (PRIMARY production channel — must be on Polimi network or GlobalProtect VPN):
+   ```bash
+   npm run deploy:polimi
+   ```
+   This builds the site with `BASE_PATH=` (root URL), wipes `htdocs-SSL/` on the FTP server, and uploads the fresh `out/` folder. Takes ~5 minutes for a full upload.
 
 ---
 
 ## 4. Deploy Channels
 
-The site is deployed to **2 channels**. GitLab Pages is the **primary production channel**.
+The site is deployed to **3 channels**. **Polimi FTPS is the primary production channel** (`mimic.polimi.it`). GitLab and GitHub serve as mirrors / source backup.
 
-### 4.1 GitLab Pages (PRIMARY — `www.mimic.polimi.it`)
+### 4.1 Polimi FTPS — PRIMARY (`mimic.polimi.it`)
+
+This is the live site. See [DEPLOY_FTPS.md](DEPLOY_FTPS.md) for the full operational details.
+
+- **URL:** `https://mimic.polimi.it`
+- **Server:** `131.175.186.58:2121` (hostname `web462.dmz.polimi.it`), user `mimic`
+- **Remote dir:** `htdocs-SSL/`
+- **Command:** `npm run deploy:polimi`
+- **Script:** [scripts/deploy-polimi-ftp.sh](scripts/deploy-polimi-ftp.sh)
+- **Approach:** wipe-and-reload. Empty `htdocs-SSL/` first, then upload entire `out/` from scratch (~5 min).
+- **Network requirement:** must be on Polimi network or **GlobalProtect VPN active** (covers `131.175.0.0/16`).
+- **Credentials:** `deploy.polimi.env` (copy from `deploy.polimi.env.example`).
+- **Critical FTPS settings (in the script):**
+  - `set ftp:ssl-protect-data false` — data channel in clear (login still encrypted). Without this, transfers stall at 60-300 B/s.
+  - `set ssl:verify-certificate false` — server uses a self-signed cert.
+  - `set ftp:passive-mode true` — required by the server.
+- **Skip rebuild:** `SKIP_BUILD=1 npm run sync:polimi` (uses existing `out/`).
+
+> **Apache 301 redirect:** as of May 2026, `mimic.polimi.it` may still be configured by Polimi ICT to redirect to GitLab Pages. To make the FTP-uploaded files actually serve, ICT must remove the redirect in the Apache VirtualHost and set `DocumentRoot` on `htdocs-SSL/`.
+
+### 4.2 GitLab Pages (mirror)
 
 - **Repo:** `https://gitlab.polimi.it/DEIB/mimic.git`
-- **Production URL:** `www.mimic.polimi.it` (CNAME pointing to GitLab Pages)
+- **URL:** `https://mimic-224a25.pages.gitlab.polimi.it`
 - **Structure:** monorepo with `mimic-website/` (site) and `cardiac-video/` (separate tool)
 - **Sync script:** `bash scripts/sync-gitlab.sh "commit message"`
   - Clones/updates the GitLab repo in `.gitlab-clone/` (cached)
   - Rsyncs website files into `mimic-website/` subfolder
   - Commits and pushes
-- **CI/CD:** `.gitlab-ci.yml` builds the site and deploys to GitLab Pages automatically
-  - Build: `BASE_PATH= NODE_ENV=production npm run build` (root basePath)
-  - Artifact: `out/` moved to `public/`
+- **CI/CD:** [.gitlab-clone/.gitlab-ci.yml](.gitlab-clone/.gitlab-ci.yml) builds and deploys to GitLab Pages automatically. It also includes a manual `deploy_ftp` job (configure `FTP_PASS` as Protected+Masked CI/CD variable in Settings → CI/CD → Variables).
 - **CRITICAL LIMIT: artifact size must be under 100 MB.** See [Images](#11-images-rules-sizes--limits).
-- **Credentials:** `deploy.gitlab.env` (Personal Access Token with `read_repository` + `write_repository` scopes)
+- **Credentials:** `deploy.gitlab.env` (Personal Access Token with `read_repository` + `write_repository` scopes).
+- **Note:** Custom domains on GitLab Pages are disabled on the Polimi instance, so `mimic.polimi.it` cannot be served directly from here. Pages remains a useful preview/backup.
 
-### 4.2 GitHub (source backup)
+### 4.3 GitHub (source backup)
 
 - **Repo:** `https://github.com/ringo977/mimic.git` (remote `origin`)
 - **Branch:** `main`
 - **Push:** `git push origin main`
-- **GitHub Pages:** available at `https://ringo977.github.io/mimic/` (basePath `/mimic`) — secondary/legacy, not the production URL
-- **Deploy Pages:** `npm run publish:github` (builds + pushes `out/` to `gh-pages` branch)
-
-### 4.3 Polimi FTP (DEPRECATED)
-
-> FTP deployment is no longer used. GitLab Pages with the CNAME `www.mimic.polimi.it` replaces it.
-> The scripts `deploy-polimi-ftp.sh` and `deploy.polimi.env` remain in the repo for reference but are not part of the active workflow.
+- **GitHub Pages:** available at `https://ringo977.github.io/mimic/` (basePath `/mimic`) — secondary/legacy.
+- **Deploy Pages:** `npm run publish:github` (builds + pushes `out/` to `gh-pages` branch).
 
 ### npm scripts summary
 
@@ -248,9 +272,12 @@ The site is deployed to **2 channels**. GitLab Pages is the **primary production
 |--------|-------------|
 | `npm run dev` | Start dev server at localhost:3000 |
 | `npm run build` | Build for GitHub Pages (basePath `/mimic`) |
-| `npm run build:polimi` | Build with empty basePath (used by GitLab CI) |
-| `npm run sync:gitlab` | Sync source to GitLab monorepo → auto-deploy |
+| `npm run build:polimi` | Build with empty basePath (for FTPS / GitLab Pages) |
+| `npm run deploy:polimi` | Build + FTPS deploy to `mimic.polimi.it` (PRIMARY) |
+| `npm run sync:polimi` | FTPS upload only (skip build, use existing `out/`) |
+| `npm run sync:gitlab` | Sync source to GitLab monorepo → auto-deploy Pages |
 | `npm run publish:github` | Build + push to GitHub Pages `gh-pages` branch |
+| `npm run publish:all` | `publish:github` + `deploy:polimi` + `sync:gitlab` |
 
 ---
 
@@ -574,7 +601,8 @@ The site uses different base paths depending on the deployment target.
 
 | Target | basePath | How to build |
 |--------|----------|-------------|
-| GitLab Pages (`www.mimic.polimi.it`) | `` (empty) | `BASE_PATH= npm run build` (done by CI) |
+| Polimi FTPS (`mimic.polimi.it`) | `` (empty) | `npm run build:polimi` (done by `deploy:polimi`) |
+| GitLab Pages (mirror) | `` (empty) | `BASE_PATH= npm run build` (done by GitLab CI) |
 | GitHub Pages | `/mimic` | `npm run build` (default) |
 | Local dev | `` (empty) | `npm run dev` |
 
@@ -668,9 +696,9 @@ The `out/` directory exceeds 100 MB. Fix:
 
 ### Changes not visible after deploy
 
-- GitLab Pages (`www.mimic.polimi.it`): wait for CI pipeline to complete (~1 min), check pipeline status at `gitlab.polimi.it/DEIB/mimic/-/pipelines`, then hard-refresh (Cmd+Shift+R)
-- GitHub Pages: wait 1-2 minutes, then hard-refresh (Cmd+Shift+R)
-- Try incognito/private window
+- `mimic.polimi.it` (FTPS): changes are immediate after upload completes. If still seeing old version, hard-refresh (Cmd+Shift+R) or try incognito. If you see GitLab Pages content instead of your FTP files, the Apache 301 redirect is still active — ask Polimi ICT to remove it.
+- GitLab Pages (`mimic-XXXXX.pages.gitlab.polimi.it`): wait for CI pipeline (~1 min) at `gitlab.polimi.it/DEIB/mimic/-/pipelines`, then hard-refresh.
+- GitHub Pages: wait 1-2 minutes, then hard-refresh (Cmd+Shift+R).
 
 ### GitLab sync fails
 
@@ -686,9 +714,24 @@ rm -rf .gitlab-clone
 bash scripts/sync-gitlab.sh "message"
 ```
 
-### Polimi FTP (deprecated)
+### Polimi FTPS troubleshooting
 
-FTP deployment is no longer used. If ever needed for reference, scripts and credentials templates are still in the repo (`scripts/deploy-polimi-ftp.sh`, `deploy.polimi.env.example`).
+See [DEPLOY_FTPS.md](DEPLOY_FTPS.md) for the full reference. Common issues:
+
+- **Connection times out / "Cannot connect"**: you are not on Polimi network. Activate GlobalProtect VPN. Verify with `route -n get 131.175.186.58` — gateway should be a `utun*` interface.
+- **Transfers stall at 60-300 B/s**: `set ftp:ssl-protect-data` is `true` somewhere (e.g. in `~/.lftprc`). The script already disables it; if you ran lftp manually, add `set ftp:ssl-protect-data false`.
+- **`426 Failure reading network stream`**: same as above — disable SSL on the data channel.
+- **`500 Unknown SITE command`**: `ftp:use-site-chmod` not disabled. Script handles this.
+- **Cert verify error**: `set ssl:verify-certificate false` (server uses self-signed cert).
+- **Site shows GitLab Pages content instead of new FTP upload**: Apache 301 redirect is still active on `mimic.polimi.it`. Ask Polimi ICT to remove it from the VirtualHost and set `DocumentRoot` to `htdocs-SSL/`.
+
+```bash
+# Verify what was uploaded
+lftp -u "mimic,$FTP_PASS" -e 'cls -la htdocs-SSL/; quit' ftp://131.175.186.58:2121
+
+# Verify what mimic.polimi.it serves (should be 200 OK once redirect is removed)
+curl -I https://mimic.polimi.it
+```
 
 ---
 

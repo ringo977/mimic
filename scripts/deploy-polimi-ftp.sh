@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
-# Build static site for Polimi root URL, then upload via FTPS (mirror).
+# Build the static site for Polimi root URL, then upload via FTPS to mimic.polimi.it.
+#
+# Approach: WIPE + RELOAD (not incremental).
+# Tests showed that lftp `mirror` against a non-empty remote folder gets stuck in slow
+# TLS comparisons (60-300 B/s, hours per deploy). Emptying htdocs-SSL/ first and then
+# uploading from scratch is much faster (~5 min for ~300 files / ~100 MB at ~310 KiB/s).
+#
+# Critical FTPS flags (do NOT change):
+#   set ftp:ssl-protect-data false   → data channel in clear (login still encrypted).
+#                                       This is what makes transfers fast. With true,
+#                                       the server stalls at 60-300 B/s.
+#   set ssl:verify-certificate false → server uses a self-signed cert for web462.dmz
+#   set ftp:passive-mode true        → server requires passive mode
+#   set ftp:use-site-chmod false     → server does not support SITE CHMOD (avoids spam)
+#   set ftp:use-mdtm false           → skip MDTM (timestamp queries)
+#
+# Network: must be on Polimi network or GlobalProtect VPN covering 131.175.0.0/16.
+#
 # Prerequisites: brew install lftp
 # Credentials: copy deploy.polimi.env.example → deploy.polimi.env (never commit)
-#
-# Smart incremental deploy (2-step):
-#   Step 1: Force-upload HTML/txt/json (small, always change when chunks change)
-#   Step 2: Upload static assets only if new (JS/CSS have content hashes in filename)
-# This avoids re-uploading hundreds of unchanged assets while ensuring HTML
-# always references the correct chunk hashes.
-#
-# Set FTP_FULL_SYNC=1 to force upload everything (useful for first deploy or debugging).
-#
-# Skip rebuild: SKIP_BUILD=1 npm run sync:polimi  (out/ must be from npm run build:polimi)
+# Skip rebuild: SKIP_BUILD=1 npm run sync:polimi (out/ must exist from npm run build:polimi)
 
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,50 +59,28 @@ if [[ ! -d out ]]; then
 fi
 
 PWENC=$(FTP_PASS="$FTP_PASS" python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['FTP_PASS'], safe=''))")
-# Explicit TLS (AUTH TLS) like curl --ssl-reqd; ftps:// is implicit SSL and breaks with "wrong version number"
 OPEN_URL="ftp://${FTP_USER}:${PWENC}@${FTP_HOST}:${FTP_PORT}"
-
-COMMON_FLAGS="--parallel=2 --verbose --no-perms --continue"
 
 LFTP_SCRIPT=$(mktemp)
 trap 'rm -f "$LFTP_SCRIPT"' EXIT
 
-if [[ "${FTP_FULL_SYNC:-}" == "1" ]]; then
-  echo "→ Full sync: uploading ALL files…"
-  cat >"$LFTP_SCRIPT" <<EOF
-set ssl:verify-certificate no
+cat >"$LFTP_SCRIPT" <<EOF
+set ssl:verify-certificate false
 set ftp:ssl-force true
-set ftp:ssl-protect-data true
-set ftp:use-site-chmod no
+set ftp:ssl-protect-data false
+set ftp:passive-mode true
+set ftp:use-site-chmod false
+set ftp:use-mdtm false
 open ${OPEN_URL}
 cd ${FTP_REMOTE_DIR}
-mirror -R ${COMMON_FLAGS} out .
+echo "→ Wiping remote ${FTP_REMOTE_DIR}/ …"
+glob -a rm -rf *
+echo "→ Uploading out/ → ${FTP_REMOTE_DIR}/ (parallel=2) …"
+mirror -R --parallel=2 --verbose --no-perms out .
 bye
 EOF
-else
-  echo "→ Smart deploy: Step 1 — force-uploading HTML/txt/json pages…"
-  echo "→ Smart deploy: Step 2 — uploading new static assets (size-based skip)…"
-  cat >"$LFTP_SCRIPT" <<EOF
-set ssl:verify-certificate no
-set ftp:ssl-force true
-set ftp:ssl-protect-data true
-set ftp:use-site-chmod no
-open ${OPEN_URL}
-cd ${FTP_REMOTE_DIR}
 
-# Step 1: Force-upload all HTML, txt, json, xml files (pages that reference chunk hashes).
-# These are small and MUST be updated every deploy to point to the correct JS chunks.
-mirror -R ${COMMON_FLAGS} --include-glob=*.html --include-glob=*.txt --include-glob=*.json --include-glob=*.xml --include-glob=*.rss out .
-
-# Step 2: Upload remaining static assets (JS/CSS/images/fonts).
-# --ignore-time: skip files whose size matches (Next.js JS chunks have content hashes
-# in the filename, so a changed file = new filename = always uploaded as new).
-mirror -R ${COMMON_FLAGS} --ignore-time --exclude-glob=*.html --exclude-glob=*.txt --exclude-glob=*.json --exclude-glob=*.xml --exclude-glob=*.rss out .
-bye
-EOF
-fi
-
-echo "→ Uploading to ${FTP_HOST}:${FTP_PORT}/${FTP_REMOTE_DIR} …"
-# --norc: ignore ~/.lftprc so nothing re-enables SITE CHMOD (fixes 500 Unknown SITE command)
+echo "→ Connecting to ${FTP_HOST}:${FTP_PORT} as ${FTP_USER} …"
+# --norc: ignore ~/.lftprc so nothing re-enables SITE CHMOD or ssl-protect-data
 lftp --norc -f "$LFTP_SCRIPT"
-echo "Done."
+echo "✓ Done. Site available at https://mimic.polimi.it (once the Apache 301 redirect is removed)."

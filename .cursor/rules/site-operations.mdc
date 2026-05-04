@@ -34,9 +34,9 @@ Next.js 14 static site (`output: 'export'`). All public content lives in `data/*
 - Optimize with: `sips -Z 1200 public/images/news/photo.jpg`
 - **CRITICAL:** total `out/` build must be <100 MB (GitLab Pages limit). Currently ~33 MB. Never commit multi-MB uncompressed photos.
 
-## Deploy workflow (2 channels)
+## Deploy workflow (3 channels)
 
-**GitLab Pages is the PRIMARY production channel** → `www.mimic.polimi.it`
+**Polimi FTPS is the PRIMARY production channel** → `mimic.polimi.it`. See [DEPLOY_FTPS.md](../../DEPLOY_FTPS.md) for full details.
 
 After editing data files:
 
@@ -46,19 +46,29 @@ git add data/FILE.json public/images/...
 git commit -m "Description"
 git push origin main
 
-# 2. Sync to GitLab → auto-deploys to www.mimic.polimi.it
+# 2. Sync to GitLab (mirror + Pages backup)
 bash scripts/sync-gitlab.sh "Description"
+
+# 3. Deploy to mimic.polimi.it via FTPS — REQUIRES Polimi network or GlobalProtect VPN
+npm run deploy:polimi
 ```
 
 ### Channel details
 
-- **GitLab (PRIMARY):** monorepo at `gitlab.polimi.it/DEIB/mimic`. Website lives in `mimic-website/` subfolder. Do NOT `git push` directly — always use `scripts/sync-gitlab.sh`. CI builds with empty basePath and deploys to GitLab Pages (`www.mimic.polimi.it`). Credentials in `deploy.gitlab.env`.
-- **GitHub (backup):** remote `origin`, branch `main`. Pages at `/mimic` basePath — secondary, not the production URL.
-- **Polimi FTP:** DEPRECATED. No longer used. Scripts remain for reference only.
+- **Polimi FTPS (PRIMARY):** `mimic.polimi.it`. Server `131.175.186.58:2121`, user `mimic`, dir `htdocs-SSL/`. Script wipes the remote dir then uploads `out/` from scratch (~5 min). Credentials in `deploy.polimi.env`.
+- **GitLab (mirror):** monorepo at `gitlab.polimi.it/DEIB/mimic`. Website lives in `mimic-website/` subfolder. Do NOT `git push` directly — always use `scripts/sync-gitlab.sh`. CI builds with empty basePath and deploys to GitLab Pages at `mimic-XXXXXX.pages.gitlab.polimi.it`. Custom domains disabled on Polimi instance. Credentials in `deploy.gitlab.env`.
+- **GitHub (backup):** remote `origin`, branch `main`. Pages at `/mimic` basePath — secondary.
+
+### FTPS critical settings (already in script, do NOT change)
+
+- `set ftp:ssl-protect-data false` → data channel in clear (login still encrypted). Without this, transfers stall at 60-300 B/s.
+- `set ssl:verify-certificate false` → server self-signed cert.
+- `set ftp:passive-mode true` → server requires passive.
+- Approach: WIPE + RELOAD (do NOT use incremental mirror — gets stuck on non-empty remote).
 
 ## basePath
 
-GitLab Pages (production, `www.mimic.polimi.it`) uses empty basePath. GitHub Pages uses `/mimic`. Controlled by `BASE_PATH` env var in `next.config.js`. Components use `siteBasePath` from `lib/site-base-path.ts`.
+Polimi FTPS (production, `mimic.polimi.it`) and GitLab Pages use empty basePath. GitHub Pages uses `/mimic`. Controlled by `BASE_PATH` env var in `next.config.js`. Components use `siteBasePath` from `lib/site-base-path.ts`.
 
 ## Lab app (`/lab`)
 
