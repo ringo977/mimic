@@ -32,7 +32,7 @@ export default function AdminPage() {
       { id: 'storageUnits', label: 'Storage', icon: Warehouse, count: ctx.storageUnits.length },
     ]},
     { label: 'Inventory', tabs: [
-      { id: 'reagents', label: 'Reagents', icon: FlaskConical, count: ctx.reagents.length },
+      { id: 'reagents', label: 'Consumables', icon: FlaskConical, count: ctx.reagents.length },
       { id: 'cryo', label: 'Cryo', icon: Snowflake, count: ctx.cryoVials.length },
     ]},
     { label: 'Docs & Schedule', tabs: [
