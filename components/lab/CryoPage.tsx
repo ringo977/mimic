@@ -429,6 +429,8 @@ function VialInventory() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cryoVials, search, sortKey, sortAsc]);
 
+  const orphanVials = useMemo(() => cryoVials.filter(v => !storageUnits.some(s => s.id === v.storageUnitId)), [cryoVials, storageUnits]);
+
   const SortHeader = ({ label, k }: { label: string; k: VialSortKey }) => (
     <th className="px-3 py-2.5 text-left font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900 group" onClick={() => toggleSort(k)}>
       <span className="inline-flex items-center gap-0.5">{label}
@@ -449,6 +451,19 @@ function VialInventory() {
         </div>
         {search && <p className="text-[11px] text-gray-400 font-manrope">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>}
       </div>
+      {orphanVials.length > 0 && permissions.canManageCryo && (
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between gap-3">
+          <p className="text-xs text-amber-800 font-manrope">
+            {orphanVials.length} orphaned vial{orphanVials.length > 1 ? 's' : ''} reference a storage unit that no longer exists.
+          </p>
+          <button
+            onClick={() => confirmDelete('Remove orphaned vials?', `${orphanVials.length} vial${orphanVials.length > 1 ? 's' : ''} whose storage unit was deleted will be permanently removed. This cannot be undone.`, () => orphanVials.forEach(v => removeCryoVial(v.id)))}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold font-manrope bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+          >
+            Clean up
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope">
           <thead><tr className="bg-gray-50 border-b border-gray-200">

@@ -771,7 +771,7 @@ function InstrumentsTab() {
 // Storage Units Tab (was Dewars)
 // ============================================================
 function StorageUnitsTab() {
-  const { storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit, cryoVials, reagents, locations } = useLabContext();
+  const { storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit, cryoVials, removeCryoVial, reagents, updateReagent, locations } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<StorageUnit | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -827,7 +827,18 @@ function StorageUnitsTab() {
                 </div>
                 <div className="flex gap-0.5">
                   <button onClick={() => open(s)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
-                  <button onClick={() => confirmDelete('Delete Storage Unit?', `"${s.name}" and its associations will be permanently removed.`, () => removeStorageUnit(s.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                  <button onClick={() => {
+                    const vialsHere = cryoVials.filter(v => v.storageUnitId === s.id);
+                    const reagentsHere = reagents.filter(r => r.storageUnitId === s.id);
+                    const parts = [`"${s.name}" will be permanently removed.`];
+                    if (vialsHere.length) parts.push(`Its ${vialsHere.length} stored vial${vialsHere.length > 1 ? 's' : ''} will also be permanently deleted.`);
+                    if (reagentsHere.length) parts.push(`${reagentsHere.length} reagent${reagentsHere.length > 1 ? 's' : ''} will be unlinked from it (kept in inventory).`);
+                    confirmDelete('Delete Storage Unit?', parts.join(' '), () => {
+                      vialsHere.forEach(v => removeCryoVial(v.id));
+                      reagentsHere.forEach(r => updateReagent({ ...r, storageUnitId: undefined }));
+                      removeStorageUnit(s.id);
+                    });
+                  }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                 </div>
               </div>
               <div className="space-y-1 text-[11px] font-manrope text-gray-500">
