@@ -35,6 +35,7 @@ interface LabContextType {
   setCurrentPage: (page: string) => void;
   bookings: Booking[];
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
+  updateBooking: (b: Booking) => void;
   removeBooking: (id: string) => void;
   bookingSettings: BookingSettings;
   updateBookingSettings: (s: BookingSettings) => void;
@@ -185,6 +186,12 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
   }, [addLogEntry]);
 
+  const updateBooking = useCallback((b: Booking) => {
+    setBookings(prev => prev.map(x => x.id === b.id ? b : x));
+    upsertBooking(b);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Updated ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
+  }, [user, addLogEntry]);
+
   const removeBooking = useCallback((id: string) => {
     setBookings(prev => {
       const bk = prev.find(b => b.id === id);
@@ -328,7 +335,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         const base = user.affiliation === 'MiMic Lab' ? rolePermissions[user.role] : externalRolePermissions[user.role];
         return { ...base, canAdmin: base.canAdmin || user.isAdmin };
       })(), currentPage, setCurrentPage,
-      bookings, addBooking, removeBooking,
+      bookings, addBooking, updateBooking, removeBooking,
       bookingSettings, updateBookingSettings,
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       reagents, withdrawReagent, addReagentStock,
