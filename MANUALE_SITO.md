@@ -320,19 +320,29 @@ App interna di gestione laboratorio, completamente separata dal sito pubblico. N
 - **Tipi e dati mock:** `data/lab-data.ts`.
 
 ### Funzionalità (pagine nel menu)
-Dashboard · **Instruments** (strumenti + prenotazioni) · **Reagents** (reagenti, categorie, transazioni) · **Cryo** (storage criogenico: dewar, freezer, vials) · **Wishlist** (richieste d'acquisto) · **Manuals** (manuali/file) · **Activity Log** · **Database** · **Admin Panel**. Le voci compaiono in base ai permessi del ruolo.
+Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + prenotazioni) · **Reagents** (reagenti, categorie, transazioni) · **Cryo** (storage criogenico: dewar, freezer, vials) · **Wishlist** (richieste d'acquisto) · **Manuals** (manuali/file) · **Activity Log** · **Database** · **Admin Panel**. Le voci compaiono in base ai permessi del ruolo.
+
+### Prenotazione strumenti (aggiornato giugno 2026)
+- **Granularità mezz'ora:** gli slot sono da 30 min (configurabile a 60). Internamente l'orario è un decimale (`9.5` = 09:30) salvato nelle colonne `bookings.start_hour`/`end_hour` (tipo `numeric`).
+- **Orario lavorativo con codice colore:** default **9:00–19:00**, evidenziato sul calendario; gli slot fuori orario sono prenotabili comunque ma marcati come "extra" (ambra). L'orario lavorativo, l'orario di apertura/chiusura del calendario e la granularità sono **impostabili dall'admin** in **Admin Panel → Hours**.
+- **Impostazioni condivise:** salvate nella tabella Supabase `app_settings` (chiave `booking_settings`, valore JSONB), così valgono per tutti gli utenti. Fallback su `localStorage`/default se non raggiungibile.
+- **Anti-overlap:** controllo dei conflitti con **ri-verifica sullo stato fresco del server** appena prima di confermare (riduce le doppie prenotazioni in concorrenza).
+- **Vincoli:** niente prenotazioni su date/slot già passati; chi prenota può cancellare le proprie, mentre **admin / PI / lab_manager** possono cancellare anche quelle altrui (override).
+- **Calendario settimanale (Dashboard):** vista a 7 giorni con le prenotazioni **di tutti**, navigazione tra settimane e **filtro per strumento**; colore per strumento e fuori-orario tratteggiato.
+- File principali: `components/lab/InstrumentsPage.tsx`, `components/lab/DashboardPage.tsx` (calendario), `components/lab/AdminPage.tsx` (tab Hours), config in `data/lab-data.ts` (`BookingSettings`, `buildBookingSlots`, `isWorkingHour`).
 
 ### Autenticazione e sicurezza
 - Login **email + password** (Supabase Auth). Solo email **autorizzate** (presenti nella tabella utenti) possono entrare: `findLabUserByEmail` blocca le altre.
 - **2FA TOTP** (Google/Microsoft Authenticator, Authy): obbligatorio per ruoli `admin`, `pi`, `lab_manager` (e admin flag); opzionale ("Skip for now") per gli altri.
 - Reset password via `/lab/reset-password`.
-- **RLS (Row Level Security):** policy nel file `scripts/supabase-rls-policies.sql` regolano l'accesso ai dati lato database.
+- **RLS (Row Level Security): ✅ ATTIVE (eseguite giugno 2026).** Le policy in `scripts/supabase-rls-policies.sql` sono applicate sul progetto live: con la sola anon key e **senza login** tutte le tabelle restituiscono `[]`. Solo gli utenti **autenticati** leggono/scrivono; le mutazioni sensibili (utenti, locations, projects, settings, ecc.) sono ristrette agli **admin/PI** via funzione `is_lab_admin()`. Lo script è **ri-eseguibile** (fa drop delle policy prima di ricrearle, così l'`ENABLE ROW LEVEL SECURITY` non viene annullato dal rollback della transazione dell'SQL Editor).
+  - ⚠️ Le policy fanno match su `auth.jwt() ->> 'email'` con `lab_users.email`: se l'email di login di un utente **non coincide** con la sua riga in `lab_users`, quell'utente non vedrà i dati.
 
 ### Ruoli (da `data/lab-data.ts`)
-`admin`, `pi`, `researcher`, `lab_manager`, `project_manager`, `postdoc`, `phd`, `msc`, `guest`. Ogni ruolo ha un set di permessi (`canRequestOrders`, `canViewLog`, `canViewDatabase`, `canUploadManuals`, `canAdmin`, ...). Esiste anche un set di permessi ridotti per utenti `External`.
+`admin`, `pi`, `researcher`, `lab_manager`, `project_manager`, `postdoc`, `phd`, `msc`, `guest`. Ogni ruolo ha un set di permessi (`canRequestOrders`, `canViewLog`, `canViewDatabase`, `canUploadManuals`, `canAdmin`, ...). Esiste anche un set di permessi ridotti per utenti `External`. Per le prenotazioni esiste inoltre `canManageAllBookings` (admin/PI/lab_manager) per l'override di cancellazione.
 
 ### Tabelle Supabase usate (da `lib/supabase-data.ts`)
-`instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals` (+ tabella utenti e storage file).
+`instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals`, **`app_settings`** (key/value JSONB per le impostazioni, es. orari prenotazione) (+ tabella utenti e storage file). Migrazione dedicata: `scripts/supabase-booking-settings.sql` (crea `app_settings` con RLS e converte `bookings.start_hour`/`end_hour` a `numeric` per le mezz'ore).
 
 ### Backup
 `lib/backup.ts` consente backup/restore del database del lab (usa `jszip` per esportare).
@@ -383,9 +393,12 @@ Il sito è pubblicato su **3 canali**. **Polimi FTPS è il canale di produzione 
 - **Credenziali:** `deploy.gitlab.env` (PAT con `read_repository` + `write_repository`).
 - Domini custom disabilitati sull'istanza PoliMi → resta utile come backup/preview.
 
-### 11.3 GitHub (backup sorgente)
+### 11.3 GitHub (backup sorgente + Pages)
 - **Repo:** `github.com/ringo977/mimic`, branch `main`. Push: `git push origin main`.
-- **GitHub Pages:** `ringo977.github.io/mimic/` (basePath `/mimic`) — secondario. Deploy: `npm run publish:github`.
+- **GitHub Pages:** `ringo977.github.io/mimic/` (basePath `/mimic`), servito dal branch **`gh-pages`** (file già buildati).
+- **🚀 Auto-deploy (giugno 2026):** il workflow `.github/workflows/deploy-github-pages.yml` builda e pubblica su `gh-pages` **automaticamente a ogni push su `main`** (~1–2 min; salta il rebuild se cambi solo `scripts/`, `updates/` o file `.md`/`.rtf`). Avviabile anche a mano da GitHub → Actions → "Deploy to GitHub Pages" → Run workflow.
+- **Deploy manuale (fallback):** `npm run publish:github` (build + push su `gh-pages`).
+- ⚠️ GitHub Pages serve file in cache: dopo un deploy fai **hard refresh** (Cmd+Shift+R) per vedere le novità.
 
 ### Script npm in sintesi
 | Script | Cosa fa |
@@ -443,10 +456,10 @@ Tutti questi file vivono nella **root** `/Users/marco/Local Sites/mimic/`. La co
 | `deploy.gitlab.env` | **`GITLAB_TOKEN`** (PAT), `GITLAB_REPO`, `GITLAB_SUBFOLDER` | ✅ ignorato |
 | `mimic passwd.txt` | Password del Lab Manager (riferimento locale) | ✅ ignorato |
 | `.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (solo se creato localmente) | ✅ ignorato (`.env*.local`) |
-| `Supabase.rtf` | Note Supabase del progetto **`taskflow-polimi`**: password, URL, publishable key, stringa di connessione Postgres, **API key Resend** | ⚠️ **NON ignorato** |
-| `Token MiMic Push.rtf` | **GitLab Personal Access Token** (`glpat-…`) "Mimic-push" | ⚠️ **NON ignorato** |
+| `Supabase.rtf` | Note Supabase del progetto **`taskflow-polimi`**: password, URL, publishable key, stringa di connessione Postgres, **API key Resend** | ✅ ignorato (`*.rtf`) |
+| `Token MiMic Push.rtf` | **GitLab Personal Access Token** (`glpat-…`) "Mimic-push" | ✅ ignorato (`*.rtf`) |
 
-> ⚠️ **ATTENZIONE — rischio di leak.** `Supabase.rtf` e `Token MiMic Push.rtf` **non sono in `.gitignore`** e contengono segreti reali. Su un repo **pubblico** (GitHub `ringo977/mimic`) un `git add .` distratto li espone al mondo. Azioni consigliate: (a) aggiungerli a `.gitignore`; (b) spostarli fuori dal repo (es. in un password manager / cartella privata); (c) se sono mai stati pushati, **revocare e rigenerare** quei token/chiavi. Vedi [Criticità #8](#15-criticità-attuali-da-tenere-docchio).
+> ✅ **Risolto (giugno 2026).** `Supabase.rtf` e `Token MiMic Push.rtf` sono ora coperti da `.gitignore` (regole dedicate + `*.rtf`). L'audit della history (`git log --all`) ha confermato che non sono **mai** stati committati, quindi nessuna rotazione di chiavi è stata necessaria. Resta comunque buona norma custodire questi file in un password manager fuori dal repo.
 
 I file `*.example` versionati (`deploy.polimi.env.example`, `deploy.gitlab.env.example`, `.env.local.example`) sono **template senza valori** e servono per ricreare i file reali.
 
@@ -479,7 +492,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key pubblica>
 
 ### 13.4 Note sulla natura dei segreti
 
-- L'**anon key di Supabase** (`vfruyyrpriymhmelgidr…`) è una chiave **pubblica**: compare nel bundle del client (`lib/supabase.ts`) ed è normale. La sicurezza reale è garantita dalle **RLS**.
+- L'**anon key di Supabase** (`vfruyyrpriymhmelgidr…`) è una chiave **pubblica**: compare nel bundle del client (`lib/supabase.ts`) ed è normale. La sicurezza reale è garantita dalle **RLS** (ora attive — vedi sez. 9: senza login la anon key non legge nulla).
 - Sono invece **veramente sensibili** e vanno protetti: la **password FTP**, i **GitLab PAT** (`glpat-…`), la **password/connection string Postgres**, le **API key** (es. Resend), le password del Lab Manager.
 - Il fallback dell'anon key è hardcodato in `lib/supabase.ts`; se la chiave venisse ruotata su Supabase, va aggiornata lì **e** nei secret GitHub.
 
@@ -533,9 +546,11 @@ rm -rf .gitlab-clone && bash scripts/sync-gitlab.sh "messaggio"   # reset clone
 
 7. **Form contatti / integrazioni esterne.** Storicamente il form contatti era solo UI; verificare che invii davvero (Formspree/EmailJS/altro) e che eventuali API key siano configurate.
 
-8. **🔴 Segreti non ignorati da git: `Supabase.rtf` e `Token MiMic Push.rtf`.** Contengono credenziali reali (password/URL/key Supabase `taskflow-polimi`, connection string Postgres, API key Resend, **GitLab PAT** `glpat-…`) e **non** sono in `.gitignore` sul repo pubblico GitHub: un `git add .` li esporrebbe. *Azione immediata:* aggiungerli a `.gitignore`, spostarli fuori dal repo (password manager) e, se mai pushati, **revocare e rigenerare** i token/chiavi. Gli altri segreti (`deploy.*.env`, `mimic passwd.txt`, `.env.local`) sono già ignorati ma vivono comunque sul disco: custodirli in un password manager e non condividerli in chiaro. Vedi [sez. 13.1](#131-inventario-dei-file-locali-sensibili-root-del-progetto).
+8. **✅ Risolto — Segreti `.rtf` ora ignorati.** `Supabase.rtf` e `Token MiMic Push.rtf` (credenziali Supabase `taskflow-polimi`, connection string Postgres, API key Resend, **GitLab PAT** `glpat-…`) sono ora in `.gitignore` (regola `*.rtf`); l'audit ha confermato che non sono mai stati committati. *Residuo:* gli altri segreti (`deploy.*.env`, `mimic passwd.txt`, `.env.local`) sono già ignorati ma vivono sul disco: custodirli in un password manager e non condividerli in chiaro. Vedi [sez. 13.1](#131-inventario-dei-file-locali-sensibili-root-del-progetto).
 
 9. **Nessun test automatico.** Un JSON malformato o un refuso si scoprono solo al build/manualmente. *Mitigazione:* lo step di validazione JSON e l'anteprima locale.
+
+10. **✅ Risolto — RLS Supabase attive.** Le policy di Row Level Security sono ora applicate sul progetto live (giugno 2026): senza login la anon key non legge alcun dato. In precedenza le tabelle (incluse le email degli utenti) erano leggibili pubblicamente. *Da tenere d'occhio:* eventuali nuove tabelle vanno aggiunte allo script RLS, e l'email di login degli utenti deve coincidere con `lab_users.email`.
 
 ---
 
