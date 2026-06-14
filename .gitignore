@@ -37,6 +37,11 @@ deploy.gitlab.env
 # Credentials file
 mimic passwd.txt
 
+# Secret notes (Supabase keys, GitLab PAT, Resend API key, etc.) — never commit
+Supabase.rtf
+Token MiMic Push.rtf
+*.rtf
+
 # vercel
 .vercel
 
