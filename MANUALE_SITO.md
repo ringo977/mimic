@@ -450,6 +450,8 @@ Tutti questi file vivono nella **root** `/Users/marco/Local Sites/mimic/`. La co
 
 I file `*.example` versionati (`deploy.polimi.env.example`, `deploy.gitlab.env.example`, `.env.local.example`) sono **template senza valori** e servono per ricreare i file reali.
 
+> ✅ **Audit history (giugno 2026):** `git log --all -- <file>` ha confermato che **nessuno** di questi file segreti (inclusi i due `.rtf`) è mai stato committato in alcun branch. I segreti sono rimasti solo in locale: nessun leak, nessuna rotazione di chiavi necessaria. I `.rtf` sono ora coperti da `.gitignore`.
+
 ### 13.2 Anatomia dei file di credenziali
 
 ```
