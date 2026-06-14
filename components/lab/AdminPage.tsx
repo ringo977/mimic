@@ -7,7 +7,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
   DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType,
+import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
@@ -137,6 +137,94 @@ const btnPrimary = "w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold
 const btnExport = "flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-medium font-manrope hover:bg-gray-200";
 const btnAdd = "flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-xs font-medium font-manrope hover:bg-[#1a3d6e]";
 
+// --- Reusable CSV import ---
+// parseRow returns the built item (optionally with a non-blocking note) or a skip reason.
+type ParsedRow<T> = { item: T; note?: string } | { skip: string };
+interface ImportSpec<T> {
+  title: string;
+  headers: string[];                     // canonical columns, used for matching + template
+  aliases?: Record<string, string[]>;    // canonical -> accepted header variants (any case)
+  template: (string | number)[][];       // example rows aligned to headers
+  templateName: string;
+  notes?: React.ReactNode;               // extra instruction bullet(s)
+  parseRow: (rec: Record<string, string>, rowNum: number) => ParsedRow<T>;
+  onAdd: (item: T) => void;
+}
+
+function ImportModal<T>({ spec, onClose }: { spec: ImportSpec<T>; onClose: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [result, setResult] = useState<{ added: number; messages: string[] } | null>(null);
+
+  const handleFile = async (file: File) => {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) { setResult({ added: 0, messages: ['File is empty or has no data rows.'] }); return; }
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const colIndex: Record<string, number> = {};
+    spec.headers.forEach(h => {
+      const names = [h.toLowerCase(), ...(spec.aliases?.[h]?.map(a => a.toLowerCase()) || [])];
+      colIndex[h] = header.findIndex(x => names.includes(x));
+    });
+    const messages: string[] = [];
+    let added = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const rec: Record<string, string> = {};
+      spec.headers.forEach(h => { const idx = colIndex[h]; rec[h] = idx >= 0 ? (row[idx] ?? '').trim() : ''; });
+      const out = spec.parseRow(rec, i + 1);
+      if ('skip' in out) { messages.push(out.skip); continue; }
+      spec.onAdd(out.item); added++;
+      if (out.note) messages.push(out.note);
+    }
+    setResult({ added, messages });
+  };
+
+  return (
+    <Modal title={spec.title} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 font-manrope space-y-1.5">
+          <p className="font-semibold flex items-center gap-1.5"><FileText size={13} /> How it works</p>
+          <p>Upload a <strong>.csv</strong> file (in Excel/Google Sheets use <em>Save as → CSV</em>). The first row must be the column headers; each following row is one record.</p>
+          <p><strong>Columns:</strong> {spec.headers.join(', ')}.</p>
+          {spec.notes && <div className="space-y-0.5">{spec.notes}</div>}
+          <p>Tip: <strong>Export</strong> first to get a file in the exact format, edit it, then import.</p>
+        </div>
+
+        <button onClick={() => downloadCSV(spec.headers, spec.template, spec.templateName)} className={`${btnExport} w-full justify-center`}><Download size={14} /> Download example template</button>
+
+        <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden"
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+        <button onClick={() => inputRef.current?.click()} className={`${btnPrimary} w-full justify-center`}><Upload size={16} /> Choose CSV file…</button>
+
+        {result && (
+          <div className="rounded-xl border border-gray-100 p-3 text-xs font-manrope space-y-2">
+            <p className="flex items-center gap-1.5 font-semibold text-green-700"><CheckCircle2 size={14} /> {result.added} record{result.added !== 1 ? 's' : ''} imported.</p>
+            {result.messages.length > 0 && (
+              <div className="text-amber-700">
+                <p className="flex items-center gap-1.5 font-semibold"><AlertCircle size={14} /> {result.messages.length} note{result.messages.length !== 1 ? 's' : ''}:</p>
+                <ul className="list-disc list-inside max-h-32 overflow-y-auto mt-1 space-y-0.5">
+                  {result.messages.map((m, i) => <li key={i}>{m}</li>)}
+                </ul>
+              </div>
+            )}
+            {result.added > 0 && <button onClick={onClose} className={`${btnPrimary} w-full justify-center`}>Done</button>}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ImportButton<T>({ spec }: { spec: ImportSpec<T> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)} className={btnExport}><Upload size={14} /> Import</button>
+      {open && <ImportModal spec={spec} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 // --- Sortable table helpers ---
 function useSort<T>(data: T[], defaultKey: string, accessors: Record<string, (item: T) => string | number>) {
   const [sortKey, setSortKey] = useState(defaultKey);
@@ -199,11 +287,53 @@ function UsersTab() {
   const toggleCert = (id: string) => setForm(f => ({ ...f, certifications: f.certifications.includes(id) ? f.certifications.filter(c => c !== id) : [...f.certifications, id] }));
   const toggleProj = (id: string) => setForm(f => ({ ...f, projects: f.projects.includes(id) ? f.projects.filter(p => p !== id) : [...f.projects, id] }));
 
+  const importSpec: ImportSpec<LabUser> = {
+    title: 'Import users (CSV)',
+    headers: ['Name', 'Email', 'Role', 'Affiliation', 'Admin', 'Abbreviation', 'Certifications', 'Projects'],
+    aliases: { 'Admin': ['is admin'], 'Abbreviation': ['id', 'abbr', 'initials'], 'Certifications': ['certs', 'certification'], 'Projects': ['project'] },
+    template: [
+      ['Jane Doe', 'jane.doe@polimi.it', 'phd', 'DEIB', 'No', 'JDO', '', ''],
+      ['John Smith', 'john.smith@polimi.it', 'postdoc', 'MiMic Lab', 'No', 'JSM', '', ''],
+    ],
+    templateName: 'users_template',
+    notes: <>
+      <p><strong>Role</strong>: one of {roles.join(', ')}. <strong>Affiliation</strong>: {affiliations.join(', ')}.</p>
+      <p><strong>Admin</strong>: Yes/No. <strong>Certifications/Projects</strong>: names separated by &ldquo;;&rdquo; (must already exist).</p>
+    </>,
+    onAdd: addUser,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      if (!rec['Email']) return { skip: `Row ${rowNum} (${rec['Name']}): missing email` };
+      const notes: string[] = [];
+      const roleRaw = rec['Role'].toLowerCase().replace(/\s+/g, '_');
+      const role = (roles as string[]).includes(roleRaw) ? roleRaw as UserRole : 'guest';
+      if (rec['Role'] && role !== roleRaw) notes.push(`role "${rec['Role']}" not recognized → set to guest`);
+      const aff = affiliations.find(a => a.toLowerCase() === rec['Affiliation'].toLowerCase()) || 'DEIB';
+      const resolve = (raw: string, list: { id: string; name: string }[]) => {
+        const ids: string[] = [];
+        raw.split(';').map(s => s.trim()).filter(Boolean).forEach(token => {
+          const m = list.find(x => x.id === token || x.name.toLowerCase() === token.toLowerCase());
+          if (m) ids.push(m.id); else notes.push(`"${token}" not found`);
+        });
+        return ids;
+      };
+      const item: LabUser = {
+        id: generateId(), name: rec['Name'], email: rec['Email'], role, affiliation: aff,
+        isAdmin: /^(yes|true|1|y)$/i.test(rec['Admin']),
+        abbreviation: rec['Abbreviation'] || generateAbbreviation(rec['Name']),
+        certifications: resolve(rec['Certifications'], certifications),
+        projects: resolve(rec['Projects'], projects),
+      };
+      return notes.length ? { item, note: `Row ${rowNum} (${item.name}): ${notes.join('; ')}` } : { item };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{users.length} users</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','ID','Email','Role','Affiliation','Admin','Certifications','Projects'], users.map(u => [u.name,u.abbreviation || generateAbbreviation(u.name),u.email,u.role,u.affiliation,u.isAdmin ? 'Yes' : 'No',u.certifications.join('; '),u.projects.join('; ')]), 'users')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add User</button>
         </div>
@@ -325,11 +455,29 @@ function ProjectsTab() {
   const acc = useMemo(() => ({ name: (p: Project) => p.name, status: (p: Project) => p.status, members: (p: Project) => users.filter(u => u.projects.includes(p.id)).length }), [users]);
   const { sorted, sortKey, sortAsc, toggle } = useSort(projects, 'name', acc);
 
+  const importSpec: ImportSpec<Project> = {
+    title: 'Import projects (CSV)',
+    headers: ['Name', 'Description', 'Status'],
+    template: [
+      ['PHOENIX', 'Lung-on-chip platform', 'active'],
+      ['ARCHIVE-01', 'Completed pilot study', 'completed'],
+    ],
+    templateName: 'projects_template',
+    notes: <p><strong>Status</strong>: active or completed (defaults to active). The project name is used as its ID.</p>,
+    onAdd: addProject,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      const status = rec['Status'].toLowerCase() === 'completed' ? 'completed' : 'active';
+      return { item: { id: rec['Name'], name: rec['Name'], description: rec['Description'], status } };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{projects.length} projects</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Description','Status','Members'], projects.map(p => [p.name, p.description, p.status, users.filter(u => u.projects.includes(p.id)).length]), 'projects')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add Project</button>
         </div>
@@ -403,12 +551,32 @@ function CertificationsTab() {
   const certAcc = useMemo(() => ({ name: (c: Certification) => c.name, instrument: (c: Certification) => { const i = instruments.find(x => x.id === c.instrumentId); return i ? i.name : '— General'; }, users: (c: Certification) => users.filter(u => u.certifications.includes(c.id)).length }), [instruments, users]);
   const { sorted: sortedCerts, sortKey: cSortKey, sortAsc: cSortAsc, toggle: cToggle } = useSort(certifications, 'name', certAcc);
 
+  const importSpec: ImportSpec<Certification> = {
+    title: 'Import certifications (CSV)',
+    headers: ['Name', 'Instrument', 'Description'],
+    template: [
+      ['Confocal Microscope', 'Confocal Microscope', 'Required to operate the confocal'],
+      ['Biosafety Level 2', '', 'General BSL-2 training'],
+    ],
+    templateName: 'certifications_template',
+    notes: <p><strong>Instrument</strong>: optional; must match an existing instrument name to link the cert (leave blank for a general certification).</p>,
+    onAdd: addCertification,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      const instVal = rec['Instrument'];
+      const inst = instVal ? instruments.find(i => i.id === instVal || i.name.toLowerCase() === instVal.toLowerCase()) : undefined;
+      const item: Certification = { id: inst?.id || generateId(), name: rec['Name'], instrumentId: inst?.id, description: rec['Description'] };
+      return instVal && !inst ? { item, note: `Row ${rowNum} (${item.name}): instrument "${instVal}" not found — left unlinked` } : { item };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{certifications.length} certifications</p>
         <div className="flex gap-2">
           <button onClick={() => setViewMode(viewMode === 'list' ? 'matrix' : 'list')} className={btnExport}>{viewMode === 'list' ? 'Matrix View' : 'List View'}</button>
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Instrument','Description'], certifications.map(c => [c.name, c.instrumentId || '—', c.description]), 'certifications')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
@@ -505,11 +673,27 @@ function LocationsTab() {
   const open = (l?: Location) => { setForm(l ? { ...l } : empty()); setEditing(l || null); setShowForm(true); };
   const save = () => { if (!form.name) return; editing ? updateLocation(form) : addLocation(form); setShowForm(false); };
 
+  const importSpec: ImportSpec<Location> = {
+    title: 'Import locations (CSV)',
+    headers: ['Name', 'Building', 'Floor', 'Notes'],
+    template: [
+      ['Room 101', 'Building 3', 'Ground Floor', 'Main cell culture lab'],
+      ['Cleanroom', 'DEIB', '2nd Floor', 'ISO-7'],
+    ],
+    templateName: 'locations_template',
+    onAdd: addLocation,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      return { item: { id: generateId(), name: rec['Name'], building: rec['Building'], floor: rec['Floor'], notes: rec['Notes'] } };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{locations.length} locations</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Building','Floor','Notes','Instruments','Storage Units'], locations.map(l => {
             const instCount = instruments.filter(i => i.locationId === l.id).length;
             const suCount = storageUnits.filter(s => s.locationId === l.id).length;
@@ -586,6 +770,35 @@ function InstrumentsTab() {
   const instAcc = useMemo(() => ({ name: (i: Instrument) => i.name, category: (i: Instrument) => i.category, location: (i: Instrument) => { const l = locations.find(x => x.id === i.locationId); return l?.name || i.location; }, cert: (i: Instrument) => i.requiresCertification ? 1 : 0, maintenance: (i: Instrument) => i.nextMaintenanceDate || 'z' }), [locations]);
   const { sorted: sortedInst, sortKey: iSortKey, sortAsc: iSortAsc, toggle: iToggle } = useSort(instruments, 'name', instAcc);
 
+  const importSpec: ImportSpec<Instrument> = {
+    title: 'Import instruments (CSV)',
+    headers: ['Name', 'Category', 'Location', 'S/N', 'Manufacturer', 'Model', 'Purchase Date', 'Next Maintenance', 'Cert'],
+    aliases: { 'S/N': ['serial', 'serial number'], 'Purchase Date': ['purchase'], 'Next Maintenance': ['maintenance', 'next maintenance date'], 'Cert': ['requires certification', 'certification'] },
+    template: [
+      ['Confocal Microscope', 'Microscopy', 'Room 101', 'SN-12345', 'Leica', 'SP8', '2023-01-15', '2026-12-01', 'Yes'],
+      ['CO₂ Incubator', 'Cell Culture', 'Room 101', '', 'Thermo', 'Heracell', '', '', 'No'],
+    ],
+    templateName: 'instruments_template',
+    notes: <>
+      <p><strong>Category</strong>: e.g. {instrumentCategories.join(', ')} (free text allowed; defaults to Cell Culture).</p>
+      <p><strong>Location</strong>: matched to an existing location by name. <strong>Cert</strong>: Yes/No. Dates as YYYY-MM-DD.</p>
+    </>,
+    onAdd: addInstrument,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      const locVal = rec['Location'];
+      const loc = locVal ? locations.find(l => l.id === locVal || l.name.toLowerCase() === locVal.toLowerCase()) : undefined;
+      const item: Instrument = {
+        id: generateId(), name: rec['Name'], category: rec['Category'] || 'Cell Culture',
+        location: loc?.name || locVal, locationId: loc?.id,
+        requiresCertification: /^(yes|true|1|y)$/i.test(rec['Cert']), description: '', icon: '🔬',
+        serialNumber: rec['S/N'] || undefined, manufacturer: rec['Manufacturer'] || undefined, model: rec['Model'] || undefined,
+        purchaseDate: rec['Purchase Date'] || undefined, nextMaintenanceDate: rec['Next Maintenance'] || undefined,
+      };
+      return locVal && !loc ? { item, note: `Row ${rowNum} (${item.name}): location "${locVal}" not matched — kept as text only` } : { item };
+    },
+  };
+
   const openMaintenance = async (instId: string) => {
     setShowMaintenance(instId);
     const logs = await fetchMaintenanceLogs(instId);
@@ -622,6 +835,7 @@ function InstrumentsTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{instruments.length} instruments</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Category','Location','S/N','Manufacturer','Model','Purchase Date','Next Maintenance','Cert'], instruments.map(i => [i.name, i.category, i.location, i.serialNumber||'', i.manufacturer||'', i.model||'', i.purchaseDate||'', i.nextMaintenanceDate||'', i.requiresCertification ? 'Yes' : 'No']), 'instruments')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
@@ -810,11 +1024,49 @@ function StorageUnitsTab() {
     }));
   };
 
+  const importSpec: ImportSpec<StorageUnit> = {
+    title: 'Import storage units (CSV)',
+    headers: ['Name', 'Type', 'Temperature', 'Model', 'Location', 'Racks', 'Boxes/Rack', 'Grid Rows', 'Grid Cols', 'Shelves', 'Doors'],
+    template: [
+      ['LN₂ Dewar A', 'DEWAR', '−196 °C', 'MVE 815', 'Room 101', 6, 10, 9, 9, '', ''],
+      ['Fridge A', 'FRIDGE', '+4 °C', 'Liebherr', 'Room 101', '', '', '', '', 3, 1],
+    ],
+    templateName: 'storage_units_template',
+    notes: <>
+      <p><strong>Type</strong>: one of {allTypes.join(', ')}. If Temperature is blank it&rsquo;s auto-filled from the type.</p>
+      <p>Use Racks/Boxes/Grid for LN₂ dewars; Shelves/Doors for freezers, fridges &amp; cabinets. <strong>Location</strong> matched by name.</p>
+    </>,
+    onAdd: addStorageUnit,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      const tRaw = rec['Type'].toUpperCase().replace(/[\s-]+/g, '_');
+      const type: StorageUnitType = (allTypes as string[]).includes(tRaw)
+        ? tRaw as StorageUnitType
+        : (allTypes.find(t => storageUnitTypes[t].label.toLowerCase() === rec['Type'].toLowerCase()) || 'FRIDGE');
+      const locVal = rec['Location'];
+      const loc = locVal ? locations.find(l => l.id === locVal || l.name.toLowerCase() === locVal.toLowerCase()) : undefined;
+      const numOrU = (v: string) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : undefined; };
+      const item: StorageUnit = {
+        id: `su-${Date.now()}-${rowNum}`, name: rec['Name'], type,
+        temperature: rec['Temperature'] || storageUnitTypes[type].temperature, model: rec['Model'],
+        location: loc?.name || locVal, locationId: loc?.id,
+        numRacks: numOrU(rec['Racks']), boxesPerRack: numOrU(rec['Boxes/Rack']),
+        gridRows: numOrU(rec['Grid Rows']), gridCols: numOrU(rec['Grid Cols']),
+        numShelves: numOrU(rec['Shelves']), numDoors: numOrU(rec['Doors']),
+      };
+      const notes: string[] = [];
+      if (rec['Type'] && !(allTypes as string[]).includes(tRaw) && type === 'FRIDGE' && rec['Type'].toLowerCase() !== 'fridge') notes.push(`type "${rec['Type']}" not recognized → set to FRIDGE`);
+      if (locVal && !loc) notes.push(`location "${locVal}" not matched`);
+      return notes.length ? { item, note: `Row ${rowNum} (${item.name}): ${notes.join('; ')}` } : { item };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{storageUnits.length} storage units</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(
             ['Name','Type','Temperature','Model','Location','Layout','Vials','Reagents'],
             storageUnits.map(s => {
@@ -1009,73 +1261,44 @@ function ReagentsTab() {
     return counts;
   }, [reagents]);
 
-  // ---- CSV import ----
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [showImport, setShowImport] = useState(false);
-  const [importResult, setImportResult] = useState<{ added: number; skipped: string[] } | null>(null);
-
-  const IMPORT_HEADERS = ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert'];
-
-  const downloadTemplate = () => {
-    downloadCSV(IMPORT_HEADERS, [
+  // ---- CSV import spec ----
+  const findUnitId = (val: string): string | undefined => {
+    const v = val.trim().toLowerCase();
+    if (!v) return undefined;
+    const u = storageUnits.find(s => s.name.toLowerCase() === v || `${storageUnitTypes[s.type]?.icon || ''} ${s.name}`.trim().toLowerCase() === v);
+    return u?.id;
+  };
+  const importSpec: ImportSpec<Reagent> = {
+    title: 'Import items (CSV)',
+    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert'],
+    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'] },
+    template: [
       ['DMEM High Glucose', 'Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2],
       ['Trypsin-EDTA 0.05%', 'Reagents', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge A (+4 °C)', '2026-09-01', 2],
       ['DAPI', 'Staining', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C', '2027-01-01', 1],
-    ], 'consumables_template');
-  };
-
-  const handleImportFile = async (file: File) => {
-    const text = await file.text();
-    const rows = parseCSV(text);
-    if (rows.length < 2) { setImportResult({ added: 0, skipped: ['File is empty or has no data rows.'] }); return; }
-    const header = rows[0].map(h => h.trim().toLowerCase());
-    const idx = (names: string[]) => header.findIndex(h => names.includes(h));
-    const ci = {
-      name: idx(['name']), category: idx(['category', 'sub-category', 'subcategory']),
-      stock: idx(['stock', 'current stock', 'currentstock']), max: idx(['max', 'max stock', 'maxstock']),
-      unit: idx(['unit', 'units']), supplier: idx(['supplier']),
-      cat: idx(['cat#', 'catalog', 'catalog #', 'catalog number', 'catalognumber', 'cat']),
-      storage: idx(['storage unit', 'storage', 'storageunit']), expiry: idx(['expiry', 'expiry date', 'expirydate']),
-      alert: idx(['alert', 'alert at', 'alert threshold', 'alertthreshold']),
-    };
-    if (ci.name === -1) { setImportResult({ added: 0, skipped: ['Missing required "Name" column. Download the template for the correct format.'] }); return; }
-
-    const findUnitId = (val: string): string | undefined => {
-      const v = val.trim().toLowerCase();
-      if (!v) return undefined;
-      const u = storageUnits.find(s => s.name.toLowerCase() === v || `${storageUnitTypes[s.type]?.icon || ''} ${s.name}`.trim().toLowerCase() === v);
-      return u?.id;
-    };
-    const num = (val: string | undefined, fallback: number) => { const n = Number((val ?? '').trim()); return Number.isFinite(n) && (val ?? '').trim() !== '' ? n : fallback; };
-    const get = (row: string[], i: number) => (i >= 0 ? (row[i] ?? '').trim() : '');
-
-    const skipped: string[] = [];
-    let added = 0;
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      const name = get(row, ci.name);
-      if (!name) { skipped.push(`Row ${i + 1}: missing name`); continue; }
-      const category = get(row, ci.category) || defaultCategory;
-      const storageVal = get(row, ci.storage);
+    ],
+    templateName: 'consumables_template',
+    notes: <>
+      <p><strong>Category</strong>: a sub-category (e.g. Culture Media, Reagents…). If blank, items go to <em>{defaultCategory}</em>.</p>
+      <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Expiry</strong>: YYYY-MM-DD.</p>
+    </>,
+    onAdd: addNewReagent,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
+      const storageVal = rec['Storage Unit'];
       const storageUnitId = findUnitId(storageVal);
-      if (storageVal && !storageUnitId) skipped.push(`Row ${i + 1} (${name}): storage "${storageVal}" not found — imported without a storage unit`);
-      const currentStock = num(get(row, ci.stock), 0);
-      const reagent: Reagent = {
-        id: generateId(), name, category,
-        currentStock,
-        maxStock: num(get(row, ci.max), Math.max(currentStock, 1)),
-        unit: get(row, ci.unit) || 'units',
-        expiryDate: get(row, ci.expiry),
-        location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
-        storageUnitId,
-        supplier: get(row, ci.supplier),
-        catalogNumber: get(row, ci.cat),
-        alertThreshold: num(get(row, ci.alert), 0),
+      const num = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
+      const currentStock = num(rec['Stock'], 0);
+      const item: Reagent = {
+        id: generateId(), name: rec['Name'], category: rec['Category'] || defaultCategory,
+        currentStock, maxStock: num(rec['Max'], Math.max(currentStock, 1)), unit: rec['Unit'] || 'units',
+        expiryDate: rec['Expiry'], location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
+        storageUnitId, supplier: rec['Supplier'], catalogNumber: rec['Cat#'], alertThreshold: num(rec['Alert'], 0),
       };
-      addNewReagent(reagent);
-      added++;
-    }
-    setImportResult({ added, skipped });
+      return storageVal && !storageUnitId
+        ? { item, note: `Row ${rowNum} (${item.name}): storage "${storageVal}" not found — imported without a storage unit` }
+        : { item };
+    },
   };
 
   return (
@@ -1113,7 +1336,7 @@ function ReagentsTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
-          <button onClick={() => { setImportResult(null); setShowImport(true); }} className={btnExport}><Upload size={14} /> Import</button>
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
@@ -1179,43 +1402,6 @@ function ReagentsTab() {
         </div>
       </Modal>}
 
-      {showImport && <Modal title="Import consumables (CSV)" onClose={() => setShowImport(false)}>
-        <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 font-manrope space-y-1.5">
-            <p className="font-semibold flex items-center gap-1.5"><FileText size={13} /> How it works</p>
-            <p>Upload a <strong>.csv</strong> file (export it from Excel/Google Sheets via <em>Save as → CSV</em>). The first row must be the column headers below; each following row is one item.</p>
-            <p><strong>Columns:</strong> Name (required), Category, Stock, Max, Unit, Supplier, Cat#, Storage Unit, Expiry, Alert.</p>
-            <ul className="list-disc list-inside space-y-0.5">
-              <li><strong>Category</strong>: a sub-category (e.g. Culture Media, Reagents, Staining…). If blank, items go to <em>{defaultCategory}</em>.</li>
-              <li><strong>Stock / Max / Alert</strong>: numbers. <strong>Expiry</strong>: date as YYYY-MM-DD.</li>
-              <li><strong>Storage Unit</strong>: must match an existing unit name exactly (e.g. &ldquo;Fridge A (+4 °C)&rdquo;); otherwise it&rsquo;s imported without a storage link.</li>
-            </ul>
-            <p>Tip: <strong>Export</strong> first to get a file with your current items in the exact format, edit it, then import.</p>
-          </div>
-
-          <button onClick={downloadTemplate} className={`${btnExport} w-full justify-center`}><Download size={14} /> Download example template</button>
-
-          <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }} />
-          <button onClick={() => importInputRef.current?.click()} className={`${btnPrimary} w-full justify-center`}><Upload size={16} /> Choose CSV file…</button>
-
-          {importResult && (
-            <div className="rounded-xl border border-gray-100 p-3 text-xs font-manrope space-y-2">
-              <p className="flex items-center gap-1.5 font-semibold text-green-700"><CheckCircle2 size={14} /> {importResult.added} item{importResult.added !== 1 ? 's' : ''} imported.</p>
-              {importResult.skipped.length > 0 && (
-                <div className="text-amber-700">
-                  <p className="flex items-center gap-1.5 font-semibold"><AlertCircle size={14} /> {importResult.skipped.length} note{importResult.skipped.length !== 1 ? 's' : ''}:</p>
-                  <ul className="list-disc list-inside max-h-32 overflow-y-auto mt-1 space-y-0.5">
-                    {importResult.skipped.map((s, i) => <li key={i}>{s}</li>)}
-                  </ul>
-                </div>
-              )}
-              {importResult.added > 0 && <button onClick={() => setShowImport(false)} className={`${btnPrimary} w-full justify-center`}>Done</button>}
-            </div>
-          )}
-        </div>
-      </Modal>}
-
       <ConfirmDialog />
     </>
   );
@@ -1246,11 +1432,42 @@ function CryoTab() {
   const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [storageUnits]);
   const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
 
+  const importSpec: ImportSpec<Omit<CryoVial, 'id'>> = {
+    title: 'Import cryo vials (CSV)',
+    headers: ['Cell Line', 'Passage', 'Storage Unit', 'Rack', 'Box', 'Row', 'Col', 'Stored By', 'Date', 'Notes'],
+    aliases: { 'Cell Line': ['cellline', 'cell'], 'Stored By': ['user', 'stored by'] },
+    template: [
+      ['HUVEC', 5, gridUnits[0]?.name || 'LN₂ Dewar A', 1, 1, 0, 0, '', new Date().toISOString().split('T')[0], 'Early passage'],
+    ],
+    templateName: 'cryo_vials_template',
+    notes: <>
+      <p><strong>Storage Unit</strong>: must match an existing rack-based unit by name. Rows/Cols are 0-based; Rack/Box start at 1.</p>
+      <p><strong>Stored By</strong>: defaults to you if blank. <strong>Date</strong>: YYYY-MM-DD.</p>
+    </>,
+    onAdd: addCryoVial,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Cell Line']) return { skip: `Row ${rowNum}: missing cell line` };
+      const suVal = rec['Storage Unit'];
+      const su = storageUnits.find(s => s.id === suVal || s.name.toLowerCase() === suVal.toLowerCase());
+      if (!su) return { skip: `Row ${rowNum} (${rec['Cell Line']}): storage unit "${suVal}" not found — skipped` };
+      const numD = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
+      const item: Omit<CryoVial, 'id'> = {
+        cellLine: rec['Cell Line'], passage: numD(rec['Passage'], 0),
+        date: rec['Date'] || new Date().toISOString().split('T')[0],
+        userId: user.id, userName: rec['Stored By'] || user.name, storageUnitId: su.id,
+        rack: numD(rec['Rack'], 1), box: numD(rec['Box'], 1), row: numD(rec['Row'], 0), col: numD(rec['Col'], 0),
+        notes: rec['Notes'],
+      };
+      return { item };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{cryoVials.length} vials stored</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Cell Line','Passage','Storage Unit','Position','Stored By','Date','Notes'], cryoVials.map(v => {
             const su = storageUnits.find(s => s.id === v.storageUnitId);
             const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
@@ -1356,11 +1573,37 @@ function ManualsTab() {
   const mAcc = useMemo(() => ({ title: (m: Manual) => m.title, category: (m: Manual) => m.category, updated: (m: Manual) => m.lastUpdated || '', by: (m: Manual) => m.uploadedBy || '' }), []);
   const { sorted: sortedManuals, sortKey: mSortKey, sortAsc: mSortAsc, toggle: mToggle } = useSort(manuals, 'title', mAcc);
 
+  const importSpec: ImportSpec<Manual> = {
+    title: 'Import documents (CSV)',
+    headers: ['Title', 'Category', 'Description', 'Instrument', 'Updated', 'Uploaded By'],
+    aliases: { 'Updated': ['last updated', 'date'], 'Uploaded By': ['author', 'by'] },
+    template: [
+      ['Confocal SOP', 'protocol', 'Step-by-step imaging protocol', 'Confocal Microscope', new Date().toISOString().split('T')[0], 'Lab'],
+      ['Acetone SDS', 'sds', 'Safety data sheet', '', new Date().toISOString().split('T')[0], 'Lab'],
+    ],
+    templateName: 'documents_template',
+    notes: <p><strong>Category</strong>: protocol, manual, or sds (defaults to protocol). PDF files can&rsquo;t be imported via CSV — attach them afterwards by editing the record.</p>,
+    onAdd: addManual,
+    parseRow: (rec, rowNum) => {
+      if (!rec['Title']) return { skip: `Row ${rowNum}: missing title` };
+      const catRaw = rec['Category'].toLowerCase();
+      const category = (['protocol', 'manual', 'sds'] as Manual['category'][]).includes(catRaw as Manual['category']) ? catRaw as Manual['category'] : 'protocol';
+      const item: Manual = {
+        id: generateId(), title: rec['Title'], category, description: rec['Description'],
+        instrument: rec['Instrument'] || undefined,
+        lastUpdated: rec['Updated'] || new Date().toISOString().split('T')[0],
+        uploadedBy: rec['Uploaded By'] || 'Import',
+      };
+      return { item };
+    },
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{manuals.length} documents</p>
         <div className="flex gap-2">
+          <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Title','Category','Description','Instrument','Updated','Uploaded By','Has PDF'], manuals.map(m => [m.title, m.category, m.description, m.instrument || '', m.lastUpdated, m.uploadedBy, m.fileUrl ? 'Yes' : 'No']), 'manuals')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
