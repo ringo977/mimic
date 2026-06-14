@@ -434,9 +434,77 @@ const navItems = [
   { id: 'admin', label: 'Admin Panel', icon: Settings, requiresPerm: 'canAdmin' as const },
 ];
 
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must be at least 8 characters with uppercase, lowercase and a number.');
+      return;
+    }
+    if (password !== password2) {
+      setError('Passwords do not match.');
+      return;
+    }
+    setLoading(true);
+    const { error: upErr } = await supabase.auth.updateUser({ password });
+    if (upErr) {
+      setError(upErr.message);
+      setLoading(false);
+      return;
+    }
+    setDone(true);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-bold text-gray-900 font-manrope flex items-center gap-2"><Lock size={16} className="text-[#102C53]" /> Change password</h2>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+
+        {done ? (
+          <div className="text-center py-4">
+            <div className="w-11 h-11 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-3"><Lock className="w-5 h-5 text-green-600" /></div>
+            <p className="text-sm text-gray-700 font-manrope mb-5">Password updated. Use it next time you sign in.</p>
+            <button onClick={onClose} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors">Done</button>
+          </div>
+        ) : (
+          <form onSubmit={submit} className="space-y-3">
+            {error && <div className="bg-red-50 text-red-600 text-sm px-3 py-2 rounded-xl font-manrope">{error}</div>}
+            <input
+              type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="New password" autoComplete="new-password" required disabled={loading}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] outline-none transition-all font-manrope text-sm"
+            />
+            <input
+              type="password" value={password2} onChange={e => setPassword2(e.target.value)}
+              placeholder="Confirm new password" autoComplete="new-password" required disabled={loading}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] outline-none transition-all font-manrope text-sm"
+            />
+            <p className="text-[11px] text-gray-400 font-manrope">Min 8 characters, with uppercase, lowercase and a number.</p>
+            <button type="submit" disabled={loading} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
+              <Lock size={15} /> {loading ? 'Saving…' : 'Update password'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AppShell({ onLogout }: { onLogout: () => void }) {
   const { user, permissions, currentPage, setCurrentPage } = useLabContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showChangePwd, setShowChangePwd] = useState(false);
 
   const filteredNav = navItems.filter(item => {
     if (!item.requiresPerm) return true;
@@ -500,8 +568,15 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3 border-t border-gray-100">
+        {/* Account actions */}
+        <div className="p-3 border-t border-gray-100 space-y-0.5">
+          <button
+            onClick={() => setShowChangePwd(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-[#102C53] hover:bg-gray-50 transition-all font-manrope"
+          >
+            <Lock size={18} />
+            Change password
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all font-manrope"
@@ -545,7 +620,10 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
                 );
               })}
             </nav>
-            <div className="p-3 border-t border-gray-100">
+            <div className="p-3 border-t border-gray-100 space-y-0.5">
+              <button onClick={() => { setShowChangePwd(true); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-[#102C53] hover:bg-gray-50 transition-all font-manrope">
+                <Lock size={18} /> Change password
+              </button>
               <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all font-manrope">
                 <LogOut size={18} /> Logout
               </button>
@@ -553,6 +631,8 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
           </aside>
         </div>
       )}
+
+      {showChangePwd && <ChangePasswordModal onClose={() => setShowChangePwd(false)} />}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

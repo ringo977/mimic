@@ -19,13 +19,50 @@ function startOfWeek(ref: Date): Date {
   return d;
 }
 
-function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
-  bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
+const EPS = 1e-9;
+const HOUR_PX = 46; // pixel height of one hour row
+
+// Assign overlapping same-day bookings to side-by-side lanes (like Google Calendar).
+function layoutDayEvents(evts: Booking[]): { ev: Booking; lane: number; lanes: number }[] {
+  const sorted = [...evts].sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
+  const out: { ev: Booking; lane: number; lanes: number }[] = [];
+  let cluster: Booking[] = [];
+  let clusterEnd = -Infinity;
+  const flush = () => {
+    const laneEnds: number[] = [];
+    const laneOf = new Map<string, number>();
+    cluster.forEach(ev => {
+      let lane = laneEnds.findIndex(end => ev.startHour >= end - EPS);
+      if (lane === -1) { lane = laneEnds.length; laneEnds.push(ev.endHour); }
+      else laneEnds[lane] = ev.endHour;
+      laneOf.set(ev.id, lane);
+    });
+    const lanes = laneEnds.length;
+    cluster.forEach(ev => out.push({ ev, lane: laneOf.get(ev.id) ?? 0, lanes }));
+    cluster = [];
+  };
+  sorted.forEach(ev => {
+    if (cluster.length && ev.startHour >= clusterEnd - EPS) { flush(); clusterEnd = -Infinity; }
+    cluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, ev.endHour);
+  });
+  if (cluster.length) flush();
+  return out;
+}
+
+type RangePreset = 'work' | 'open' | 'all';
+
+function WeeklyCalendar({ bookings, instruments, user, bookingSettings, onNavigate }: {
+  bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings; onNavigate: (page: string) => void;
 }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
+  const [preset, setPreset] = useState<RangePreset>('open');
 
-  const todayStr = localDateStr(new Date());
+  const now = new Date();
+  const todayStr = localDateStr(now);
+  const nowHour = now.getHours() + now.getMinutes() / 60;
+
   const colorOf = useMemo(() => {
     const map = new Map<string, string>();
     instruments.forEach((i, idx) => map.set(i.id, INSTRUMENT_PALETTE[idx % INSTRUMENT_PALETTE.length]));
@@ -35,10 +72,18 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   const weekStart = useMemo(() => { const s = startOfWeek(new Date()); s.setDate(s.getDate() + weekOffset * 7); return s; }, [weekOffset]);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; }), [weekStart]);
 
+  // Visible time range, inspired by Agora's presets (Work day / Compact / All hours)
+  const [rangeStart, rangeEnd] = preset === 'work'
+    ? [Math.floor(bookingSettings.workStartHour), Math.ceil(bookingSettings.workEndHour)]
+    : preset === 'all'
+      ? [0, 24]
+      : [Math.floor(bookingSettings.openStartHour), Math.ceil(bookingSettings.openEndHour)];
+  const hourMarks = Array.from({ length: rangeEnd - rangeStart + 1 }, (_, i) => rangeStart + i);
+  const gridHeight = (rangeEnd - rangeStart) * HOUR_PX;
+
   const showAll = activeInstruments.size === 0;
   const visibleBookings = bookings.filter(b => showAll || activeInstruments.has(b.instrumentId));
 
-  // Only show instruments that actually have bookings somewhere, for a tidy filter bar
   const bookedInstrumentIds = useMemo(() => new Set(bookings.map(b => b.instrumentId)), [bookings]);
   const filterInstruments = instruments.filter(i => bookedInstrumentIds.has(i.id));
 
@@ -53,25 +98,40 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   const weekRangeLabel = `${days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   const weekBookingCount = days.reduce((acc, d) => acc + visibleBookings.filter(b => b.date === localDateStr(d)).length, 0);
 
+  const presetLabels: Record<RangePreset, string> = {
+    work: `Work ${formatTime(bookingSettings.workStartHour)}–${formatTime(bookingSettings.workEndHour)}`,
+    open: `Open ${formatTime(bookingSettings.openStartHour)}–${formatTime(bookingSettings.openEndHour)}`,
+    all: 'All hours',
+  };
+
   return (
     <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
         <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2">
           <Calendar size={16} className="text-[#102C53]" />
           Weekly Calendar
           <span className="text-xs font-normal text-gray-400">{weekBookingCount} booking{weekBookingCount !== 1 ? 's' : ''}</span>
         </h2>
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => setWeekOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
-          <button onClick={() => setWeekOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope transition-colors ${weekOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>This week</button>
-          <button onClick={() => setWeekOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+        <div className="flex items-center gap-2">
+          <select
+            value={preset}
+            onChange={e => setPreset(e.target.value as RangePreset)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium font-manrope bg-gray-100 text-gray-600 border-0 outline-none cursor-pointer hover:bg-gray-200"
+          >
+            {(['work', 'open', 'all'] as RangePreset[]).map(p => <option key={p} value={p}>{presetLabels[p]}</option>)}
+          </select>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setWeekOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
+            <button onClick={() => setWeekOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope transition-colors ${weekOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Today</button>
+            <button onClick={() => setWeekOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+          </div>
         </div>
       </div>
-      <p className="text-xs text-gray-500 font-manrope -mt-2 mb-3">{weekRangeLabel}</p>
+      <p className="text-xs text-gray-500 font-manrope mb-3">{weekRangeLabel}</p>
 
       {/* Instrument filter */}
       {filterInstruments.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 scrollbar-hide">
+        <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
           <button
             onClick={() => setActiveInstruments(new Set())}
             className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${showAll ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
@@ -95,45 +155,106 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
         </div>
       )}
 
-      {/* 7-day grid */}
+      {/* Time-grid week view */}
       <div className="overflow-x-auto">
-        <div className="grid grid-cols-7 gap-2 min-w-[760px]">
-          {days.map(d => {
-            const ds = localDateStr(d);
-            const isToday = ds === todayStr;
-            const dayBookings = visibleBookings.filter(b => b.date === ds).sort((a, b) => a.startHour - b.startHour);
-            return (
-              <div key={ds} className={`rounded-xl border ${isToday ? 'border-[#102C53] bg-[#102C53]/[0.03]' : 'border-gray-100 bg-gray-50/50'} p-2 min-h-[140px]`}>
-                <div className="text-center mb-2">
+        <div className="min-w-[820px]">
+          {/* Day headers */}
+          <div className="flex border-b border-gray-100">
+            <div className="w-[52px] shrink-0" />
+            {days.map(d => {
+              const isToday = localDateStr(d) === todayStr;
+              return (
+                <div key={d.toISOString()} className="flex-1 text-center pb-2">
                   <p className={`text-[10px] font-semibold uppercase tracking-wide font-manrope ${isToday ? 'text-[#102C53]' : 'text-gray-400'}`}>{d.toLocaleDateString('en', { weekday: 'short' })}</p>
-                  <p className={`text-base font-bold font-manrope ${isToday ? 'text-[#102C53]' : 'text-gray-700'}`}>{d.getDate()}</p>
+                  <p className={`text-sm font-bold font-manrope inline-flex items-center justify-center w-7 h-7 rounded-full ${isToday ? 'bg-[#102C53] text-white' : 'text-gray-700'}`}>{d.getDate()}</p>
                 </div>
-                <div className="space-y-1.5">
-                  {dayBookings.length === 0 ? (
-                    <p className="text-[10px] text-gray-300 font-manrope text-center pt-2">—</p>
-                  ) : dayBookings.map(b => {
-                    const inst = instruments.find(i => i.id === b.instrumentId);
-                    const isMine = b.userId === user.id;
-                    const color = colorOf.get(b.instrumentId) || '#94a3b8';
-                    const extra = !isWorkingHour(b.startHour, bookingSettings);
+              );
+            })}
+          </div>
+
+          {/* Grid body */}
+          <div className="flex">
+            {/* Time axis */}
+            <div className="w-[52px] shrink-0 relative" style={{ height: gridHeight }}>
+              {hourMarks.map(h => (
+                <div key={h} className="absolute right-2 text-[10px] font-mono text-gray-400 -translate-y-1/2" style={{ top: (h - rangeStart) * HOUR_PX }}>
+                  {h < 24 ? formatTime(h) : ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Day columns */}
+            {days.map(d => {
+              const ds = localDateStr(d);
+              const isToday = ds === todayStr;
+              const dayLayout = layoutDayEvents(visibleBookings.filter(b => b.date === ds));
+              return (
+                <div key={ds} className={`flex-1 relative border-l border-gray-100 ${isToday ? 'bg-[#102C53]/[0.02]' : ''}`} style={{ height: gridHeight }}>
+                  {/* Hour bands + gridlines */}
+                  {hourMarks.slice(0, -1).map(h => {
+                    const working = isWorkingHour(h, bookingSettings);
                     return (
-                      <div
-                        key={b.id}
-                        className={`rounded-lg px-2 py-1 text-[10px] font-manrope border-l-[3px] ${isMine ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-white'} ${extra ? 'border border-dashed border-amber-200' : 'border border-gray-100'}`}
-                        style={{ borderLeftColor: color }}
-                        title={`${inst?.name || b.instrumentId} · ${b.userName} · ${formatTime(b.startHour)}-${formatTime(b.endHour)}${b.notes ? ' · ' + b.notes : ''}`}
-                      >
-                        <p className="font-mono font-semibold text-gray-700 leading-tight">{formatTime(b.startHour)}–{formatTime(b.endHour)}</p>
-                        <p className="text-gray-600 truncate leading-tight">{inst?.icon} {inst?.name || b.instrumentId}</p>
-                        <p className="text-gray-400 truncate leading-tight">{isMine ? 'You' : b.userName}</p>
+                      <div key={h} className={`absolute left-0 right-0 border-t border-gray-100 ${working ? '' : 'bg-amber-50/50'}`} style={{ top: (h - rangeStart) * HOUR_PX, height: HOUR_PX }}>
+                        <div className="absolute left-0 right-0 border-t border-dashed border-gray-100/70" style={{ top: HOUR_PX / 2 }} />
                       </div>
                     );
                   })}
+
+                  {/* Now indicator */}
+                  {isToday && nowHour >= rangeStart && nowHour <= rangeEnd && (
+                    <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{ top: (nowHour - rangeStart) * HOUR_PX }}>
+                      <div className="relative">
+                        <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
+                        <div className="border-t border-red-500" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Events */}
+                  {dayLayout.map(({ ev, lane, lanes }) => {
+                    const inst = instruments.find(i => i.id === ev.instrumentId);
+                    const isMine = ev.userId === user.id;
+                    const color = colorOf.get(ev.instrumentId) || '#64748b';
+                    const start = Math.max(ev.startHour, rangeStart);
+                    const end = Math.min(ev.endHour, rangeEnd);
+                    if (end <= start) return null;
+                    const top = (start - rangeStart) * HOUR_PX;
+                    const height = Math.max((end - start) * HOUR_PX - 2, 15);
+                    const widthPct = 100 / lanes;
+                    const compact = height < 30;
+                    return (
+                      <button
+                        key={ev.id}
+                        onClick={() => onNavigate('instruments')}
+                        title={`${inst?.name || ev.instrumentId} · ${ev.userName} · ${formatTime(ev.startHour)}–${formatTime(ev.endHour)}${ev.notes ? ' · ' + ev.notes : ''}`}
+                        className="absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10"
+                        style={{
+                          top,
+                          height,
+                          left: `calc(${lane * widthPct}% + 2px)`,
+                          width: `calc(${widthPct}% - 4px)`,
+                          backgroundColor: color,
+                          boxShadow: isMine ? `inset 0 0 0 2px rgba(255,255,255,0.9)` : undefined,
+                        }}
+                      >
+                        <p className="text-[10px] font-semibold leading-tight truncate">{formatTime(ev.startHour)} {inst?.icon} {inst?.name || ev.instrumentId}</p>
+                        {!compact && <p className="text-[9px] leading-tight truncate opacity-90">{isMine ? 'You' : ev.userName}</p>}
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#102C53] ring-2 ring-inset ring-white/90" /> Your bookings</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" /> Color = instrument</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-500" /> Now</span>
       </div>
     </div>
   );
@@ -216,7 +337,7 @@ export default function DashboardPage({ onNavigate }: Props) {
       </div>
 
       {/* Weekly Calendar — all bookings, filterable by instrument */}
-      <WeeklyCalendar bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} />
+      <WeeklyCalendar bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} onNavigate={onNavigate} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* My Bookings Today */}
