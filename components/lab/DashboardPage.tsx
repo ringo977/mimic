@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots } from '@/data/lab-data';
@@ -55,7 +55,12 @@ type RangePreset = 'work' | 'open' | 'all';
 
 type ModalState =
   | { mode: 'view'; booking: Booking }
-  | { mode: 'create'; date: string; startHour: number };
+  | { mode: 'create'; date: string; startHour: number; endHour?: number; instrumentId?: string };
+
+type DragState =
+  | { kind: 'create'; date: string; colTop: number; anchor: number; start: number; end: number; moved: boolean }
+  | { kind: 'move'; booking: Booking; date: string; colTop: number; grab: number; dur: number; start: number; end: number; moved: boolean }
+  | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; start: number; end: number; moved: boolean };
 
 function BookingModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
   const { user, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, canManageAllBookings } = useLabContext();
@@ -69,10 +74,10 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   const canEdit = existing ? (isMine || canManageAllBookings) : true;
 
   const [editing, setEditing] = useState(state.mode === 'create');
-  const [instrumentId, setInstrumentId] = useState(existing?.instrumentId ?? '');
+  const [instrumentId, setInstrumentId] = useState(existing?.instrumentId ?? (state.mode === 'create' ? state.instrumentId ?? '' : ''));
   const [date, setDate] = useState(existing?.date ?? (state.mode === 'create' ? state.date : todayStr));
   const [startHour, setStartHour] = useState<number>(existing?.startHour ?? (state.mode === 'create' ? state.startHour : bookingSettings.workStartHour));
-  const [endHour, setEndHour] = useState<number>(existing?.endHour ?? (state.mode === 'create' ? Math.min(state.startHour + 1, bookingSettings.openEndHour) : bookingSettings.workStartHour + 1));
+  const [endHour, setEndHour] = useState<number>(existing?.endHour ?? (state.mode === 'create' ? (state.endHour ?? Math.min(state.startHour + 1, bookingSettings.openEndHour)) : bookingSettings.workStartHour + 1));
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -167,14 +172,20 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Instrument</label>
-            <select
-              value={instrumentId}
-              onChange={e => setInstrumentId(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none bg-white"
-            >
-              <option value="">Select an instrument…</option>
-              {bookableInstruments.map(i => <option key={i.id} value={i.id}>{i.icon} {i.name}</option>)}
-            </select>
+            {existing ? (
+              <div className="w-full px-3 py-2.5 border border-gray-200 bg-gray-50 rounded-xl text-sm font-manrope text-gray-700 flex items-center gap-2">
+                <span>{inst?.icon}</span> {inst?.name || existing.instrumentId}
+              </div>
+            ) : (
+              <select
+                value={instrumentId}
+                onChange={e => setInstrumentId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none bg-white"
+              >
+                <option value="">Select an instrument…</option>
+                {bookableInstruments.map(i => <option key={i.id} value={i.id}>{i.icon} {i.name}</option>)}
+              </select>
+            )}
           </div>
 
           <div>
@@ -248,10 +259,14 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
 }) {
+  const { updateBooking, canManageAllBookings } = useLabContext();
   const [weekOffset, setWeekOffset] = useState(0);
   const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
   const [preset, setPreset] = useState<RangePreset>('open');
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [drag, setDragState] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const setDrag = (d: DragState | null) => { dragRef.current = d; setDragState(d); };
 
   const now = new Date();
   const todayStr = localDateStr(now);
@@ -279,14 +294,79 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   const visibleBookings = bookings.filter(b => showAll || activeInstruments.has(b.instrumentId));
 
   const slotStep = bookingSettings.slotMinutes / 60;
-  const handleColumnClick = (e: React.MouseEvent<HTMLDivElement>, ds: string) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    let h = rangeStart + (e.clientY - rect.top) / HOUR_PX;
-    h = Math.round((Math.round(h / slotStep) * slotStep) * 100) / 100;
-    const maxStart = bookingSettings.openEndHour - slotStep;
-    h = Math.min(Math.max(h, bookingSettings.openStartHour), maxStart);
-    setModal({ mode: 'create', date: ds, startHour: h });
+  const minH = bookingSettings.openStartHour;
+  const maxH = bookingSettings.openEndHour;
+  const snap = (h: number) => Math.round((Math.round(h / slotStep) * slotStep) * 100) / 100;
+  const clamp = (h: number, lo: number, hi: number) => Math.min(Math.max(h, lo), hi);
+  const conflictFor = (instrumentId: string, date: string, s: number, e: number, excludeId: string) =>
+    bookings.some(b => b.instrumentId === instrumentId && b.date === date && b.id !== excludeId && s < b.endHour - EPS && e > b.startHour + EPS);
+
+  const colTopFromChild = (el: HTMLElement): number => {
+    const col = el.closest('[data-daycol]') as HTMLElement | null;
+    return col ? col.getBoundingClientRect().top : 0;
   };
+
+  const startCreate = (e: React.PointerEvent<HTMLDivElement>, ds: string) => {
+    if (e.button !== 0) return;
+    const colTop = e.currentTarget.getBoundingClientRect().top;
+    const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
+    setDrag({ kind: 'create', date: ds, colTop, anchor: h, start: h, end: Math.min(h + slotStep, maxH), moved: false });
+  };
+  const startMove = (e: React.PointerEvent<HTMLDivElement>, ev: Booking) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const colTop = colTopFromChild(e.currentTarget);
+    const pointerH = rangeStart + (e.clientY - colTop) / HOUR_PX;
+    setDrag({ kind: 'move', booking: ev, date: ev.date, colTop, grab: pointerH - ev.startHour, dur: ev.endHour - ev.startHour, start: ev.startHour, end: ev.endHour, moved: false });
+  };
+  const startResize = (e: React.PointerEvent<HTMLDivElement>, ev: Booking, edge: 'top' | 'bottom') => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const colTop = colTopFromChild(e.currentTarget);
+    setDrag({ kind: edge === 'top' ? 'resize-top' : 'resize-bottom', booking: ev, date: ev.date, colTop, start: ev.startHour, end: ev.endHour, moved: false });
+  };
+
+  const dragActive = drag !== null;
+  useEffect(() => {
+    if (!dragActive) return;
+    const onMove = (e: PointerEvent) => {
+      const d = dragRef.current; if (!d) return;
+      const raw = rangeStart + (e.clientY - d.colTop) / HOUR_PX;
+      if (d.kind === 'create') {
+        const cur = clamp(snap(raw), minH, maxH);
+        let start = Math.min(d.anchor, cur), end = Math.max(d.anchor, cur);
+        if (end - start < slotStep - EPS) end = Math.min(start + slotStep, maxH);
+        setDrag({ ...d, start, end, moved: d.moved || Math.abs(cur - d.anchor) > EPS });
+      } else if (d.kind === 'move') {
+        const ns = clamp(snap(raw - d.grab), minH, maxH - d.dur);
+        setDrag({ ...d, start: ns, end: ns + d.dur, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
+      } else if (d.kind === 'resize-top') {
+        const ns = clamp(snap(raw), minH, d.end - slotStep);
+        setDrag({ ...d, start: ns, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
+      } else {
+        const ne = clamp(snap(raw), d.start + slotStep, maxH);
+        setDrag({ ...d, end: ne, moved: d.moved || Math.abs(ne - d.booking.endHour) > EPS });
+      }
+    };
+    const onUp = () => {
+      const d = dragRef.current; setDrag(null);
+      if (!d) return;
+      if (d.kind === 'create') { setModal({ mode: 'create', date: d.date, startHour: d.start, endHour: d.end }); return; }
+      if (!d.moved) { setModal({ mode: 'view', booking: d.booking }); return; }
+      const b = d.booking;
+      if (d.end - d.start < slotStep - EPS) return;
+      if (conflictFor(b.instrumentId, b.date, d.start, d.end, b.id)) return;
+      const today = new Date().toLocaleDateString('en-CA');
+      const nh = (() => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; })();
+      if (b.date < today) return;
+      if (b.date === today && d.start < nh - EPS) return;
+      updateBooking({ ...b, startHour: d.start, endHour: d.end });
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragActive]);
 
   const bookedInstrumentIds = useMemo(() => new Set(bookings.map(b => b.instrumentId)), [bookings]);
   const filterInstruments = instruments.filter(i => bookedInstrumentIds.has(i.id));
@@ -392,8 +472,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
               const ds = localDateStr(d);
               const isToday = ds === todayStr;
               const dayLayout = layoutDayEvents(visibleBookings.filter(b => b.date === ds));
+              const ghost = drag && drag.date === ds ? drag : null;
               return (
-                <div key={ds} onClick={e => handleColumnClick(e, ds)} className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''}`} style={{ height: gridHeight }}>
+                <div key={ds} data-daycol onPointerDown={e => startCreate(e, ds)} className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`} style={{ height: gridHeight }}>
                   {/* Hour bands + gridlines */}
                   {hourMarks.slice(0, -1).map(h => {
                     const working = isWorkingHour(h, bookingSettings);
@@ -418,6 +499,8 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                   {dayLayout.map(({ ev, lane, lanes }) => {
                     const inst = instruments.find(i => i.id === ev.instrumentId);
                     const isMine = ev.userId === user.id;
+                    const editable = isMine || canManageAllBookings;
+                    const draggingThis = !!drag && drag.kind !== 'create' && drag.booking.id === ev.id;
                     const color = colorOf.get(ev.instrumentId) || '#64748b';
                     const start = Math.max(ev.startHour, rangeStart);
                     const end = Math.min(ev.endHour, rangeEnd);
@@ -427,11 +510,12 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                     const widthPct = 100 / lanes;
                     const compact = height < 30;
                     return (
-                      <button
+                      <div
                         key={ev.id}
-                        onClick={e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
+                        onPointerDown={editable ? e => startMove(e, ev) : undefined}
+                        onClick={editable ? undefined : e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
                         title={`${inst?.name || ev.instrumentId} · ${ev.userName} · ${formatTime(ev.startHour)}–${formatTime(ev.endHour)}${ev.notes ? ' · ' + ev.notes : ''}`}
-                        className="absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 cursor-pointer"
+                        className={`absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 touch-none ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingThis ? 'opacity-30' : ''}`}
                         style={{
                           top,
                           height,
@@ -441,11 +525,23 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                           boxShadow: isMine ? `inset 0 0 0 2px rgba(255,255,255,0.9)` : undefined,
                         }}
                       >
-                        <p className="text-[10px] font-semibold leading-tight truncate">{formatTime(ev.startHour)} {inst?.icon} {inst?.name || ev.instrumentId}</p>
-                        {!compact && <p className="text-[9px] leading-tight truncate opacity-90">{isMine ? 'You' : ev.userName}</p>}
-                      </button>
+                        {editable && <div onPointerDown={e => startResize(e, ev, 'top')} className="absolute -top-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
+                        <p className="text-[10px] font-semibold leading-tight truncate pointer-events-none">{formatTime(ev.startHour)} {inst?.icon} {inst?.name || ev.instrumentId}</p>
+                        {!compact && <p className="text-[9px] leading-tight truncate opacity-90 pointer-events-none">{isMine ? 'You' : ev.userName}</p>}
+                        {editable && <div onPointerDown={e => startResize(e, ev, 'bottom')} className="absolute -bottom-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
+                      </div>
                     );
                   })}
+
+                  {/* Drag ghost */}
+                  {ghost && (
+                    <div
+                      className="absolute left-0.5 right-0.5 rounded-md border-2 border-dashed border-[#102C53] bg-[#102C53]/10 z-30 pointer-events-none flex items-start justify-center"
+                      style={{ top: (ghost.start - rangeStart) * HOUR_PX, height: Math.max((ghost.end - ghost.start) * HOUR_PX, 14) }}
+                    >
+                      <span className="text-[9px] font-mono text-[#102C53] mt-0.5 font-semibold">{formatTime(ghost.start)}–{formatTime(ghost.end)}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -459,7 +555,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" /> Color = instrument</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
         <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-500" /> Now</span>
-        <span className="ml-auto text-gray-400">Click a slot to book · click a booking for details</span>
+        <span className="ml-auto text-gray-400">Drag empty space to book · drag a booking to move · drag its edges to resize</span>
       </div>
 
       {modal && <BookingModal state={modal} onClose={() => setModal(null)} />}
