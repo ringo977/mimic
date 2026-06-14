@@ -355,11 +355,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
       if (!d.moved) { setModal({ mode: 'view', booking: d.booking }); return; }
       const b = d.booking;
       if (d.end - d.start < slotStep - EPS) return;
+      // Don't block on past time when editing an existing booking: it may already
+      // be in the past (earlier today) and the user still wants to adjust it.
       if (conflictFor(b.instrumentId, b.date, d.start, d.end, b.id)) return;
-      const today = new Date().toLocaleDateString('en-CA');
-      const nh = (() => { const n = new Date(); return n.getHours() + n.getMinutes() / 60; })();
-      if (b.date < today) return;
-      if (b.date === today && d.start < nh - EPS) return;
       updateBooking({ ...b, startHour: d.start, endHour: d.end });
     };
     window.addEventListener('pointermove', onMove);
