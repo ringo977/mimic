@@ -42,12 +42,9 @@ function LoginScreen({ authError }: { authError?: string }) {
     // Clear any stale session first
     await supabase.auth.signOut();
 
-    const labUser = await findLabUserByEmail(email);
-    if (!labUser) {
-      setError('This email is not authorized. Contact the lab admin to get access.');
-      setLoading(false);
-      return;
-    }
+    // NOTE: membership in lab_users is validated AFTER authentication, in the
+    // onAuthStateChange handler (resolveLabUser). With RLS enabled, lab_users is
+    // not readable while signed out, so we must NOT pre-check it here.
 
     if (isSignUp) {
       if (password.length < 8) {

@@ -13,8 +13,6 @@ import Link from 'next/link';
 import { KeyRound, Lock, ArrowLeft, ShieldCheck } from 'lucide-react';
 import AuthShell from './AuthShell';
 import { supabase } from '@/lib/supabase';
-import { findLabUserByEmail } from '@/lib/supabase-users';
-import { getStoredUsers } from '@/data/lab-data';
 import { siteBasePath } from '@/lib/site-base-path';
 
 type Phase = 'loading' | 'request' | 'verify-mfa' | 'set-password' | 'email-sent' | 'password-updated';
@@ -118,15 +116,9 @@ export default function LabPasswordResetPage() {
     setError('');
     setLoading(true);
 
-    const labUser = await findLabUserByEmail(email);
-    if (!labUser) {
-      const localUser = getStoredUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (!localUser) {
-        setError('This email is not authorized for the lab. Contact the lab admin.');
-        setLoading(false);
-        return;
-      }
-    }
+    // NOTE: we do not pre-check lab_users membership here. With RLS enabled the
+    // table is not readable while signed out, so the check would wrongly fail.
+    // Supabase only delivers the recovery email if the auth user actually exists.
 
     const redirectTo = recoveryRedirectUrl();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
