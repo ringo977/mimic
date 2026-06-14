@@ -1,8 +1,143 @@
 'use client';
 
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { rolePermissions, formatTime, formatDate } from '@/data/lab-data';
+import { rolePermissions, formatTime, formatDate, isWorkingHour } from '@/data/lab-data';
+import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
+
+const INSTRUMENT_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#a855f7'];
+
+function localDateStr(d: Date): string { return d.toLocaleDateString('en-CA'); }
+
+// Monday-based start of the week containing `ref`
+function startOfWeek(ref: Date): Date {
+  const d = new Date(ref);
+  const day = (d.getDay() + 6) % 7; // 0 = Monday
+  d.setDate(d.getDate() - day);
+  d.setHours(12, 0, 0, 0);
+  return d;
+}
+
+function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
+  bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
+}) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
+
+  const todayStr = localDateStr(new Date());
+  const colorOf = useMemo(() => {
+    const map = new Map<string, string>();
+    instruments.forEach((i, idx) => map.set(i.id, INSTRUMENT_PALETTE[idx % INSTRUMENT_PALETTE.length]));
+    return map;
+  }, [instruments]);
+
+  const weekStart = useMemo(() => { const s = startOfWeek(new Date()); s.setDate(s.getDate() + weekOffset * 7); return s; }, [weekOffset]);
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; }), [weekStart]);
+
+  const showAll = activeInstruments.size === 0;
+  const visibleBookings = bookings.filter(b => showAll || activeInstruments.has(b.instrumentId));
+
+  // Only show instruments that actually have bookings somewhere, for a tidy filter bar
+  const bookedInstrumentIds = useMemo(() => new Set(bookings.map(b => b.instrumentId)), [bookings]);
+  const filterInstruments = instruments.filter(i => bookedInstrumentIds.has(i.id));
+
+  const toggleInstrument = (id: string) => {
+    setActiveInstruments(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const weekRangeLabel = `${days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekBookingCount = days.reduce((acc, d) => acc + visibleBookings.filter(b => b.date === localDateStr(d)).length, 0);
+
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2">
+          <Calendar size={16} className="text-[#102C53]" />
+          Weekly Calendar
+          <span className="text-xs font-normal text-gray-400">{weekBookingCount} booking{weekBookingCount !== 1 ? 's' : ''}</span>
+        </h2>
+        <div className="flex items-center gap-1.5">
+          <button onClick={() => setWeekOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
+          <button onClick={() => setWeekOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope transition-colors ${weekOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>This week</button>
+          <button onClick={() => setWeekOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 font-manrope -mt-2 mb-3">{weekRangeLabel}</p>
+
+      {/* Instrument filter */}
+      {filterInstruments.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 scrollbar-hide">
+          <button
+            onClick={() => setActiveInstruments(new Set())}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${showAll ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            All instruments
+          </button>
+          {filterInstruments.map(inst => {
+            const active = activeInstruments.has(inst.id);
+            return (
+              <button
+                key={inst.id}
+                onClick={() => toggleInstrument(inst.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all border ${active ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                style={active ? { backgroundColor: colorOf.get(inst.id) } : undefined}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: active ? '#fff' : colorOf.get(inst.id) }} />
+                {inst.icon} {inst.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 7-day grid */}
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-7 gap-2 min-w-[760px]">
+          {days.map(d => {
+            const ds = localDateStr(d);
+            const isToday = ds === todayStr;
+            const dayBookings = visibleBookings.filter(b => b.date === ds).sort((a, b) => a.startHour - b.startHour);
+            return (
+              <div key={ds} className={`rounded-xl border ${isToday ? 'border-[#102C53] bg-[#102C53]/[0.03]' : 'border-gray-100 bg-gray-50/50'} p-2 min-h-[140px]`}>
+                <div className="text-center mb-2">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wide font-manrope ${isToday ? 'text-[#102C53]' : 'text-gray-400'}`}>{d.toLocaleDateString('en', { weekday: 'short' })}</p>
+                  <p className={`text-base font-bold font-manrope ${isToday ? 'text-[#102C53]' : 'text-gray-700'}`}>{d.getDate()}</p>
+                </div>
+                <div className="space-y-1.5">
+                  {dayBookings.length === 0 ? (
+                    <p className="text-[10px] text-gray-300 font-manrope text-center pt-2">—</p>
+                  ) : dayBookings.map(b => {
+                    const inst = instruments.find(i => i.id === b.instrumentId);
+                    const isMine = b.userId === user.id;
+                    const color = colorOf.get(b.instrumentId) || '#94a3b8';
+                    const extra = !isWorkingHour(b.startHour, bookingSettings);
+                    return (
+                      <div
+                        key={b.id}
+                        className={`rounded-lg px-2 py-1 text-[10px] font-manrope border-l-[3px] ${isMine ? 'bg-blue-50 ring-1 ring-blue-200' : 'bg-white'} ${extra ? 'border border-dashed border-amber-200' : 'border border-gray-100'}`}
+                        style={{ borderLeftColor: color }}
+                        title={`${inst?.name || b.instrumentId} · ${b.userName} · ${formatTime(b.startHour)}-${formatTime(b.endHour)}${b.notes ? ' · ' + b.notes : ''}`}
+                      >
+                        <p className="font-mono font-semibold text-gray-700 leading-tight">{formatTime(b.startHour)}–{formatTime(b.endHour)}</p>
+                        <p className="text-gray-600 truncate leading-tight">{inst?.icon} {inst?.name || b.instrumentId}</p>
+                        <p className="text-gray-400 truncate leading-tight">{isMine ? 'You' : b.userName}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getInitials(name: string, abbreviation?: string): string {
   if (abbreviation) return abbreviation;
@@ -16,7 +151,7 @@ interface Props {
 }
 
 export default function DashboardPage({ onNavigate }: Props) {
-  const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments, manuals } = useLabContext();
+  const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments, manuals, bookingSettings } = useLabContext();
 
   const today = new Date().toISOString().split('T')[0];
   const todayBookings = bookings.filter(b => b.date === today);
@@ -79,6 +214,9 @@ export default function DashboardPage({ onNavigate }: Props) {
           );
         })}
       </div>
+
+      {/* Weekly Calendar — all bookings, filterable by instrument */}
+      <WeeklyCalendar bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} />
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* My Bookings Today */}
