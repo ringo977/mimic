@@ -23,6 +23,15 @@ function startOfWeek(ref: Date): Date {
 const EPS = 1e-9;
 const HOUR_PX = 46; // pixel height of one hour row
 
+// A booking is 'past' once it has fully ended, 'current' while running, else 'future'.
+function bookingStatus(b: Booking, todayStr: string, nowHour: number): 'past' | 'current' | 'future' {
+  if (b.date < todayStr) return 'past';
+  if (b.date > todayStr) return 'future';
+  if (b.endHour <= nowHour + EPS) return 'past';
+  if (b.startHour <= nowHour + EPS) return 'current';
+  return 'future';
+}
+
 // Assign overlapping same-day bookings to side-by-side lanes (like Google Calendar).
 function layoutDayEvents(evts: Booking[]): { ev: Booking; lane: number; lanes: number }[] {
   const sorted = [...evts].sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
@@ -59,8 +68,8 @@ type ModalState =
 
 type DragState =
   | { kind: 'create'; date: string; colTop: number; anchor: number; start: number; end: number; moved: boolean }
-  | { kind: 'move'; booking: Booking; date: string; colTop: number; grab: number; dur: number; start: number; end: number; moved: boolean }
-  | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; start: number; end: number; moved: boolean };
+  | { kind: 'move'; booking: Booking; date: string; colTop: number; grab: number; dur: number; lowStart: number; lowEnd: number; start: number; end: number; moved: boolean }
+  | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; lowStart: number; lowEnd: number; start: number; end: number; moved: boolean };
 
 function BookingModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
   const { user, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, canManageAllBookings } = useLabContext();
@@ -71,7 +80,10 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 
   const existing = state.mode === 'view' ? state.booking : null;
   const isMine = existing ? existing.userId === user.id : true;
-  const canEdit = existing ? (isMine || canManageAllBookings) : true;
+  const isManager = canManageAllBookings;
+  const status = existing ? bookingStatus(existing, todayStr, nowHour) : 'future';
+  // Full change + cancel: managers anytime; owners only on future bookings.
+  const canModify = isManager || (isMine && status === 'future');
 
   const [editing, setEditing] = useState(state.mode === 'create');
   const [instrumentId, setInstrumentId] = useState(existing?.instrumentId ?? (state.mode === 'create' ? state.instrumentId ?? '' : ''));
@@ -97,8 +109,8 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     setError('');
     if (!instrumentId) { setError('Select an instrument.'); return; }
     if (endHour <= startHour) { setError('End time must be after start time.'); return; }
-    if (isPastDate) { setError('Cannot book a date in the past.'); return; }
-    if (isToday && startHour < nowHour - EPS) { setError('Cannot book a time in the past.'); return; }
+    if (!isManager && isPastDate) { setError('Cannot book a date in the past.'); return; }
+    if (!isManager && isToday && startHour < nowHour - EPS) { setError('Cannot book a time in the past.'); return; }
     if (conflict(startHour, endHour)) { setError('Time conflict with an existing booking.'); return; }
     setBusy(true);
     const fresh = await fetchBookingsForSlot(instrumentId, date);
@@ -146,11 +158,18 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
                   <button onClick={() => setConfirmingCancel(false)} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200 transition-colors">Keep</button>
                 </div>
               </div>
-            ) : canEdit ? (
+            ) : canModify ? (
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setEditing(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors"><Pencil size={15} /> Change</button>
                 <button onClick={() => setConfirmingCancel(true)} className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-semibold font-manrope hover:bg-red-100 transition-colors"><Trash2 size={15} /> Cancel</button>
               </div>
+            ) : isMine && status === 'current' ? (
+              <div className="bg-blue-50 text-blue-700 px-3 py-2.5 rounded-xl text-xs font-manrope flex items-start gap-2">
+                <Clock size={14} className="shrink-0 mt-0.5" />
+                <span>This booking is in progress. You can only lengthen or shorten its end by dragging its bottom edge on the calendar (not before the current time). It can&rsquo;t be moved or cancelled.</span>
+              </div>
+            ) : isMine && status === 'past' ? (
+              <p className="text-xs text-gray-400 font-manrope text-center pt-1">This booking has ended and can no longer be changed. Contact an admin if needed.</p>
             ) : (
               <p className="text-xs text-gray-400 font-manrope text-center pt-1">You can only change your own bookings.</p>
             )}
@@ -312,18 +331,28 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
     const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
     setDrag({ kind: 'create', date: ds, colTop, anchor: h, start: h, end: Math.min(h + slotStep, maxH), moved: false });
   };
+  const ceilSlot = (h: number) => Math.min(Math.ceil((h - EPS) / slotStep) * slotStep, maxH);
+  // Lowest start/end a NON-manager may drag a booking to. Managers (admins) are free.
+  const dragBounds = (ev: Booking) => {
+    const free = canManageAllBookings || ev.date !== todayStr;
+    const low = free ? minH : ceilSlot(nowHour);
+    return { lowStart: low, lowEnd: low };
+  };
+
   const startMove = (e: React.PointerEvent<HTMLDivElement>, ev: Booking) => {
     e.stopPropagation();
     if (e.button !== 0) return;
     const colTop = colTopFromChild(e.currentTarget);
     const pointerH = rangeStart + (e.clientY - colTop) / HOUR_PX;
-    setDrag({ kind: 'move', booking: ev, date: ev.date, colTop, grab: pointerH - ev.startHour, dur: ev.endHour - ev.startHour, start: ev.startHour, end: ev.endHour, moved: false });
+    const { lowStart, lowEnd } = dragBounds(ev);
+    setDrag({ kind: 'move', booking: ev, date: ev.date, colTop, grab: pointerH - ev.startHour, dur: ev.endHour - ev.startHour, lowStart, lowEnd, start: ev.startHour, end: ev.endHour, moved: false });
   };
   const startResize = (e: React.PointerEvent<HTMLDivElement>, ev: Booking, edge: 'top' | 'bottom') => {
     e.stopPropagation();
     if (e.button !== 0) return;
     const colTop = colTopFromChild(e.currentTarget);
-    setDrag({ kind: edge === 'top' ? 'resize-top' : 'resize-bottom', booking: ev, date: ev.date, colTop, start: ev.startHour, end: ev.endHour, moved: false });
+    const { lowStart, lowEnd } = dragBounds(ev);
+    setDrag({ kind: edge === 'top' ? 'resize-top' : 'resize-bottom', booking: ev, date: ev.date, colTop, lowStart, lowEnd, start: ev.startHour, end: ev.endHour, moved: false });
   };
 
   const dragActive = drag !== null;
@@ -338,13 +367,13 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
         if (end - start < slotStep - EPS) end = Math.min(start + slotStep, maxH);
         setDrag({ ...d, start, end, moved: d.moved || Math.abs(cur - d.anchor) > EPS });
       } else if (d.kind === 'move') {
-        const ns = clamp(snap(raw - d.grab), minH, maxH - d.dur);
+        const ns = clamp(snap(raw - d.grab), d.lowStart, maxH - d.dur);
         setDrag({ ...d, start: ns, end: ns + d.dur, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
       } else if (d.kind === 'resize-top') {
-        const ns = clamp(snap(raw), minH, d.end - slotStep);
+        const ns = clamp(snap(raw), d.lowStart, d.end - slotStep);
         setDrag({ ...d, start: ns, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
       } else {
-        const ne = clamp(snap(raw), d.start + slotStep, maxH);
+        const ne = clamp(snap(raw), Math.max(d.start + slotStep, d.lowEnd), maxH);
         setDrag({ ...d, end: ne, moved: d.moved || Math.abs(ne - d.booking.endHour) > EPS });
       }
     };
@@ -497,7 +526,11 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                   {dayLayout.map(({ ev, lane, lanes }) => {
                     const inst = instruments.find(i => i.id === ev.instrumentId);
                     const isMine = ev.userId === user.id;
-                    const editable = isMine || canManageAllBookings;
+                    const status = bookingStatus(ev, todayStr, nowHour);
+                    // Full drag (move + both edges): managers always; owners only on future bookings.
+                    const fullDrag = canManageAllBookings || (isMine && status === 'future');
+                    // In-progress bookings owned by the user: only the END can be dragged.
+                    const endOnly = !fullDrag && isMine && status === 'current';
                     const draggingThis = !!drag && drag.kind !== 'create' && drag.booking.id === ev.id;
                     const color = colorOf.get(ev.instrumentId) || '#64748b';
                     const start = Math.max(ev.startHour, rangeStart);
@@ -510,10 +543,10 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                     return (
                       <div
                         key={ev.id}
-                        onPointerDown={editable ? e => startMove(e, ev) : undefined}
-                        onClick={editable ? undefined : e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
+                        onPointerDown={fullDrag ? e => startMove(e, ev) : undefined}
+                        onClick={fullDrag ? undefined : e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
                         title={`${inst?.name || ev.instrumentId} · ${ev.userName} · ${formatTime(ev.startHour)}–${formatTime(ev.endHour)}${ev.notes ? ' · ' + ev.notes : ''}`}
-                        className={`absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 touch-none ${editable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingThis ? 'opacity-30' : ''}`}
+                        className={`absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 touch-none ${fullDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingThis ? 'opacity-30' : ''}`}
                         style={{
                           top,
                           height,
@@ -523,10 +556,10 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                           boxShadow: isMine ? `inset 0 0 0 2px rgba(255,255,255,0.9)` : undefined,
                         }}
                       >
-                        {editable && <div onPointerDown={e => startResize(e, ev, 'top')} className="absolute -top-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
+                        {fullDrag && <div onPointerDown={e => startResize(e, ev, 'top')} className="absolute -top-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
                         <p className="text-[10px] font-semibold leading-tight truncate pointer-events-none">{formatTime(ev.startHour)} {inst?.icon} {inst?.name || ev.instrumentId}</p>
                         {!compact && <p className="text-[9px] leading-tight truncate opacity-90 pointer-events-none">{isMine ? 'You' : ev.userName}</p>}
-                        {editable && <div onPointerDown={e => startResize(e, ev, 'bottom')} className="absolute -bottom-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
+                        {(fullDrag || endOnly) && <div onPointerDown={e => startResize(e, ev, 'bottom')} className="absolute -bottom-0.5 left-0 right-0 h-2 cursor-ns-resize z-20" />}
                       </div>
                     );
                   })}
