@@ -94,6 +94,26 @@ function downloadCSV(headers: string[], rows: (string | number)[][], filename: s
   URL.revokeObjectURL(url);
 }
 
+/** Minimal RFC-4180-ish CSV parser: handles quoted fields, escaped quotes, commas and newlines. */
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let cur: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { cur.push(field); field = ''; }
+    else if (c === '\n') { cur.push(field); rows.push(cur); cur = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field.length > 0 || cur.length > 0) { cur.push(field); rows.push(cur); }
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
@@ -989,6 +1009,75 @@ function ReagentsTab() {
     return counts;
   }, [reagents]);
 
+  // ---- CSV import ----
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importResult, setImportResult] = useState<{ added: number; skipped: string[] } | null>(null);
+
+  const IMPORT_HEADERS = ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert'];
+
+  const downloadTemplate = () => {
+    downloadCSV(IMPORT_HEADERS, [
+      ['DMEM High Glucose', 'Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2],
+      ['Trypsin-EDTA 0.05%', 'Reagents', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge A (+4 °C)', '2026-09-01', 2],
+      ['DAPI', 'Staining', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C', '2027-01-01', 1],
+    ], 'consumables_template');
+  };
+
+  const handleImportFile = async (file: File) => {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    if (rows.length < 2) { setImportResult({ added: 0, skipped: ['File is empty or has no data rows.'] }); return; }
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const idx = (names: string[]) => header.findIndex(h => names.includes(h));
+    const ci = {
+      name: idx(['name']), category: idx(['category', 'sub-category', 'subcategory']),
+      stock: idx(['stock', 'current stock', 'currentstock']), max: idx(['max', 'max stock', 'maxstock']),
+      unit: idx(['unit', 'units']), supplier: idx(['supplier']),
+      cat: idx(['cat#', 'catalog', 'catalog #', 'catalog number', 'catalognumber', 'cat']),
+      storage: idx(['storage unit', 'storage', 'storageunit']), expiry: idx(['expiry', 'expiry date', 'expirydate']),
+      alert: idx(['alert', 'alert at', 'alert threshold', 'alertthreshold']),
+    };
+    if (ci.name === -1) { setImportResult({ added: 0, skipped: ['Missing required "Name" column. Download the template for the correct format.'] }); return; }
+
+    const findUnitId = (val: string): string | undefined => {
+      const v = val.trim().toLowerCase();
+      if (!v) return undefined;
+      const u = storageUnits.find(s => s.name.toLowerCase() === v || `${storageUnitTypes[s.type]?.icon || ''} ${s.name}`.trim().toLowerCase() === v);
+      return u?.id;
+    };
+    const num = (val: string | undefined, fallback: number) => { const n = Number((val ?? '').trim()); return Number.isFinite(n) && (val ?? '').trim() !== '' ? n : fallback; };
+    const get = (row: string[], i: number) => (i >= 0 ? (row[i] ?? '').trim() : '');
+
+    const skipped: string[] = [];
+    let added = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const name = get(row, ci.name);
+      if (!name) { skipped.push(`Row ${i + 1}: missing name`); continue; }
+      const category = get(row, ci.category) || defaultCategory;
+      const storageVal = get(row, ci.storage);
+      const storageUnitId = findUnitId(storageVal);
+      if (storageVal && !storageUnitId) skipped.push(`Row ${i + 1} (${name}): storage "${storageVal}" not found — imported without a storage unit`);
+      const currentStock = num(get(row, ci.stock), 0);
+      const reagent: Reagent = {
+        id: generateId(), name, category,
+        currentStock,
+        maxStock: num(get(row, ci.max), Math.max(currentStock, 1)),
+        unit: get(row, ci.unit) || 'units',
+        expiryDate: get(row, ci.expiry),
+        location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
+        storageUnitId,
+        supplier: get(row, ci.supplier),
+        catalogNumber: get(row, ci.cat),
+        alertThreshold: num(get(row, ci.alert), 0),
+      };
+      addNewReagent(reagent);
+      added++;
+    }
+    setImportResult({ added, skipped });
+  };
+
   return (
     <>
       {/* Macro-category selector */}
@@ -1024,6 +1113,7 @@ function ReagentsTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
+          <button onClick={() => { setImportResult(null); setShowImport(true); }} className={btnExport}><Upload size={14} /> Import</button>
           <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
@@ -1088,6 +1178,44 @@ function ReagentsTab() {
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Item'}</button>
         </div>
       </Modal>}
+
+      {showImport && <Modal title="Import consumables (CSV)" onClose={() => setShowImport(false)}>
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 font-manrope space-y-1.5">
+            <p className="font-semibold flex items-center gap-1.5"><FileText size={13} /> How it works</p>
+            <p>Upload a <strong>.csv</strong> file (export it from Excel/Google Sheets via <em>Save as → CSV</em>). The first row must be the column headers below; each following row is one item.</p>
+            <p><strong>Columns:</strong> Name (required), Category, Stock, Max, Unit, Supplier, Cat#, Storage Unit, Expiry, Alert.</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              <li><strong>Category</strong>: a sub-category (e.g. Culture Media, Reagents, Staining…). If blank, items go to <em>{defaultCategory}</em>.</li>
+              <li><strong>Stock / Max / Alert</strong>: numbers. <strong>Expiry</strong>: date as YYYY-MM-DD.</li>
+              <li><strong>Storage Unit</strong>: must match an existing unit name exactly (e.g. &ldquo;Fridge A (+4 °C)&rdquo;); otherwise it&rsquo;s imported without a storage link.</li>
+            </ul>
+            <p>Tip: <strong>Export</strong> first to get a file with your current items in the exact format, edit it, then import.</p>
+          </div>
+
+          <button onClick={downloadTemplate} className={`${btnExport} w-full justify-center`}><Download size={14} /> Download example template</button>
+
+          <input ref={importInputRef} type="file" accept=".csv,text/csv" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }} />
+          <button onClick={() => importInputRef.current?.click()} className={`${btnPrimary} w-full justify-center`}><Upload size={16} /> Choose CSV file…</button>
+
+          {importResult && (
+            <div className="rounded-xl border border-gray-100 p-3 text-xs font-manrope space-y-2">
+              <p className="flex items-center gap-1.5 font-semibold text-green-700"><CheckCircle2 size={14} /> {importResult.added} item{importResult.added !== 1 ? 's' : ''} imported.</p>
+              {importResult.skipped.length > 0 && (
+                <div className="text-amber-700">
+                  <p className="flex items-center gap-1.5 font-semibold"><AlertCircle size={14} /> {importResult.skipped.length} note{importResult.skipped.length !== 1 ? 's' : ''}:</p>
+                  <ul className="list-disc list-inside max-h-32 overflow-y-auto mt-1 space-y-0.5">
+                    {importResult.skipped.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {importResult.added > 0 && <button onClick={() => setShowImport(false)} className={`${btnPrimary} w-full justify-center`}>Done</button>}
+            </div>
+          )}
+        </div>
+      </Modal>}
+
       <ConfirmDialog />
     </>
   );
