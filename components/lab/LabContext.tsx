@@ -3,11 +3,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
-  StorageUnit, Project, Certification, Location,
+  StorageUnit, Project, Certification, Location, BookingSettings,
   rolePermissions, externalRolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals,
   mockStorageUnits, mockProjects, mockCertifications, mockLocations,
   generateId, migrateReagentCategories, migrateStorageUnits, mergeMockDefaults,
   getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
+  defaultBookingSettings, sanitizeBookingSettings, formatTime,
 } from '@/data/lab-data';
 import { fetchLabUsers, insertLabUser, updateLabUser, deleteLabUser } from '@/lib/supabase-users';
 import {
@@ -22,7 +23,10 @@ import {
   fetchWishlist, upsertWishlistItem,
   fetchLogEntries, insertLogEntry,
   fetchManuals, upsertManual, deleteManual,
+  fetchAppSetting, upsertAppSetting,
 } from '@/lib/supabase-data';
+
+const BOOKING_SETTINGS_KEY = 'booking_settings';
 
 interface LabContextType {
   user: LabUser;
@@ -32,6 +36,9 @@ interface LabContextType {
   bookings: Booking[];
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
   removeBooking: (id: string) => void;
+  bookingSettings: BookingSettings;
+  updateBookingSettings: (s: BookingSettings) => void;
+  canManageAllBookings: boolean;
   reagents: Reagent[];
   withdrawReagent: (reagentId: string, amount: number, purpose: string, project: string) => void;
   addReagentStock: (reagentId: string, amount: number) => void;
@@ -95,6 +102,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [projects, setProjects] = useState<Project[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -142,10 +150,25 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
       setManuals(sbManuals.length > 0 ? sbManuals : (localData.manuals ? mergeMockDefaults(localData.manuals as Manual[], mockManuals, del) : [...mockManuals]));
 
+      // Booking settings: Supabase → localStorage → defaults
+      const sbSettings = await fetchAppSetting<Partial<BookingSettings>>(BOOKING_SETTINGS_KEY);
+      const localSettings = localData.bookingSettings as Partial<BookingSettings> | undefined;
+      setBookingSettings(sanitizeBookingSettings(sbSettings ?? localSettings ?? defaultBookingSettings));
+
       setLoaded(true);
     }
     loadData();
   }, []);
+
+  // Persist booking settings to localStorage as offline fallback
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      saved.bookingSettings = bookingSettings;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+    } catch { /* noop */ }
+  }, [bookingSettings, loaded]);
 
   // ---- Log ----
   const addLogEntry = useCallback((entry: Omit<LogEntry, 'id' | 'timestamp'>) => {
@@ -159,7 +182,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     const full: Booking = { ...b, id: generateId(), createdAt: new Date().toISOString() };
     setBookings(prev => [...prev, full]);
     upsertBooking(full);
-    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${b.startHour}:00-${b.endHour}:00` });
+    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
   }, [addLogEntry]);
 
   const removeBooking = useCallback((id: string) => {
@@ -169,6 +192,13 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       return prev.filter(b => b.id !== id);
     });
     deleteBooking(id);
+  }, [user, addLogEntry]);
+
+  const updateBookingSettings = useCallback((s: BookingSettings) => {
+    const clean = sanitizeBookingSettings(s);
+    setBookingSettings(clean);
+    upsertAppSetting(BOOKING_SETTINGS_KEY, clean);
+    addLogEntry({ userId: user.id, userName: user.name, action: 'Updated booking hours', category: 'booking', details: `Work ${clean.workStartHour}:00-${clean.workEndHour}:00, open ${clean.openStartHour}:00-${clean.openEndHour}:00, ${clean.slotMinutes}min slots` });
   }, [user, addLogEntry]);
 
   // ---- Reagents ----
@@ -299,6 +329,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         return { ...base, canAdmin: base.canAdmin || user.isAdmin };
       })(), currentPage, setCurrentPage,
       bookings, addBooking, removeBooking,
+      bookingSettings, updateBookingSettings,
+      canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       reagents, withdrawReagent, addReagentStock,
       cryoVials, addCryoVial, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus,

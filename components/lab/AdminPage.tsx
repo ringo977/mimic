@@ -4,17 +4,17 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download,
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
-  DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+  DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType,
-  storageUnitTypes, Project, Certification, Location,
+  storageUnitTypes, Project, Certification, Location, BookingSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
-  isRackBased, isShelfBased,
+  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog } from '@/lib/supabase-data';
 
-type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'backup';
+type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'backup';
 
 export default function AdminPage() {
   const ctx = useLabContext();
@@ -38,6 +38,7 @@ export default function AdminPage() {
     { label: 'Docs & Schedule', tabs: [
       { id: 'manuals', label: 'Manuals', icon: BookOpen, count: ctx.manuals.length },
       { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+      { id: 'schedule', label: 'Hours', icon: Clock },
     ]},
     { label: 'System', tabs: [
       { id: 'backup', label: 'Backup', icon: HardDrive },
@@ -76,6 +77,7 @@ export default function AdminPage() {
       {activeTab === 'cryo' && <CryoTab />}
       {activeTab === 'manuals' && <ManualsTab />}
       {activeTab === 'calendar' && <CalendarTab />}
+      {activeTab === 'schedule' && <ScheduleTab />}
       {activeTab === 'backup' && <BackupTab />}
     </div>
   );
@@ -1283,13 +1285,13 @@ function ManualsTab() {
 // Calendar Tab
 // ============================================================
 function CalendarTab() {
-  const { bookings, instruments } = useLabContext();
+  const { bookings, instruments, bookingSettings } = useLabContext();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const changeDate = (days: number) => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + days); setSelectedDate(d.toISOString().split('T')[0]); };
   const dateLabel = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dayBookings = bookings.filter(b => b.date === selectedDate).sort((a, b) => a.startHour - b.startHour);
   const byInstrument = useMemo(() => { const map = new Map<string, typeof dayBookings>(); dayBookings.forEach(b => { const l = map.get(b.instrumentId) || []; l.push(b); map.set(b.instrumentId, l); }); return map; }, [dayBookings]);
-  const HOURS = Array.from({ length: 13 }, (_, i) => i + 8);
+  const HOURS = buildBookingSlots(bookingSettings);
   const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + (i - 3)); return d; });
 
   return (
@@ -1316,9 +1318,9 @@ function CalendarTab() {
             <th className="px-2 py-2.5 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10 w-16">Time</th>
             {Array.from(byInstrument.keys()).map(id => { const inst = instruments.find(i => i.id === id); return <th key={id} className="px-2 py-2.5 text-center font-semibold text-gray-700 min-w-[120px]"><span className="text-sm">{inst?.icon}</span> {inst?.name || id}</th>; })}
           </tr></thead><tbody>
-            {HOURS.map(hour => { const hasAny = Array.from(byInstrument.values()).some(bks => bks.some(b => hour >= b.startHour && hour < b.endHour)); return (
-              <tr key={hour} className={`border-t border-gray-50 ${!hasAny ? 'opacity-40' : ''}`}>
-                <td className="px-2 py-1.5 text-gray-400 font-mono sticky left-0 bg-white">{formatTime(hour)}</td>
+            {HOURS.map(hour => { const hasAny = Array.from(byInstrument.values()).some(bks => bks.some(b => hour >= b.startHour && hour < b.endHour)); const working = isWorkingHour(hour, bookingSettings); return (
+              <tr key={hour} className={`border-t border-gray-50 ${!hasAny ? 'opacity-40' : ''} ${working ? '' : 'bg-amber-50/40'}`}>
+                <td className={`px-2 py-1.5 font-mono sticky left-0 ${working ? 'text-gray-400 bg-white' : 'text-amber-500 bg-amber-50'}`}>{formatTime(hour)}{!working && <Moon size={9} className="inline ml-0.5 opacity-70" />}</td>
                 {Array.from(byInstrument.keys()).map(id => { const bks = byInstrument.get(id) || []; const bk = bks.find(b => hour >= b.startHour && hour < b.endHour); const isS = bk && bk.startHour === hour; return (
                   <td key={id} className="px-1 py-0.5">{bk ? <div className={`rounded px-2 py-1 ${isS ? 'bg-blue-500 text-white' : 'bg-blue-100 text-blue-800'}`}>{isS ? <div><span className="font-semibold">{bk.userName}</span><span className="ml-1 opacity-70">{formatTime(bk.startHour)}-{formatTime(bk.endHour)}</span>{bk.notes && <div className="text-[9px] opacity-80 truncate">{bk.notes}</div>}</div> : <span className="text-[9px] opacity-50">&nbsp;</span>}</div> : <div className="h-6" />}</td>); })}
               </tr>); })}
@@ -1337,6 +1339,92 @@ function CalendarTab() {
         )}
       </div>
     </>
+  );
+}
+
+// ============================================================
+// Schedule / Booking Hours Tab
+// ============================================================
+function ScheduleTab() {
+  const { bookingSettings, updateBookingSettings } = useLabContext();
+  const [draft, setDraft] = useState<BookingSettings>(bookingSettings);
+  const [saved, setSaved] = useState(false);
+
+  const hourOptions = Array.from({ length: 25 }, (_, i) => i); // 0..24
+  const set = (patch: Partial<BookingSettings>) => { setDraft(d => ({ ...d, ...patch })); setSaved(false); };
+  const dirty = JSON.stringify(draft) !== JSON.stringify(bookingSettings);
+  const handleSave = () => { updateBookingSettings(draft); setSaved(true); };
+
+  const previewSlots = buildBookingSlots(draft);
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-1">
+          <Clock size={16} className="text-[#102C53]" />
+          <h2 className="text-sm font-bold text-gray-900 font-manrope">Booking Hours</h2>
+        </div>
+        <p className="text-xs text-gray-500 font-manrope mb-4">Working hours are highlighted on every instrument calendar. Bookings outside this band are allowed but marked as &ldquo;extra hours&rdquo;.</p>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-emerald-700 mb-1 font-manrope"><Sun size={12} /> Working hours start</label>
+            <select value={draft.workStartHour} onChange={e => set({ workStartHour: Number(e.target.value) })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope outline-none focus:ring-2 focus:ring-[#4DC9FF]">
+              {hourOptions.map(h => <option key={h} value={h}>{formatTime(h)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-emerald-700 mb-1 font-manrope"><Sun size={12} /> Working hours end</label>
+            <select value={draft.workEndHour} onChange={e => set({ workEndHour: Number(e.target.value) })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope outline-none focus:ring-2 focus:ring-[#4DC9FF]">
+              {hourOptions.map(h => <option key={h} value={h}>{formatTime(h)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-amber-600 mb-1 font-manrope"><Moon size={12} /> Calendar opens at</label>
+            <select value={draft.openStartHour} onChange={e => set({ openStartHour: Number(e.target.value) })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope outline-none focus:ring-2 focus:ring-[#4DC9FF]">
+              {hourOptions.map(h => <option key={h} value={h}>{formatTime(h)}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="flex items-center gap-1 text-xs font-medium text-amber-600 mb-1 font-manrope"><Moon size={12} /> Calendar closes at</label>
+            <select value={draft.openEndHour} onChange={e => set({ openEndHour: Number(e.target.value) })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope outline-none focus:ring-2 focus:ring-[#4DC9FF]">
+              {hourOptions.map(h => <option key={h} value={h}>{formatTime(h)}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Slot granularity</label>
+            <div className="flex gap-2">
+              {[30, 60].map(m => (
+                <button key={m} onClick={() => set({ slotMinutes: m as 30 | 60 })} className={`flex-1 px-3 py-2.5 rounded-xl text-sm font-medium font-manrope transition-all ${draft.slotMinutes === m ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {m === 30 ? '30 minutes' : '1 hour'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-gray-50 rounded-xl">
+          <p className="text-[11px] font-medium text-gray-600 font-manrope mb-2">Preview ({previewSlots.length} slots / day)</p>
+          <div className="flex flex-wrap gap-1">
+            {previewSlots.map(h => (
+              <span key={h} className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isWorkingHour(h, draft) ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{formatTime(h)}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button onClick={handleSave} disabled={!dirty} className="flex items-center gap-1.5 px-4 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <Save size={15} /> Save hours
+          </button>
+          {saved && !dirty && <span className="flex items-center gap-1 text-xs text-green-600 font-manrope"><CheckCircle2 size={14} /> Saved</span>}
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-manrope flex items-start gap-2">
+        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+        <span>To share these hours across all users (and to store half-hour bookings), the Supabase migration <code className="bg-amber-100 px-1 rounded">scripts/supabase-booking-settings.sql</code> must be run once. Until then, changes apply only on this device.</span>
+      </div>
+    </div>
   );
 }
 

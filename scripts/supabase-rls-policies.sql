@@ -33,6 +33,29 @@ ALTER TABLE log_entries      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manuals          ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
+-- 1b. Make this script re-runnable: drop any pre-existing
+--     policies on these tables so the CREATE statements below
+--     never abort the transaction with "already exists".
+--     (Supabase SQL Editor runs everything in ONE transaction,
+--     so a single duplicate would roll back the RLS enables too.)
+-- ============================================================
+DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT policyname, tablename FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename IN (
+        'lab_users','instruments','maintenance_logs','locations','projects',
+        'certifications','storage_units','reagents','bookings','cryo_vials',
+        'wishlist_items','log_entries','manuals'
+      )
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', r.policyname, r.tablename);
+  END LOOP;
+END $$;
+
+-- ============================================================
 -- 2. Helper: check if current user is an admin in lab_users
 -- ============================================================
 CREATE OR REPLACE FUNCTION is_lab_admin()
@@ -266,6 +289,12 @@ CREATE POLICY "manuals_delete" ON manuals
 -- ============================================================
 -- Run these in: Supabase Dashboard → Storage → Policies
 -- Or use the SQL below:
+
+-- Drop pre-existing bucket policies first (re-runnable)
+DROP POLICY IF EXISTS "manuals_bucket_select" ON storage.objects;
+DROP POLICY IF EXISTS "manuals_bucket_insert" ON storage.objects;
+DROP POLICY IF EXISTS "manuals_bucket_update" ON storage.objects;
+DROP POLICY IF EXISTS "manuals_bucket_delete" ON storage.objects;
 
 -- Allow authenticated users to read files
 CREATE POLICY "manuals_bucket_select" ON storage.objects

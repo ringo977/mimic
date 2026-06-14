@@ -229,6 +229,37 @@ export async function upsertBooking(b: Booking) {
 
 export async function deleteBooking(id: string) { return deleteRow('bookings', id); }
 
+// Fresh fetch of bookings for one instrument on one date — used to re-check
+// conflicts right before confirming, reducing double-booking races.
+export async function fetchBookingsForSlot(instrumentId: string, date: string): Promise<Booking[]> {
+  const { data, error } = await supabase
+    .from('bookings').select('*')
+    .eq('instrument_id', instrumentId).eq('date', date);
+  if (error) { console.error('Failed to fetch slot bookings:', error.message); return []; }
+  return (data || []).map((r: {
+    id: string; instrument_id: string; user_id: string; user_name: string;
+    date: string; start_hour: number; end_hour: number; notes: string; created_at: string;
+  }) => ({
+    id: r.id, instrumentId: r.instrument_id, userId: r.user_id, userName: r.user_name,
+    date: r.date, startHour: r.start_hour, endHour: r.end_hour, notes: r.notes, createdAt: r.created_at,
+  }));
+}
+
+// ============================================================
+// App settings (key/value, JSONB) — e.g. booking working hours
+// ============================================================
+export async function fetchAppSetting<T>(key: string): Promise<T | null> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+  if (error) { console.warn(`app_settings fetch (${key}) failed:`, error.message); return null; }
+  return (data?.value as T) ?? null;
+}
+
+export async function upsertAppSetting(key: string, value: unknown): Promise<boolean> {
+  const { error } = await supabase.from('app_settings').upsert({ key, value });
+  if (error) { console.warn(`app_settings upsert (${key}) failed:`, error.message); return false; }
+  return true;
+}
+
 // ============================================================
 // Cryo Vials
 // ============================================================

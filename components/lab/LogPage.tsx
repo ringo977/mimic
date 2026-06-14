@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Download, Calendar, FlaskConical, Snowflake, ShoppingCart, LogIn, BookOpen } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDateTime } from '@/data/lab-data';
+import { formatDateTime, formatTime } from '@/data/lab-data';
 
 const categoryIcons: Record<string, typeof Calendar> = {
   booking: Calendar,
@@ -63,7 +63,7 @@ export default function LogPage({ showDatabase = false }: { showDatabase?: boole
       instrument: mockInstruments.find(i => i.id === b.instrumentId)?.name || b.instrumentId,
       user: b.userName,
       date: b.date,
-      time: `${b.startHour}:00-${b.endHour}:00`,
+      time: `${formatTime(b.startHour)}-${formatTime(b.endHour)}`,
       notes: b.notes,
       created: formatDateTime(b.createdAt),
     })),

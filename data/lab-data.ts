@@ -125,10 +125,57 @@ export interface Booking {
   userId: string;
   userName: string;
   date: string;
-  startHour: number;
+  startHour: number;   // decimal hours: 9 = 09:00, 9.5 = 09:30
   endHour: number;
   notes: string;
   createdAt: string;
+}
+
+// Lab-wide booking configuration (editable by admins, shared via Supabase).
+export interface BookingSettings {
+  openStartHour: number;   // earliest bookable hour shown on the timeline
+  openEndHour: number;     // latest bookable hour (exclusive end of last slot)
+  workStartHour: number;   // start of highlighted "working hours" band
+  workEndHour: number;     // end of working hours band
+  slotMinutes: 30 | 60;    // booking granularity
+}
+
+export const defaultBookingSettings: BookingSettings = {
+  openStartHour: 7,
+  openEndHour: 21,
+  workStartHour: 9,
+  workEndHour: 19,
+  slotMinutes: 30,
+};
+
+// Clamp/sanitize settings loaded from storage so the UI never breaks.
+export function sanitizeBookingSettings(s: Partial<BookingSettings> | null | undefined): BookingSettings {
+  const d = defaultBookingSettings;
+  const slot = s?.slotMinutes === 60 ? 60 : 30;
+  let openStart = Number.isFinite(s?.openStartHour) ? (s as BookingSettings).openStartHour : d.openStartHour;
+  let openEnd = Number.isFinite(s?.openEndHour) ? (s as BookingSettings).openEndHour : d.openEndHour;
+  let workStart = Number.isFinite(s?.workStartHour) ? (s as BookingSettings).workStartHour : d.workStartHour;
+  let workEnd = Number.isFinite(s?.workEndHour) ? (s as BookingSettings).workEndHour : d.workEndHour;
+  openStart = Math.min(Math.max(0, openStart), 23);
+  openEnd = Math.min(Math.max(openStart + 1, openEnd), 24);
+  workStart = Math.min(Math.max(openStart, workStart), openEnd);
+  workEnd = Math.min(Math.max(workStart, workEnd), openEnd);
+  return { openStartHour: openStart, openEndHour: openEnd, workStartHour: workStart, workEndHour: workEnd, slotMinutes: slot };
+}
+
+// Build the list of slot START hours (decimal) for a given settings range.
+export function buildBookingSlots(settings: BookingSettings): number[] {
+  const step = settings.slotMinutes / 60;
+  const slots: number[] = [];
+  for (let h = settings.openStartHour; h < settings.openEndHour - 1e-9; h += step) {
+    slots.push(Math.round(h * 100) / 100);
+  }
+  return slots;
+}
+
+// True if the given decimal hour falls inside the working-hours band.
+export function isWorkingHour(hour: number, settings: BookingSettings): boolean {
+  return hour >= settings.workStartHour && hour < settings.workEndHour;
 }
 
 export interface Reagent {
@@ -617,7 +664,11 @@ export function getInitialLog(): LogEntry[] {
 
 export function generateId(): string { return Date.now().toString(36) + Math.random().toString(36).substr(2, 9); }
 export function formatDate(dateStr: string): string { return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
-export function formatTime(hour: number): string { return `${hour.toString().padStart(2, '0')}:00`; }
+export function formatTime(hour: number): string {
+  const h = Math.floor(hour);
+  const m = Math.round((hour - h) * 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
 export function formatDateTime(isoStr: string): string { const d = new Date(isoStr); return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
 export function getRowLabels(count: number): string[] { return Array.from({ length: count }, (_, i) => String.fromCharCode(65 + i)); }
 
