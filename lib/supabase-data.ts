@@ -7,9 +7,11 @@ import {
 // ============================================================
 // Generic helpers
 // ============================================================
-async function fetchAll<T>(table: string, order = 'id'): Promise<T[]> {
+// Returns null on error (unreachable DB, RLS denial, …) so callers can
+// distinguish "fetch failed" from "table is legitimately empty".
+async function fetchAll<T>(table: string, order = 'id'): Promise<T[] | null> {
   const { data, error } = await supabase.from(table).select('*').order(order);
-  if (error) { console.error(`Failed to fetch ${table}:`, error.message); return []; }
+  if (error) { console.error(`Failed to fetch ${table}:`, error.message); return null; }
   return data || [];
 }
 
@@ -28,7 +30,7 @@ async function deleteRow(table: string, id: string): Promise<boolean> {
 // ============================================================
 // Instruments
 // ============================================================
-export async function fetchInstruments(): Promise<Instrument[]> {
+export async function fetchInstruments(): Promise<Instrument[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; category: string; location: string;
     location_id: string | null; requires_certification: boolean;
@@ -38,6 +40,7 @@ export async function fetchInstruments(): Promise<Instrument[]> {
     maintenance_period_months: number | null;
     last_maintenance_date: string | null; next_maintenance_date: string | null;
   }>('instruments', 'name');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, name: r.name, category: r.category, location: r.location,
     locationId: r.location_id ?? undefined,
@@ -100,7 +103,7 @@ export async function deleteMaintenanceLog(id: string) { return deleteRow('maint
 // ============================================================
 // Locations
 // ============================================================
-export async function fetchLocations(): Promise<Location[]> {
+export async function fetchLocations(): Promise<Location[] | null> {
   return fetchAll<Location>('locations', 'name');
 }
 export async function upsertLocation(l: Location) { return upsertRow('locations', l); }
@@ -109,7 +112,7 @@ export async function deleteLocation(id: string) { return deleteRow('locations',
 // ============================================================
 // Projects
 // ============================================================
-export async function fetchProjects(): Promise<Project[]> {
+export async function fetchProjects(): Promise<Project[] | null> {
   return fetchAll<Project>('projects', 'name');
 }
 export async function upsertProject(p: Project) { return upsertRow('projects', p); }
@@ -118,10 +121,11 @@ export async function deleteProject(id: string) { return deleteRow('projects', i
 // ============================================================
 // Certifications
 // ============================================================
-export async function fetchCertifications(): Promise<Certification[]> {
+export async function fetchCertifications(): Promise<Certification[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; instrument_id: string | null; description: string;
   }>('certifications', 'name');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, name: r.name, instrumentId: r.instrument_id ?? undefined, description: r.description,
   }));
@@ -138,7 +142,7 @@ export async function deleteCertification(id: string) { return deleteRow('certif
 // ============================================================
 // Storage Units
 // ============================================================
-export async function fetchStorageUnits(): Promise<StorageUnit[]> {
+export async function fetchStorageUnits(): Promise<StorageUnit[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; type: string; temperature: string; model: string;
     location: string; location_id: string | null;
@@ -146,6 +150,7 @@ export async function fetchStorageUnits(): Promise<StorageUnit[]> {
     grid_rows: number | null; grid_cols: number | null;
     num_shelves: number | null; num_doors: number | null;
   }>('storage_units', 'name');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, name: r.name, type: r.type as StorageUnit['type'],
     temperature: r.temperature, model: r.model, location: r.location,
@@ -171,13 +176,14 @@ export async function deleteStorageUnit(id: string) { return deleteRow('storage_
 // ============================================================
 // Reagents
 // ============================================================
-export async function fetchReagents(): Promise<Reagent[]> {
+export async function fetchReagents(): Promise<Reagent[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; category: string; current_stock: number;
     max_stock: number; unit: string; expiry_date: string; location: string;
     storage_unit_id: string | null; supplier: string; catalog_number: string;
     alert_threshold: number;
   }>('reagents', 'name');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, name: r.name, category: r.category,
     currentStock: r.current_stock, maxStock: r.max_stock, unit: r.unit,
@@ -204,12 +210,13 @@ export async function deleteReagent(id: string) { return deleteRow('reagents', i
 // ============================================================
 // Bookings
 // ============================================================
-export async function fetchBookings(): Promise<Booking[]> {
+export async function fetchBookings(): Promise<Booking[] | null> {
   const rows = await fetchAll<{
     id: string; instrument_id: string; user_id: string; user_name: string;
     date: string; start_hour: number; end_hour: number;
     notes: string; created_at: string;
   }>('bookings', 'date');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, instrumentId: r.instrument_id, userId: r.user_id,
     userName: r.user_name, date: r.date,
@@ -231,11 +238,12 @@ export async function deleteBooking(id: string) { return deleteRow('bookings', i
 
 // Fresh fetch of bookings for one instrument on one date — used to re-check
 // conflicts right before confirming, reducing double-booking races.
-export async function fetchBookingsForSlot(instrumentId: string, date: string): Promise<Booking[]> {
+// Returns null when the check itself fails, so callers can refuse to book blind.
+export async function fetchBookingsForSlot(instrumentId: string, date: string): Promise<Booking[] | null> {
   const { data, error } = await supabase
     .from('bookings').select('*')
     .eq('instrument_id', instrumentId).eq('date', date);
-  if (error) { console.error('Failed to fetch slot bookings:', error.message); return []; }
+  if (error) { console.error('Failed to fetch slot bookings:', error.message); return null; }
   return (data || []).map((r: {
     id: string; instrument_id: string; user_id: string; user_name: string;
     date: string; start_hour: number; end_hour: number; notes: string; created_at: string;
@@ -263,12 +271,13 @@ export async function upsertAppSetting(key: string, value: unknown): Promise<boo
 // ============================================================
 // Cryo Vials
 // ============================================================
-export async function fetchCryoVials(): Promise<CryoVial[]> {
+export async function fetchCryoVials(): Promise<CryoVial[] | null> {
   const rows = await fetchAll<{
     id: string; cell_line: string; passage: number; date: string;
     user_id: string; user_name: string; storage_unit_id: string;
     rack: number; box: number; row: number; col: number; notes: string;
   }>('cryo_vials', 'cell_line');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, cellLine: r.cell_line, passage: r.passage, date: r.date,
     userId: r.user_id, userName: r.user_name, storageUnitId: r.storage_unit_id,
@@ -289,7 +298,7 @@ export async function deleteCryoVial(id: string) { return deleteRow('cryo_vials'
 // ============================================================
 // Wishlist
 // ============================================================
-export async function fetchWishlist(): Promise<WishlistItem[]> {
+export async function fetchWishlist(): Promise<WishlistItem[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; type: string; catalog_number: string;
     supplier: string; estimated_cost: number; quantity: number;
@@ -298,6 +307,7 @@ export async function fetchWishlist(): Promise<WishlistItem[]> {
     stocked_to_reagent_id: string | null; stocked_to_storage_unit_id: string | null;
     notes: string; timestamp: string;
   }>('wishlist_items', 'timestamp');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, name: r.name, type: r.type as WishlistItem['type'],
     catalogNumber: r.catalog_number, supplier: r.supplier,
@@ -331,16 +341,21 @@ export async function deleteWishlistItem(id: string) { return deleteRow('wishlis
 // ============================================================
 // Log Entries
 // ============================================================
-export async function fetchLogEntries(): Promise<LogEntry[]> {
-  const rows = await fetchAll<{
+// Newest first, capped at 500 entries so login doesn't download the whole audit trail.
+export async function fetchLogEntries(): Promise<LogEntry[] | null> {
+  const { data, error } = await supabase
+    .from('log_entries').select('*')
+    .order('timestamp', { ascending: false })
+    .limit(500);
+  if (error) { console.error('Failed to fetch log_entries:', error.message); return null; }
+  return (data || []).map((r: {
     id: string; timestamp: string; user_id: string; user_name: string;
     action: string; category: string; details: string;
-  }>('log_entries', 'timestamp');
-  return rows.map(r => ({
+  }) => ({
     id: r.id, timestamp: r.timestamp, userId: r.user_id,
     userName: r.user_name, action: r.action,
     category: r.category as LogEntry['category'], details: r.details,
-  })).reverse();
+  }));
 }
 
 export async function insertLogEntry(entry: LogEntry) {
@@ -354,12 +369,13 @@ export async function insertLogEntry(entry: LogEntry) {
 // ============================================================
 // Manuals (metadata only, fileData stays in localStorage)
 // ============================================================
-export async function fetchManuals(): Promise<Manual[]> {
+export async function fetchManuals(): Promise<Manual[] | null> {
   const rows = await fetchAll<{
     id: string; title: string; category: string; instrument: string | null;
     description: string; last_updated: string; uploaded_by: string;
     file_name: string | null; file_url: string | null;
   }>('manuals', 'title');
+  if (!rows) return null;
   return rows.map(r => ({
     id: r.id, title: r.title, category: r.category as Manual['category'],
     instrument: r.instrument ?? undefined, description: r.description,

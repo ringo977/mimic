@@ -114,6 +114,9 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     if (conflict(startHour, endHour)) { setError('Time conflict with an existing booking.'); return; }
     setBusy(true);
     const fresh = await fetchBookingsForSlot(instrumentId, date);
+    if (fresh === null) {
+      setBusy(false); setError('Could not verify availability (connection problem). Please try again.'); return;
+    }
     if (fresh.some(b => b.id !== existing?.id && startHour < b.endHour - EPS && endHour > b.startHour + EPS)) {
       setBusy(false); setError('Someone just booked an overlapping slot. Pick another time.'); return;
     }

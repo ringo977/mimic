@@ -138,7 +138,9 @@ mimic/
 ├── scripts/
 │   ├── deploy-polimi-ftp.sh   # Deploy FTPS → mimic.polimi.it (PRIMARIO)
 │   ├── sync-gitlab.sh         # Sync verso il monorepo GitLab
-│   └── supabase-rls-policies.sql  # Policy di sicurezza (RLS) del database lab
+│   ├── supabase-rls-policies.sql        # Policy di sicurezza (RLS) del database lab
+│   ├── supabase-booking-settings.sql    # Migrazione app_settings + mezz'ore
+│   └── supabase-security-hardening.sql  # Hardening: is_lab_member, anti-escalation, no-overlap
 │
 ├── .github/workflows/
 │   └── keep-supabase-alive.yml  # Ping giornaliero per non far andare Supabase in pausa
@@ -336,6 +338,7 @@ Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + preno
 - **2FA TOTP** (Google/Microsoft Authenticator, Authy): obbligatorio per ruoli `admin`, `pi`, `lab_manager` (e admin flag); opzionale ("Skip for now") per gli altri.
 - Reset password via `/lab/reset-password`.
 - **RLS (Row Level Security): ✅ ATTIVE (eseguite giugno 2026).** Le policy in `scripts/supabase-rls-policies.sql` sono applicate sul progetto live: con la sola anon key e **senza login** tutte le tabelle restituiscono `[]`. Solo gli utenti **autenticati** leggono/scrivono; le mutazioni sensibili (utenti, locations, projects, settings, ecc.) sono ristrette agli **admin/PI** via funzione `is_lab_admin()`. Lo script è **ri-eseguibile** (fa drop delle policy prima di ricrearle, così l'`ENABLE ROW LEVEL SECURITY` non viene annullato dal rollback della transazione dell'SQL Editor).
+- **Hardening (luglio 2026):** `scripts/supabase-security-hardening.sql` stringe ulteriormente le policy: tutte richiedono l'**appartenenza al lab** (`is_lab_member()`, non basta un account Supabase qualsiasi creato via sign-up); un **trigger anti-escalation** su `lab_users` impedisce ai non-admin di modificare `role`/`is_admin`/`email` (anche sulla propria riga); un **exclusion constraint** su `bookings` rende impossibili le doppie prenotazioni sovrapposte a livello di database; le funzioni `SECURITY DEFINER` hanno `search_path` fissato. Consigliato inoltre disattivare i sign-up pubblici (Dashboard → Authentication). Lato app: i fetch distinguono "errore di connessione" da "tabella vuota" (i dati demo non risorgono più), le scritture fallite mostrano un **banner rosso** invece di perdere dati in silenzio, e il log attività è limitato alle ultime 500 voci al caricamento.
   - ⚠️ Le policy fanno match su `auth.jwt() ->> 'email'` con `lab_users.email`: se l'email di login di un utente **non coincide** con la sua riga in `lab_users`, quell'utente non vedrà i dati.
 
 ### Ruoli (da `data/lab-data.ts`)

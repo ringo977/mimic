@@ -79,6 +79,11 @@ export default function InstrumentsPage() {
     setBooking(true);
     // Re-check against the freshest server state to reduce double-booking races.
     const fresh = await fetchBookingsForSlot(selectedInstrument, selectedDate);
+    if (fresh === null) {
+      setBooking(false);
+      setBookError('Could not verify availability (connection problem). Please try again.');
+      return;
+    }
     if (overlaps(bookStartHour, bookEndHour, fresh)) {
       setBooking(false);
       setBookError('Someone just booked an overlapping slot. Please pick another time.');

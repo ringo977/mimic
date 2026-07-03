@@ -42,7 +42,8 @@ function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at'> {
   };
 }
 
-export async function fetchLabUsers(): Promise<LabUser[]> {
+// Returns null on error so callers can distinguish "fetch failed" from "no users".
+export async function fetchLabUsers(): Promise<LabUser[] | null> {
   const { data, error } = await supabase
     .from('lab_users')
     .select('*')
@@ -50,7 +51,7 @@ export async function fetchLabUsers(): Promise<LabUser[]> {
 
   if (error) {
     console.error('Failed to fetch lab users:', error.message);
-    return [];
+    return null;
   }
 
   return (data || []).map(toLabUser);

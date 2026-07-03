@@ -105,6 +105,17 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [locations, setLocations] = useState<Location[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
   const [loaded, setLoaded] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Watch a fire-and-forget persistence call: if it fails (null/false result
+  // or rejection), surface a visible warning instead of losing data silently.
+  const track = useCallback((p: Promise<unknown>, what: string) => {
+    p.then(res => {
+      if (res === null || res === false) setSyncError(`${what}: the change was NOT saved to the server. Check your connection, then reload and retry.`);
+    }).catch(() => {
+      setSyncError(`${what}: the change was NOT saved to the server. Check your connection, then reload and retry.`);
+    });
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -136,20 +147,27 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         fetchManuals(),
       ]);
 
-      // Use Supabase data if available, else fall back to localStorage/mock
-      setUsers(sbUsers.length > 0 ? sbUsers : (localData.users as LabUser[]) || [...mockUsers]);
-      setInstruments(sbInstruments.length > 0 ? sbInstruments : (localData.instruments ? mergeMockDefaults(localData.instruments as Instrument[], mockInstruments, del) : [...mockInstruments]));
-      setLocations(sbLocations.length > 0 ? sbLocations : (localData.locations ? mergeMockDefaults(localData.locations as Location[], mockLocations, del) : [...mockLocations]));
-      setProjects(sbProjects.length > 0 ? sbProjects : (localData.projects ? mergeMockDefaults(localData.projects as Project[], mockProjects, del) : [...mockProjects]));
-      setCertifications(sbCertifications.length > 0 ? sbCertifications : (localData.certifications ? mergeMockDefaults(localData.certifications as Certification[], mockCertifications, del) : [...mockCertifications]));
-      setStorageUnits(sbStorageUnits.length > 0 ? sbStorageUnits : (localData.storageUnits ? mergeMockDefaults(migrateStorageUnits((localData.storageUnits || localData.dewars) as StorageUnit[]), mockStorageUnits, del) : [...mockStorageUnits]));
-      setReagents(sbReagents.length > 0 ? sbReagents : (localData.reagents ? migrateReagentCategories(mergeMockDefaults(localData.reagents as Reagent[], mockReagents, del)) : [...mockReagents]));
-      setBookings(sbBookings.length > 0 ? sbBookings : (localData.bookings as Booking[]) || getInitialBookings());
-      setCryoVials(sbCryoVials.length > 0 ? sbCryoVials : (localData.cryoVials as CryoVial[]) || getInitialCryoVials());
-      setWishlist(sbWishlist.length > 0 ? sbWishlist : (localData.wishlist as WishlistItem[]) || getInitialWishlist());
-      setLog(sbLog.length > 0 ? sbLog : (localData.log as LogEntry[]) || getInitialLog());
+      // Use Supabase data when the fetch succeeded (even if the table is
+      // empty). Fall back to localStorage/mock ONLY when the fetch failed
+      // (null) — e.g. DB unreachable — and warn the user we're offline.
+      setUsers(sbUsers ?? (localData.users as LabUser[]) ?? [...mockUsers]);
+      setInstruments(sbInstruments ?? (localData.instruments ? mergeMockDefaults(localData.instruments as Instrument[], mockInstruments, del) : [...mockInstruments]));
+      setLocations(sbLocations ?? (localData.locations ? mergeMockDefaults(localData.locations as Location[], mockLocations, del) : [...mockLocations]));
+      setProjects(sbProjects ?? (localData.projects ? mergeMockDefaults(localData.projects as Project[], mockProjects, del) : [...mockProjects]));
+      setCertifications(sbCertifications ?? (localData.certifications ? mergeMockDefaults(localData.certifications as Certification[], mockCertifications, del) : [...mockCertifications]));
+      setStorageUnits(sbStorageUnits ?? (localData.storageUnits ? mergeMockDefaults(migrateStorageUnits((localData.storageUnits || localData.dewars) as StorageUnit[]), mockStorageUnits, del) : [...mockStorageUnits]));
+      setReagents(sbReagents ?? (localData.reagents ? migrateReagentCategories(mergeMockDefaults(localData.reagents as Reagent[], mockReagents, del)) : [...mockReagents]));
+      setBookings(sbBookings ?? (localData.bookings as Booking[]) ?? getInitialBookings());
+      setCryoVials(sbCryoVials ?? (localData.cryoVials as CryoVial[]) ?? getInitialCryoVials());
+      setWishlist(sbWishlist ?? (localData.wishlist as WishlistItem[]) ?? getInitialWishlist());
+      setLog(sbLog ?? (localData.log as LogEntry[]) ?? getInitialLog());
+      setManuals(sbManuals ?? (localData.manuals ? mergeMockDefaults(localData.manuals as Manual[], mockManuals, del) : [...mockManuals]));
 
-      setManuals(sbManuals.length > 0 ? sbManuals : (localData.manuals ? mergeMockDefaults(localData.manuals as Manual[], mockManuals, del) : [...mockManuals]));
+      // If any core fetch failed, the data on screen is a local fallback —
+      // make that visible instead of silently showing stale/demo data.
+      if ([sbUsers, sbInstruments, sbReagents, sbBookings, sbCryoVials, sbWishlist, sbManuals].some(x => x === null)) {
+        setSyncError('Could not load data from the server — showing local fallback data. Changes may not be saved. Check your connection and reload.');
+      }
 
       // Booking settings: Supabase → localStorage → defaults
       const sbSettings = await fetchAppSetting<Partial<BookingSettings>>(BOOKING_SETTINGS_KEY);
@@ -182,15 +200,15 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const addBooking = useCallback((b: Omit<Booking, 'id' | 'createdAt'>) => {
     const full: Booking = { ...b, id: generateId(), createdAt: new Date().toISOString() };
     setBookings(prev => [...prev, full]);
-    upsertBooking(full);
+    track(upsertBooking(full), 'Booking');
     addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
-  }, [addLogEntry]);
+  }, [addLogEntry, track]);
 
   const updateBooking = useCallback((b: Booking) => {
     setBookings(prev => prev.map(x => x.id === b.id ? b : x));
-    upsertBooking(b);
+    track(upsertBooking(b), 'Booking update');
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
-  }, [user, addLogEntry]);
+  }, [user, addLogEntry, track]);
 
   const removeBooking = useCallback((id: string) => {
     setBookings(prev => {
@@ -198,46 +216,46 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${bk.instrumentId}`, category: 'booking', details: bk.date });
       return prev.filter(b => b.id !== id);
     });
-    deleteBooking(id);
-  }, [user, addLogEntry]);
+    track(deleteBooking(id), 'Booking cancellation');
+  }, [user, addLogEntry, track]);
 
   const updateBookingSettings = useCallback((s: BookingSettings) => {
     const clean = sanitizeBookingSettings(s);
     setBookingSettings(clean);
-    upsertAppSetting(BOOKING_SETTINGS_KEY, clean);
+    track(upsertAppSetting(BOOKING_SETTINGS_KEY, clean), 'Booking hours');
     addLogEntry({ userId: user.id, userName: user.name, action: 'Updated booking hours', category: 'booking', details: `Work ${clean.workStartHour}:00-${clean.workEndHour}:00, open ${clean.openStartHour}:00-${clean.openEndHour}:00, ${clean.slotMinutes}min slots` });
-  }, [user, addLogEntry]);
+  }, [user, addLogEntry, track]);
 
   // ---- Reagents ----
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
     setReagents(prev => {
       const updated = prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.max(0, r.currentStock - amount) } : r);
       const r = updated.find(x => x.id === reagentId);
-      if (r) upsertReagent(r);
+      if (r) track(upsertReagent(r), 'Reagent withdrawal');
       return updated;
     });
     const rg = reagents.find(r => r.id === reagentId);
     addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${amount} ${rg?.unit || ''} - ${purpose} (${project})` });
-  }, [user, reagents, addLogEntry]);
+  }, [user, reagents, addLogEntry, track]);
 
   const addReagentStock = useCallback((reagentId: string, amount: number) => {
     setReagents(prev => {
       const updated = prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.min(r.maxStock, r.currentStock + amount) } : r);
       const r = updated.find(x => x.id === reagentId);
-      if (r) upsertReagent(r);
+      if (r) track(upsertReagent(r), 'Reagent restock');
       return updated;
     });
     const rg = reagents.find(r => r.id === reagentId);
     addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${rg?.name || reagentId}`, category: 'reagent', details: `+${amount} ${rg?.unit || ''}` });
-  }, [user, reagents, addLogEntry]);
+  }, [user, reagents, addLogEntry, track]);
 
   // ---- Cryo ----
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {
     const full: CryoVial = { ...v, id: generateId() };
     setCryoVials(prev => [...prev, full]);
-    upsertCryoVial(full);
+    track(upsertCryoVial(full), 'Cryo vial');
     addLogEntry({ userId: user.id, userName: user.name, action: `Stored vial ${v.cellLine}`, category: 'cryo', details: `${v.storageUnitId} R${v.rack} B${v.box}, P${v.passage}` });
-  }, [user, addLogEntry]);
+  }, [user, addLogEntry, track]);
 
   const removeCryoVial = useCallback((id: string) => {
     setCryoVials(prev => {
@@ -245,16 +263,16 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       if (vl) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vl.cellLine}`, category: 'cryo', details: `${vl.storageUnitId} R${vl.rack} B${vl.box}, P${vl.passage}` });
       return prev.filter(v => v.id !== id);
     });
-    deleteCryoVial(id);
-  }, [user, addLogEntry]);
+    track(deleteCryoVial(id), 'Cryo vial removal');
+  }, [user, addLogEntry, track]);
 
   // ---- Wishlist ----
   const addWishlistItem = useCallback((item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => {
     const full: WishlistItem = { ...item, id: generateId(), timestamp: new Date().toISOString(), status: 'pending' };
     setWishlist(prev => [...prev, full]);
-    upsertWishlistItem(full);
+    track(upsertWishlistItem(full), 'Wishlist request');
     addLogEntry({ userId: user.id, userName: user.name, action: `Requested ${item.name}`, category: 'wishlist', details: `${item.supplier} ${item.catalogNumber}` });
-  }, [user, addLogEntry]);
+  }, [user, addLogEntry, track]);
 
   const updateWishlistStatus = useCallback((id: string, status: WishlistItem['status'], approvedBy?: string) => {
     setWishlist(prev => {
@@ -263,28 +281,31 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         deliveredAt: status === 'delivered' ? new Date().toISOString() : w.deliveredAt,
       } : w);
       const w = updated.find(x => x.id === id);
-      if (w) upsertWishlistItem(w);
+      if (w) track(upsertWishlistItem(w), 'Wishlist update');
       return updated;
     });
     const it = wishlist.find(w => w.id === id);
     addLogEntry({ userId: user.id, userName: user.name, action: `${status} ${it?.name || id}`, category: 'wishlist', details: `Status → ${status}` });
-  }, [user, wishlist, addLogEntry]);
+  }, [user, wishlist, addLogEntry, track]);
 
   // ---- Users (Supabase) ----
   const addUser = useCallback(async (u: LabUser) => {
     const result = await insertLabUser(u);
+    if (!result) setSyncError(`User "${u.name}": the change was NOT saved to the server. Check your connection, then reload and retry.`);
     setUsers(prev => [...prev, result || u]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Added user ${u.name}`, category: 'auth', details: `${u.role}, ${u.email}` });
   }, [user, addLogEntry]);
 
   const updateUser = useCallback(async (u: LabUser) => {
-    await updateLabUser(u);
+    const ok = await updateLabUser(u);
+    if (!ok) setSyncError(`User "${u.name}": the change was NOT saved to the server. Check your connection, then reload and retry.`);
     setUsers(prev => prev.map(x => x.id === u.id ? u : x));
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated user ${u.name}`, category: 'auth', details: u.role });
   }, [user, addLogEntry]);
 
   const removeUser = useCallback(async (id: string) => {
-    await deleteLabUser(id);
+    const ok = await deleteLabUser(id);
+    if (!ok) setSyncError('User removal: the change was NOT saved to the server. Check your connection, then reload and retry.');
     setUsers(prev => {
       const u2 = prev.find(x => x.id === id);
       if (u2) addLogEntry({ userId: user.id, userName: user.name, action: `Removed user ${u2.name}`, category: 'auth', details: u2.email });
@@ -293,39 +314,39 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [user, addLogEntry]);
 
   // ---- Reagents CRUD ----
-  const addNewReagent = useCallback((r: Reagent) => { setReagents(prev => [...prev, r]); upsertReagent(r); addLogEntry({ userId: user.id, userName: user.name, action: `Added reagent ${r.name}`, category: 'reagent', details: `${r.supplier} ${r.catalogNumber}` }); }, [user, addLogEntry]);
-  const updateReagent = useCallback((r: Reagent) => { setReagents(prev => prev.map(x => x.id === r.id ? r : x)); upsertReagent(r); }, []);
-  const removeReagent = useCallback((id: string) => { setReagents(prev => { const r = prev.find(x => x.id === id); if (r) addLogEntry({ userId: user.id, userName: user.name, action: `Removed reagent ${r.name}`, category: 'reagent', details: r.catalogNumber }); return prev.filter(x => x.id !== id); }); deleteReagent(id); }, [user, addLogEntry]);
+  const addNewReagent = useCallback((r: Reagent) => { setReagents(prev => [...prev, r]); track(upsertReagent(r), `Reagent "${r.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added reagent ${r.name}`, category: 'reagent', details: `${r.supplier} ${r.catalogNumber}` }); }, [user, addLogEntry, track]);
+  const updateReagent = useCallback((r: Reagent) => { setReagents(prev => prev.map(x => x.id === r.id ? r : x)); track(upsertReagent(r), `Reagent "${r.name}"`); }, [track]);
+  const removeReagent = useCallback((id: string) => { setReagents(prev => { const r = prev.find(x => x.id === id); if (r) addLogEntry({ userId: user.id, userName: user.name, action: `Removed reagent ${r.name}`, category: 'reagent', details: r.catalogNumber }); return prev.filter(x => x.id !== id); }); track(deleteReagent(id), 'Reagent removal'); }, [user, addLogEntry, track]);
 
   // ---- Instruments ----
-  const addInstrument = useCallback((i: Instrument) => { setInstruments(prev => [...prev, i]); upsertInstrument(i); addLogEntry({ userId: user.id, userName: user.name, action: `Added instrument ${i.name}`, category: 'booking', details: `${i.category}, ${i.location}` }); }, [user, addLogEntry]);
-  const updateInstrument = useCallback((i: Instrument) => { setInstruments(prev => prev.map(x => x.id === i.id ? i : x)); upsertInstrument(i); }, []);
-  const removeInstrument = useCallback((id: string) => { setInstruments(prev => { const i = prev.find(x => x.id === id); if (i) addLogEntry({ userId: user.id, userName: user.name, action: `Removed instrument ${i.name}`, category: 'booking', details: i.category }); return prev.filter(x => x.id !== id); }); deleteInstrument(id); }, [user, addLogEntry]);
+  const addInstrument = useCallback((i: Instrument) => { setInstruments(prev => [...prev, i]); track(upsertInstrument(i), `Instrument "${i.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added instrument ${i.name}`, category: 'booking', details: `${i.category}, ${i.location}` }); }, [user, addLogEntry, track]);
+  const updateInstrument = useCallback((i: Instrument) => { setInstruments(prev => prev.map(x => x.id === i.id ? i : x)); track(upsertInstrument(i), `Instrument "${i.name}"`); }, [track]);
+  const removeInstrument = useCallback((id: string) => { setInstruments(prev => { const i = prev.find(x => x.id === id); if (i) addLogEntry({ userId: user.id, userName: user.name, action: `Removed instrument ${i.name}`, category: 'booking', details: i.category }); return prev.filter(x => x.id !== id); }); track(deleteInstrument(id), 'Instrument removal'); }, [user, addLogEntry, track]);
 
   // ---- Manuals ----
-  const addManual = useCallback((m: Manual) => { setManuals(prev => [...prev, m]); upsertManual(m); addLogEntry({ userId: user.id, userName: user.name, action: `Added manual ${m.title}`, category: 'manual', details: m.category }); }, [user, addLogEntry]);
-  const updateManual = useCallback((m: Manual) => { setManuals(prev => prev.map(x => x.id === m.id ? m : x)); upsertManual(m); }, []);
-  const removeManual = useCallback((id: string) => { setManuals(prev => { const m = prev.find(x => x.id === id); if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category }); return prev.filter(x => x.id !== id); }); deleteManual(id); }, [user, addLogEntry]);
+  const addManual = useCallback((m: Manual) => { setManuals(prev => [...prev, m]); track(upsertManual(m), `Document "${m.title}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added manual ${m.title}`, category: 'manual', details: m.category }); }, [user, addLogEntry, track]);
+  const updateManual = useCallback((m: Manual) => { setManuals(prev => prev.map(x => x.id === m.id ? m : x)); track(upsertManual(m), `Document "${m.title}"`); }, [track]);
+  const removeManual = useCallback((id: string) => { setManuals(prev => { const m = prev.find(x => x.id === id); if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category }); return prev.filter(x => x.id !== id); }); track(deleteManual(id), 'Document removal'); }, [user, addLogEntry, track]);
 
   // ---- Storage Units ----
-  const addStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => [...prev, s]); upsertStorageUnit(s); addLogEntry({ userId: user.id, userName: user.name, action: `Added storage unit ${s.name}`, category: 'cryo', details: `${s.type}, ${s.temperature}` }); }, [user, addLogEntry]);
-  const updateStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => prev.map(x => x.id === s.id ? s : x)); upsertStorageUnit(s); }, []);
-  const removeStorageUnit = useCallback((id: string) => { setStorageUnits(prev => { const s = prev.find(x => x.id === id); if (s) addLogEntry({ userId: user.id, userName: user.name, action: `Removed storage unit ${s.name}`, category: 'cryo', details: s.type }); return prev.filter(x => x.id !== id); }); deleteStorageUnit(id); }, [user, addLogEntry]);
+  const addStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => [...prev, s]); track(upsertStorageUnit(s), `Storage unit "${s.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added storage unit ${s.name}`, category: 'cryo', details: `${s.type}, ${s.temperature}` }); }, [user, addLogEntry, track]);
+  const updateStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => prev.map(x => x.id === s.id ? s : x)); track(upsertStorageUnit(s), `Storage unit "${s.name}"`); }, [track]);
+  const removeStorageUnit = useCallback((id: string) => { setStorageUnits(prev => { const s = prev.find(x => x.id === id); if (s) addLogEntry({ userId: user.id, userName: user.name, action: `Removed storage unit ${s.name}`, category: 'cryo', details: s.type }); return prev.filter(x => x.id !== id); }); track(deleteStorageUnit(id), 'Storage unit removal'); }, [user, addLogEntry, track]);
 
   // ---- Projects ----
-  const addProject = useCallback((p: Project) => { setProjects(prev => [...prev, p]); upsertProject(p); addLogEntry({ userId: user.id, userName: user.name, action: `Added project ${p.name}`, category: 'auth', details: p.description }); }, [user, addLogEntry]);
-  const updateProject = useCallback((p: Project) => { setProjects(prev => prev.map(x => x.id === p.id ? p : x)); upsertProject(p); }, []);
-  const removeProject = useCallback((id: string) => { setProjects(prev => { const p = prev.find(x => x.id === id); if (p) addLogEntry({ userId: user.id, userName: user.name, action: `Removed project ${p.name}`, category: 'auth', details: p.description }); return prev.filter(x => x.id !== id); }); deleteProject(id); }, [user, addLogEntry]);
+  const addProject = useCallback((p: Project) => { setProjects(prev => [...prev, p]); track(upsertProject(p), `Project "${p.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added project ${p.name}`, category: 'auth', details: p.description }); }, [user, addLogEntry, track]);
+  const updateProject = useCallback((p: Project) => { setProjects(prev => prev.map(x => x.id === p.id ? p : x)); track(upsertProject(p), `Project "${p.name}"`); }, [track]);
+  const removeProject = useCallback((id: string) => { setProjects(prev => { const p = prev.find(x => x.id === id); if (p) addLogEntry({ userId: user.id, userName: user.name, action: `Removed project ${p.name}`, category: 'auth', details: p.description }); return prev.filter(x => x.id !== id); }); track(deleteProject(id), 'Project removal'); }, [user, addLogEntry, track]);
 
   // ---- Certifications ----
-  const addCertification = useCallback((c: Certification) => { setCertifications(prev => [...prev, c]); upsertCertification(c); addLogEntry({ userId: user.id, userName: user.name, action: `Added cert ${c.name}`, category: 'auth', details: c.description }); }, [user, addLogEntry]);
-  const updateCertification = useCallback((c: Certification) => { setCertifications(prev => prev.map(x => x.id === c.id ? c : x)); upsertCertification(c); }, []);
-  const removeCertification = useCallback((id: string) => { setCertifications(prev => { const c = prev.find(x => x.id === id); if (c) addLogEntry({ userId: user.id, userName: user.name, action: `Removed cert ${c.name}`, category: 'auth', details: c.description }); return prev.filter(x => x.id !== id); }); deleteCertification(id); }, [user, addLogEntry]);
+  const addCertification = useCallback((c: Certification) => { setCertifications(prev => [...prev, c]); track(upsertCertification(c), `Certification "${c.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added cert ${c.name}`, category: 'auth', details: c.description }); }, [user, addLogEntry, track]);
+  const updateCertification = useCallback((c: Certification) => { setCertifications(prev => prev.map(x => x.id === c.id ? c : x)); track(upsertCertification(c), `Certification "${c.name}"`); }, [track]);
+  const removeCertification = useCallback((id: string) => { setCertifications(prev => { const c = prev.find(x => x.id === id); if (c) addLogEntry({ userId: user.id, userName: user.name, action: `Removed cert ${c.name}`, category: 'auth', details: c.description }); return prev.filter(x => x.id !== id); }); track(deleteCertification(id), 'Certification removal'); }, [user, addLogEntry, track]);
 
   // ---- Locations ----
-  const addLocation = useCallback((l: Location) => { setLocations(prev => [...prev, l]); upsertLocation(l); addLogEntry({ userId: user.id, userName: user.name, action: `Added location ${l.name}`, category: 'auth', details: `${l.building || ''} ${l.floor || ''}`.trim() }); }, [user, addLogEntry]);
-  const updateLocation = useCallback((l: Location) => { setLocations(prev => prev.map(x => x.id === l.id ? l : x)); upsertLocation(l); }, []);
-  const removeLocation = useCallback((id: string) => { setLocations(prev => { const l = prev.find(x => x.id === id); if (l) addLogEntry({ userId: user.id, userName: user.name, action: `Removed location ${l.name}`, category: 'auth', details: '' }); return prev.filter(x => x.id !== id); }); deleteLocation(id); }, [user, addLogEntry]);
+  const addLocation = useCallback((l: Location) => { setLocations(prev => [...prev, l]); track(upsertLocation(l), `Location "${l.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added location ${l.name}`, category: 'auth', details: `${l.building || ''} ${l.floor || ''}`.trim() }); }, [user, addLogEntry, track]);
+  const updateLocation = useCallback((l: Location) => { setLocations(prev => prev.map(x => x.id === l.id ? l : x)); track(upsertLocation(l), `Location "${l.name}"`); }, [track]);
+  const removeLocation = useCallback((id: string) => { setLocations(prev => { const l = prev.find(x => x.id === id); if (l) addLogEntry({ userId: user.id, userName: user.name, action: `Removed location ${l.name}`, category: 'auth', details: '' }); return prev.filter(x => x.id !== id); }); track(deleteLocation(id), 'Location removal'); }, [user, addLogEntry, track]);
 
   if (!loaded) return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-50"><div className="animate-pulse text-gray-500 font-manrope">Loading Lab Manager...</div></div>;
 
@@ -352,6 +373,13 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       locations, addLocation, updateLocation, removeLocation,
     }}>
       {children}
+      {syncError && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[95] max-w-lg w-[calc(100%-2rem)] bg-red-600 text-white rounded-xl shadow-lg px-4 py-3 flex items-start gap-3 font-manrope">
+          <span className="text-sm leading-snug flex-1">{syncError}</span>
+          <button onClick={() => window.location.reload()} className="shrink-0 px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-xs font-semibold">Reload</button>
+          <button onClick={() => setSyncError(null)} className="shrink-0 px-2 py-1 rounded-lg hover:bg-white/20 text-xs font-semibold" aria-label="Dismiss">✕</button>
+        </div>
+      )}
     </LabContext.Provider>
   );
 }
