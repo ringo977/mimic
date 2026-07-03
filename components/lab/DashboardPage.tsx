@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon } from 'lucide-react';
+import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
@@ -22,6 +22,35 @@ function startOfWeek(ref: Date): Date {
 
 const EPS = 1e-9;
 const HOUR_PX = 46; // pixel height of one hour row
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia(query);
+    const update = () => setMatches(m.matches);
+    update();
+    m.addEventListener('change', update);
+    return () => m.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
+
+// "Add to Google Calendar" pre-filled event link (no account linking needed).
+function googleCalendarUrl(b: Booking, instrumentName: string): string {
+  const stamp = (dateStr: string, hour: number) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d, Math.floor(hour), Math.round((hour % 1) * 60));
+    return dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  };
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `${instrumentName} — MiMic Lab booking`,
+    dates: `${stamp(b.date, b.startHour)}/${stamp(b.date, b.endHour)}`,
+    details: b.notes || 'Lab instrument booking',
+    location: 'MiMic Lab, Politecnico di Milano',
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
 
 // A booking is 'past' once it has fully ended, 'current' while running, else 'future'.
 function bookingStatus(b: Booking, todayStr: string, nowHour: number): 'past' | 'current' | 'future' {
@@ -94,6 +123,23 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [newEnd, setNewEnd] = useState<number>(existing?.endHour ?? 0);
+
+  // In-progress booking owned by the user: end time can still be adjusted,
+  // but never earlier than now. (Works on touch devices too, where the
+  // drag-to-resize gesture is unavailable.)
+  const extendOptions = existing
+    ? [...slots.filter(s => s > Math.max(nowHour, existing.startHour) + EPS), bookingSettings.openEndHour]
+    : [];
+  const saveNewEnd = () => {
+    if (!existing || newEnd === existing.endHour) return;
+    const clash = bookings.some(b =>
+      b.instrumentId === existing.instrumentId && b.date === existing.date && b.id !== existing.id &&
+      existing.startHour < b.endHour - EPS && newEnd > b.startHour + EPS);
+    if (clash) { setError('Time conflict with an existing booking.'); return; }
+    updateBooking({ ...existing, endHour: newEnd });
+    onClose();
+  };
 
   const bookableInstruments = instruments.filter(i => !i.requiresCertification || user.certifications.includes(i.id) || i.id === instrumentId);
   const inst = instruments.find(i => i.id === (instrumentId || existing?.instrumentId));
@@ -153,6 +199,17 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
               {existing.notes && <p className="text-sm text-gray-600 font-manrope pl-6">{existing.notes}</p>}
             </div>
 
+            {status !== 'past' && (
+              <a
+                href={googleCalendarUrl(existing, inst?.name || existing.instrumentId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold font-manrope bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 transition-colors"
+              >
+                <CalendarPlus size={14} /> Add to Google Calendar
+              </a>
+            )}
+
             {confirmingCancel ? (
               <div className="bg-red-50 border border-red-100 rounded-xl p-3">
                 <p className="text-sm text-red-700 font-manrope mb-3">{isMine ? 'Cancel your booking?' : `Cancel ${existing.userName}'s booking?`}</p>
@@ -167,9 +224,29 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
                 <button onClick={() => setConfirmingCancel(true)} className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-semibold font-manrope hover:bg-red-100 transition-colors"><Trash2 size={15} /> Cancel</button>
               </div>
             ) : isMine && status === 'current' ? (
-              <div className="bg-blue-50 text-blue-700 px-3 py-2.5 rounded-xl text-xs font-manrope flex items-start gap-2">
-                <Clock size={14} className="shrink-0 mt-0.5" />
-                <span>This booking is in progress. You can only lengthen or shorten its end by dragging its bottom edge on the calendar (not before the current time). It can&rsquo;t be moved or cancelled.</span>
+              <div className="bg-blue-50 rounded-xl p-3 space-y-2">
+                <p className="text-xs text-blue-700 font-manrope flex items-start gap-2">
+                  <Clock size={14} className="shrink-0 mt-0.5" />
+                  <span>This booking is in progress: you can only adjust when it ends (not before now). It can&rsquo;t be moved or cancelled.</span>
+                </p>
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={newEnd}
+                    onChange={e => { setNewEnd(Number(e.target.value)); setError(''); }}
+                    className="flex-1 px-3 py-2 border border-blue-200 rounded-xl text-sm font-manrope bg-white outline-none"
+                  >
+                    {!extendOptions.some(h => Math.abs(h - existing.endHour) < EPS) && <option value={existing.endHour}>{formatTime(existing.endHour)} (current)</option>}
+                    {extendOptions.map(h => <option key={h} value={h}>{formatTime(h)}{Math.abs(h - existing.endHour) < EPS ? ' (current)' : ''}</option>)}
+                  </select>
+                  <button
+                    onClick={saveNewEnd}
+                    disabled={newEnd === existing.endHour}
+                    className="px-4 py-2 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40"
+                  >
+                    Update end
+                  </button>
+                </div>
+                {error && <p className="text-xs text-red-600 font-manrope">{error}</p>}
               </div>
             ) : isMine && status === 'past' ? (
               <p className="text-xs text-gray-400 font-manrope text-center pt-1">This booking has ended and can no longer be changed. Contact an admin if needed.</p>
@@ -290,6 +367,11 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   const dragRef = useRef<DragState | null>(null);
   const setDrag = (d: DragState | null) => { dragRef.current = d; setDragState(d); };
 
+  // On phones: 3-day view starting from today, tap-based interactions
+  // (drag conflicts with touch scrolling), narrower time axis.
+  const isMobile = useMediaQuery('(max-width: 640px)');
+  const daysToShow = isMobile ? 3 : 7;
+
   const now = new Date();
   const todayStr = localDateStr(now);
   const nowHour = now.getHours() + now.getMinutes() / 60;
@@ -300,8 +382,11 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
     return map;
   }, [instruments]);
 
-  const weekStart = useMemo(() => { const s = startOfWeek(new Date()); s.setDate(s.getDate() + weekOffset * 7); return s; }, [weekOffset]);
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate() + i); return d; }), [weekStart]);
+  const rangeStartDate = useMemo(() => {
+    if (isMobile) { const s = new Date(); s.setHours(12, 0, 0, 0); s.setDate(s.getDate() + weekOffset * 3); return s; }
+    const s = startOfWeek(new Date()); s.setDate(s.getDate() + weekOffset * 7); return s;
+  }, [weekOffset, isMobile]);
+  const days = useMemo(() => Array.from({ length: daysToShow }, (_, i) => { const d = new Date(rangeStartDate); d.setDate(rangeStartDate.getDate() + i); return d; }), [rangeStartDate, daysToShow]);
 
   // Visible time range, inspired by Agora's presets (Work day / Compact / All hours)
   const [rangeStart, rangeEnd] = preset === 'work'
@@ -333,6 +418,12 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
     const colTop = e.currentTarget.getBoundingClientRect().top;
     const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
     setDrag({ kind: 'create', date: ds, colTop, anchor: h, start: h, end: Math.min(h + slotStep, maxH), moved: false });
+  };
+  // Mobile: a plain tap opens the create form (dragging would fight with scrolling).
+  const tapCreate = (e: React.MouseEvent<HTMLDivElement>, ds: string) => {
+    const colTop = e.currentTarget.getBoundingClientRect().top;
+    const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
+    setModal({ mode: 'create', date: ds, startHour: h, endHour: Math.min(h + 1, maxH) });
   };
   const ceilSlot = (h: number) => Math.min(Math.ceil((h - EPS) / slotStep) * slotStep, maxH);
   // Lowest start/end a NON-manager may drag a booking to. Managers (admins) are free.
@@ -409,7 +500,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
     });
   };
 
-  const weekRangeLabel = `${days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${days[6].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  const weekRangeLabel = `${days[0].toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${days[days.length - 1].toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   const weekBookingCount = days.reduce((acc, d) => acc + visibleBookings.filter(b => b.date === localDateStr(d)).length, 0);
 
   const presetLabels: Record<RangePreset, string> = {
@@ -471,10 +562,10 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
 
       {/* Time-grid week view */}
       <div className="overflow-x-auto">
-        <div className="min-w-[820px]">
+        <div className={isMobile ? '' : 'min-w-[820px]'}>
           {/* Day headers */}
           <div className="flex border-b border-gray-100">
-            <div className="w-[52px] shrink-0" />
+            <div className={`${isMobile ? 'w-[40px]' : 'w-[52px]'} shrink-0`} />
             {days.map(d => {
               const isToday = localDateStr(d) === todayStr;
               return (
@@ -489,7 +580,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
           {/* Grid body */}
           <div className="flex">
             {/* Time axis */}
-            <div className="w-[52px] shrink-0 relative" style={{ height: gridHeight }}>
+            <div className={`${isMobile ? 'w-[40px]' : 'w-[52px]'} shrink-0 relative`} style={{ height: gridHeight }}>
               {hourMarks.map(h => (
                 <div key={h} className="absolute right-2 text-[10px] font-mono text-gray-400 -translate-y-1/2" style={{ top: (h - rangeStart) * HOUR_PX }}>
                   {h < 24 ? formatTime(h) : ''}
@@ -504,7 +595,14 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
               const dayLayout = layoutDayEvents(visibleBookings.filter(b => b.date === ds));
               const ghost = drag && drag.date === ds ? drag : null;
               return (
-                <div key={ds} data-daycol onPointerDown={e => startCreate(e, ds)} className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`} style={{ height: gridHeight }}>
+                <div
+                  key={ds}
+                  data-daycol
+                  onPointerDown={isMobile ? undefined : e => startCreate(e, ds)}
+                  onClick={isMobile ? e => tapCreate(e, ds) : undefined}
+                  className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`}
+                  style={{ height: gridHeight }}
+                >
                   {/* Hour bands + gridlines */}
                   {hourMarks.slice(0, -1).map(h => {
                     const working = isWorkingHour(h, bookingSettings);
@@ -530,10 +628,11 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                     const inst = instruments.find(i => i.id === ev.instrumentId);
                     const isMine = ev.userId === user.id;
                     const status = bookingStatus(ev, todayStr, nowHour);
-                    // Full drag (move + both edges): managers always; owners only on future bookings.
-                    const fullDrag = canManageAllBookings || (isMine && status === 'future');
+                    // Full drag (move + both edges): managers always; owners only on future
+                    // bookings. On mobile everything is tap-to-open (drag fights scrolling).
+                    const fullDrag = !isMobile && (canManageAllBookings || (isMine && status === 'future'));
                     // In-progress bookings owned by the user: only the END can be dragged.
-                    const endOnly = !fullDrag && isMine && status === 'current';
+                    const endOnly = !isMobile && !fullDrag && isMine && status === 'current';
                     const draggingThis = !!drag && drag.kind !== 'create' && drag.booking.id === ev.id;
                     const color = colorOf.get(ev.instrumentId) || '#64748b';
                     const start = Math.max(ev.startHour, rangeStart);
@@ -549,7 +648,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
                         onPointerDown={fullDrag ? e => startMove(e, ev) : undefined}
                         onClick={fullDrag ? undefined : e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
                         title={`${inst?.name || ev.instrumentId} · ${ev.userName} · ${formatTime(ev.startHour)}–${formatTime(ev.endHour)}${ev.notes ? ' · ' + ev.notes : ''}`}
-                        className={`absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 touch-none ${fullDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingThis ? 'opacity-30' : ''}`}
+                        className={`absolute rounded-md px-1.5 py-0.5 text-left overflow-hidden text-white shadow-sm hover:shadow-md hover:brightness-105 transition-all z-10 ${isMobile ? '' : 'touch-none'} ${fullDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'} ${draggingThis ? 'opacity-30' : ''}`}
                         style={{
                           top,
                           height,
@@ -589,7 +688,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" /> Color = instrument</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
         <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-500" /> Now</span>
-        <span className="ml-auto text-gray-400">Drag empty space to book · drag a booking to move · drag its edges to resize</span>
+        <span className="ml-auto text-gray-400">{isMobile
+          ? 'Tap empty space to book · tap a booking for details'
+          : 'Drag empty space to book · drag a booking to move · drag its edges to resize'}</span>
       </div>
 
       {modal && <BookingModal state={modal} onClose={() => setModal(null)} />}

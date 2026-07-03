@@ -17,7 +17,7 @@ import {
   fetchProjects, upsertProject, deleteProject,
   fetchCertifications, upsertCertification, deleteCertification,
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
-  fetchReagents, upsertReagent, deleteReagent,
+  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock,
   fetchBookings, upsertBooking, deleteBooking,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
   fetchWishlist, upsertWishlistItem,
@@ -227,27 +227,37 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [user, addLogEntry, track]);
 
   // ---- Reagents ----
+  // Stock changes go through an atomic server-side RPC (no lost updates when
+  // two people adjust the same reagent at once). Optimistic local update
+  // first, then reconcile with the value returned by the server. Falls back
+  // to the legacy full-row upsert if the RPC is not installed.
+  const changeReagentStock = useCallback((reagentId: string, delta: number, label: string) => {
+    setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.min(r.maxStock, Math.max(0, r.currentStock + delta)) } : r));
+    (async () => {
+      const newStock = await adjustReagentStock(reagentId, delta);
+      if (newStock !== null) {
+        setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: newStock } : r));
+      } else {
+        setReagents(prev => {
+          const r = prev.find(x => x.id === reagentId);
+          if (r) track(upsertReagent(r), label);
+          return prev;
+        });
+      }
+    })();
+  }, [track]);
+
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
-    setReagents(prev => {
-      const updated = prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.max(0, r.currentStock - amount) } : r);
-      const r = updated.find(x => x.id === reagentId);
-      if (r) track(upsertReagent(r), 'Reagent withdrawal');
-      return updated;
-    });
+    changeReagentStock(reagentId, -amount, 'Reagent withdrawal');
     const rg = reagents.find(r => r.id === reagentId);
     addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${amount} ${rg?.unit || ''} - ${purpose} (${project})` });
-  }, [user, reagents, addLogEntry, track]);
+  }, [user, reagents, addLogEntry, changeReagentStock]);
 
   const addReagentStock = useCallback((reagentId: string, amount: number) => {
-    setReagents(prev => {
-      const updated = prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.min(r.maxStock, r.currentStock + amount) } : r);
-      const r = updated.find(x => x.id === reagentId);
-      if (r) track(upsertReagent(r), 'Reagent restock');
-      return updated;
-    });
+    changeReagentStock(reagentId, amount, 'Reagent restock');
     const rg = reagents.find(r => r.id === reagentId);
     addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${rg?.name || reagentId}`, category: 'reagent', details: `+${amount} ${rg?.unit || ''}` });
-  }, [user, reagents, addLogEntry, track]);
+  }, [user, reagents, addLogEntry, changeReagentStock]);
 
   // ---- Cryo ----
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {

@@ -140,7 +140,9 @@ mimic/
 │   ├── sync-gitlab.sh         # Sync verso il monorepo GitLab
 │   ├── supabase-rls-policies.sql        # Policy di sicurezza (RLS) del database lab
 │   ├── supabase-booking-settings.sql    # Migrazione app_settings + mezz'ore
-│   └── supabase-security-hardening.sql  # Hardening: is_lab_member, anti-escalation, no-overlap
+│   ├── supabase-security-hardening.sql  # Hardening: is_lab_member, anti-escalation, no-overlap
+│   ├── supabase-reagent-stock-rpc.sql   # RPC atomica per lo stock reagenti (no lost update)
+│   └── supabase-schema-reference.sql    # Schema completo delle tabelle (disaster recovery)
 │
 ├── .github/workflows/
 │   └── keep-supabase-alive.yml  # Ping giornaliero per non far andare Supabase in pausa
@@ -347,8 +349,16 @@ Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + preno
 ### Tabelle Supabase usate (da `lib/supabase-data.ts`)
 `instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals`, **`app_settings`** (key/value JSONB per le impostazioni, es. orari prenotazione) (+ tabella utenti e storage file). Migrazione dedicata: `scripts/supabase-booking-settings.sql` (crea `app_settings` con RLS e converte `bookings.start_hour`/`end_hour` a `numeric` per le mezz'ore).
 
+### Stock reagenti (atomico)
+I prelievi/ricariche di stock passano dalla RPC `adjust_reagent_stock` (`scripts/supabase-reagent-stock-rpc.sql`): l'aggiornamento avviene in una singola UPDATE lato server (clampato tra 0 e max), quindi due persone che prelevano lo stesso reagente in contemporanea non si sovrascrivono più. Se la RPC non è installata l'app ricade sul vecchio salvataggio riga intera.
+
+### Calendario settimanale (dashboard)
+- Desktop: vista 7 giorni con drag per creare/spostare/ridimensionare le prenotazioni.
+- **Smartphone** (≤640px): vista **3 giorni** a partire da oggi, tutto **a tap** (tap su spazio vuoto = nuova prenotazione, tap su un blocco = dettagli); il drag è disattivato perché confligge con lo scroll touch. Le prenotazioni **in corso** si possono allungare/accorciare anche dal popup (menu "Update end"), non solo trascinando il bordo.
+- **Google Calendar:** nel popup dei dettagli c'è il pulsante **"Add to Google Calendar"** che apre un evento precompilato (titolo, orario, note). Non è una sincronizzazione automatica: per quella servirebbe un feed ICS servito da un backend (es. Supabase Edge Function), oggi assente perché il sito è statico.
+
 ### Backup
-`lib/backup.ts` consente backup/restore del database del lab (usa `jszip` per esportare).
+`lib/backup.ts` consente backup/restore del database del lab (usa `jszip` per esportare). Per un **disaster recovery completo** (progetto Supabase perso): `scripts/supabase-schema-reference.sql` ricrea tutte le tabelle e nel suo header elenca la procedura passo-passo (schema → RLS → hardening → bucket → restore JSON/PDF → utenti auth).
 
 > **Regola operativa:** non modificare il Lab Manager se non espressamente richiesto. È indipendente dal contenuto pubblico e ha la sua logica di sicurezza.
 

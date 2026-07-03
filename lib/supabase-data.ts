@@ -214,6 +214,18 @@ export async function upsertReagent(r: Reagent) {
 
 export async function deleteReagent(id: string) { return deleteRow('reagents', id); }
 
+// Atomic server-side stock adjustment (see scripts/supabase-reagent-stock-rpc.sql).
+// Returns the new stock, or null if the RPC is unavailable/failed — callers
+// should then fall back to the legacy full-row upsert.
+export async function adjustReagentStock(reagentId: string, delta: number): Promise<number | null> {
+  const { data, error } = await supabase.rpc('adjust_reagent_stock', { p_reagent_id: reagentId, p_delta: delta });
+  if (error || data === null || data === undefined) {
+    if (error) console.warn('adjust_reagent_stock RPC failed:', error.message);
+    return null;
+  }
+  return Number(data);
+}
+
 // ============================================================
 // Bookings
 // ============================================================
