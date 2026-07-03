@@ -4,14 +4,17 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download,
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
-  DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon } from 'lucide-react';
+  DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon,
+  Search, Archive, RotateCcw } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
+import UserDetailModal from './UserDetailModal';
 import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
-  rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels } from '@/data/lab-data';
+  rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
+  SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 
 type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'backup';
@@ -261,12 +264,51 @@ function UsersTab() {
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<LabUser | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [viewing, setViewing] = useState<LabUser | null>(null);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'alumni'>('active');
   const roles: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
   const affiliations: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'External'];
-  const empty = (): LabUser => ({ id: generateId(), email: '', name: '', abbreviation: '', role: 'phd', affiliation: 'DEIB', isAdmin: false, certifications: [], projects: [] });
+  const empty = (): LabUser => ({ id: generateId(), email: '', name: '', abbreviation: '', role: 'phd', affiliation: 'DEIB', isAdmin: false, certifications: [], projects: [], status: 'active' });
   const [form, setForm] = useState<LabUser>(empty());
-  const acc = useMemo(() => ({ name: (u: LabUser) => u.name, email: (u: LabUser) => u.email, role: (u: LabUser) => u.role, affiliation: (u: LabUser) => u.affiliation, admin: (u: LabUser) => u.isAdmin ? 1 : 0, certs: (u: LabUser) => u.certifications.length, projects: (u: LabUser) => u.projects.length }), []);
-  const { sorted, sortKey, sortAsc, toggle } = useSort(users, 'name', acc);
+
+  const filtered = useMemo(() => users.filter(u => {
+    if ((u.status || 'active') !== statusFilter) return false;
+    if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+    if (search && !`${u.name} ${u.email} ${u.personCode || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }), [users, statusFilter, roleFilter, search]);
+
+  const acc = useMemo(() => ({
+    name: (u: LabUser) => u.name, email: (u: LabUser) => u.email, role: (u: LabUser) => roles.indexOf(u.role),
+    affiliation: (u: LabUser) => u.affiliation, admin: (u: LabUser) => u.isAdmin ? 1 : 0,
+    start: (u: LabUser) => u.startDate || '', end: (u: LabUser) => u.endDate || '',
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+  const { sorted, sortKey, sortAsc, toggle } = useSort(filtered, 'name', acc);
+
+  const supervisorOf = (u: LabUser) => users.find(x => x.id === u.supervisorId);
+  const alumniCount = users.filter(u => u.status === 'alumni').length;
+  const activeCount = users.length - alumniCount;
+  const todayStr = () => new Date().toISOString().split('T')[0];
+
+  const archiveUser = (u: LabUser) => {
+    const futureBookings = bookings.filter(b => b.userId === u.id && b.date >= todayStr());
+    const parts = [`"${u.name}" will be archived as Alumni: all history (past bookings, log, projects, trainings) is preserved, but login is blocked.`];
+    if (futureBookings.length > 0) parts.push(`${futureBookings.length} upcoming booking${futureBookings.length > 1 ? 's' : ''} will be cancelled.`);
+    parts.push('Remember to also disable the login account in the Supabase dashboard (Authentication → Users).');
+    confirmDelete('Archive as Alumni?', parts.join(' '), () => {
+      futureBookings.forEach(b => removeBooking(b.id));
+      updateUser({ ...u, status: 'alumni', endDate: u.endDate || todayStr(), isAdmin: false });
+      setViewing(null);
+    });
+  };
+
+  const reactivateUser = (u: LabUser) => {
+    updateUser({ ...u, status: 'active', endDate: undefined });
+    setViewing(null);
+  };
 
   const currentIsPi = currentUser.role === 'pi';
 
@@ -289,16 +331,17 @@ function UsersTab() {
 
   const importSpec: ImportSpec<LabUser> = {
     title: 'Import users (CSV)',
-    headers: ['Name', 'Email', 'Role', 'Affiliation', 'Admin', 'Abbreviation', 'Certifications', 'Projects'],
-    aliases: { 'Admin': ['is admin'], 'Abbreviation': ['id', 'abbr', 'initials'], 'Certifications': ['certs', 'certification'], 'Projects': ['project'] },
+    headers: ['Name', 'Email', 'Role', 'Affiliation', 'Admin', 'Abbreviation', 'Person Code', 'Start Date', 'Supervisor', 'Certifications', 'Projects'],
+    aliases: { 'Admin': ['is admin'], 'Abbreviation': ['id', 'abbr', 'initials'], 'Person Code': ['codice persona', 'person code', 'code'], 'Start Date': ['start', 'started'], 'Supervisor': ['tutor'], 'Certifications': ['certs', 'certification'], 'Projects': ['project'] },
     template: [
-      ['Jane Doe', 'jane.doe@polimi.it', 'phd', 'DEIB', 'No', 'JDO', '', ''],
-      ['John Smith', 'john.smith@polimi.it', 'postdoc', 'MiMic Lab', 'No', 'JSM', '', ''],
+      ['Jane Doe', 'jane.doe@polimi.it', 'phd', 'DEIB', 'No', 'JDO', '10123456', '2026-01-15', '', '', ''],
+      ['John Smith', 'john.smith@mail.polimi.it', 'msc', 'POLIMI', 'No', 'JSM', '10654321', '2026-03-01', 'Jane Doe', '', ''],
     ],
     templateName: 'users_template',
     notes: <>
       <p><strong>Role</strong>: one of {roles.join(', ')}. <strong>Affiliation</strong>: {affiliations.join(', ')}.</p>
-      <p><strong>Admin</strong>: Yes/No. <strong>Certifications/Projects</strong>: names separated by &ldquo;;&rdquo; (must already exist).</p>
+      <p><strong>Admin</strong>: Yes/No. <strong>Start Date</strong>: YYYY-MM-DD. <strong>Supervisor</strong>: name or email of an existing member (PhD or above).</p>
+      <p><strong>Certifications/Projects</strong>: names separated by &ldquo;;&rdquo; (must already exist).</p>
     </>,
     onAdd: addUser,
     parseRow: (rec, rowNum) => {
@@ -317,10 +360,20 @@ function UsersTab() {
         });
         return ids;
       };
+      let supervisorId: string | undefined;
+      if (rec['Supervisor']) {
+        const sup = users.find(x => x.name.toLowerCase() === rec['Supervisor'].toLowerCase() || x.email.toLowerCase() === rec['Supervisor'].toLowerCase());
+        if (sup && SUPERVISOR_ROLES.includes(sup.role)) supervisorId = sup.id;
+        else notes.push(`supervisor "${rec['Supervisor']}" not found or not eligible`);
+      }
       const item: LabUser = {
         id: generateId(), name: rec['Name'], email: rec['Email'], role, affiliation: aff,
         isAdmin: /^(yes|true|1|y)$/i.test(rec['Admin']),
         abbreviation: rec['Abbreviation'] || generateAbbreviation(rec['Name']),
+        personCode: rec['Person Code'] || undefined,
+        startDate: rec['Start Date'] || undefined,
+        supervisorId,
+        status: 'active',
         certifications: resolve(rec['Certifications'], certifications),
         projects: resolve(rec['Projects'], projects),
       };
@@ -328,13 +381,40 @@ function UsersTab() {
     },
   };
 
+  const deleteUser = (u: LabUser) => {
+    const futureBookings = bookings.filter(b => b.userId === u.id && b.date >= todayStr());
+    const parts = [`"${u.name}" will be PERMANENTLY removed (prefer "Archive as Alumni" to keep the history).`];
+    if (futureBookings.length > 0) parts.push(`${futureBookings.length} upcoming booking${futureBookings.length > 1 ? 's' : ''} will be cancelled (past ones are kept for the records).`);
+    parts.push('Note: the login account must also be removed in the Supabase dashboard (Authentication → Users).');
+    confirmDelete('Delete User?', parts.join(' '), () => {
+      futureBookings.forEach(b => removeBooking(b.id));
+      removeUser(u.id);
+      setViewing(null);
+    });
+  };
+
   return (
     <>
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-manrope">{users.length} users</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, code…"
+              className="pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none w-52" />
+          </div>
+          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value as UserRole | 'all')}
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope bg-white outline-none">
+            <option value="all">All roles</option>
+            {roles.map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}
+          </select>
+          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <button onClick={() => setStatusFilter('active')} className={`px-2.5 py-1.5 text-[11px] font-medium font-manrope ${statusFilter === 'active' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Active {activeCount}</button>
+            <button onClick={() => setStatusFilter('alumni')} className={`px-2.5 py-1.5 text-[11px] font-medium font-manrope ${statusFilter === 'alumni' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Alumni {alumniCount}</button>
+          </div>
+        </div>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Name','ID','Email','Role','Affiliation','Admin','Certifications','Projects'], users.map(u => [u.name,u.abbreviation || generateAbbreviation(u.name),u.email,u.role,u.affiliation,u.isAdmin ? 'Yes' : 'No',u.certifications.join('; '),u.projects.join('; ')]), 'users')} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','ID','Email','Role','Affiliation','Admin','Status','Person Code','Start Date','End Date','Supervisor','Microfab Training','Bio Training','Certifications','Projects'], users.map(u => [u.name,u.abbreviation || generateAbbreviation(u.name),u.email,u.role,u.affiliation,u.isAdmin ? 'Yes' : 'No',u.status || 'active',u.personCode || '',u.startDate || '',u.endDate || '',supervisorOf(u)?.name || '',u.trainingMicrofabDone ? (u.trainingMicrofabDate || 'Yes') : 'No',u.trainingBioDone ? (u.trainingBioDate || 'Yes') : 'No',u.certifications.join('; '),u.projects.join('; ')]), 'users')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add User</button>
         </div>
       </div>
@@ -342,22 +422,22 @@ function UsersTab() {
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
           <SortTh label="Name" k="name" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <th className="px-3 py-2.5 text-left font-semibold text-gray-700">ID</th>
-          <SortTh label="Email" k="email" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <SortTh label="Role" k="role" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <SortTh label="Affiliation" k="affiliation" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <SortTh label="Admin" k="admin" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
-          <SortTh label="Certs" k="certs" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
-          <SortTh label="Projects" k="projects" sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
+          <SortTh label={statusFilter === 'alumni' ? 'Left' : 'Since'} k={statusFilter === 'alumni' ? 'end' : 'start'} sortKey={sortKey} sortAsc={sortAsc} toggle={toggle} />
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
           {sorted.map(u => (
-            <tr key={u.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 font-medium text-gray-900">{u.name}</td>
+            <tr key={u.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewing(u)}>
+              <td className="px-3 py-2 font-medium text-gray-900">
+                {u.name}
+                {u.status === 'alumni' && <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-semibold uppercase">Alumni</span>}
+              </td>
               <td className="px-3 py-2"><span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#102C53] text-white text-[10px] font-bold">{u.abbreviation || generateAbbreviation(u.name)}</span></td>
-              <td className="px-3 py-2 text-gray-600">{u.email}</td>
               <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">{rolePermissions[u.role].label}</span></td>
               <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-medium">{u.affiliation}</span></td>
-              <td className="px-3 py-2">
+              <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => handleToggleAdmin(u)}
                   disabled={!canToggleAdmin(u)}
@@ -371,26 +451,38 @@ function UsersTab() {
                   <span className="text-[10px] font-bold">{u.isAdmin ? '★' : '—'}</span>
                 </button>
               </td>
-              <td className="px-3 py-2 text-gray-500">{u.certifications.length}</td>
-              <td className="px-3 py-2 text-gray-500 max-w-[150px] truncate">{u.projects.join(', ')}</td>
-              <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
-                <button onClick={() => open(u)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => {
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  const futureBookings = bookings.filter(b => b.userId === u.id && b.date >= todayStr);
-                  const parts = [`"${u.name}" will be permanently removed.`];
-                  if (futureBookings.length > 0) parts.push(`${futureBookings.length} upcoming booking${futureBookings.length > 1 ? 's' : ''} will be cancelled (past ones are kept for the records).`);
-                  parts.push('Note: the login account must also be removed in the Supabase dashboard (Authentication → Users).');
-                  confirmDelete('Delete User?', parts.join(' '), () => {
-                    futureBookings.forEach(b => removeBooking(b.id));
-                    removeUser(u.id);
-                  });
-                }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+              <td className="px-3 py-2 text-gray-500">{statusFilter === 'alumni' ? (u.endDate ? formatDate(u.endDate) : '—') : (u.startDate ? formatDate(u.startDate) : '—')}</td>
+              <td className="px-3 py-2 text-right" onClick={e => e.stopPropagation()}><div className="flex justify-end gap-1">
+                <button onClick={() => open(u)} title="Edit" className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
+                {u.status === 'alumni'
+                  ? <button onClick={() => reactivateUser(u)} title="Reactivate" className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><RotateCcw size={13} /></button>
+                  : <button onClick={() => archiveUser(u)} title="Archive as Alumni" className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-400 hover:text-amber-600"><Archive size={13} /></button>}
+                <button onClick={() => deleteUser(u)} title="Delete permanently" className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
+          {sorted.length === 0 && <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">No {statusFilter} users match the filters.</td></tr>}
         </tbody></table>
       </div></div>
+
+      {viewing && (
+        <UserDetailModal
+          user={users.find(x => x.id === viewing.id) || viewing}
+          users={users}
+          projects={projects}
+          certifications={certifications}
+          showSensitive
+          onClose={() => setViewing(null)}
+          footer={
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => { open(users.find(x => x.id === viewing.id) || viewing); setViewing(null); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e]"><Edit2 size={14} /> Edit</button>
+              {(users.find(x => x.id === viewing.id) || viewing).status === 'alumni'
+                ? <button onClick={() => reactivateUser(users.find(x => x.id === viewing.id) || viewing)} className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-semibold font-manrope hover:bg-green-100"><RotateCcw size={14} /> Reactivate</button>
+                : <button onClick={() => archiveUser(users.find(x => x.id === viewing.id) || viewing)} className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-amber-50 text-amber-700 rounded-xl text-sm font-semibold font-manrope hover:bg-amber-100"><Archive size={14} /> Archive</button>}
+            </div>
+          }
+        />
+      )}
       {showForm && <Modal title={editing ? 'Edit User' : 'Add User'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -401,6 +493,38 @@ function UsersTab() {
             <Field label="Role"><select value={form.role} onChange={e => setForm({...form, role: e.target.value as UserRole})} className={inputCls}>{roles.map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}</select></Field>
             <Field label="Affiliation"><select value={form.affiliation} onChange={e => setForm({...form, affiliation: e.target.value as UserAffiliation})} className={inputCls}>{affiliations.map(a => <option key={a} value={a}>{a}</option>)}</select></Field>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Person Code (Polimi)"><input value={form.personCode || ''} onChange={e => setForm({...form, personCode: e.target.value})} placeholder="e.g. 10123456" className={inputCls} /></Field>
+            <Field label="Start Date"><input type="date" value={form.startDate || ''} onChange={e => setForm({...form, startDate: e.target.value || undefined})} className={inputCls} /></Field>
+          </div>
+          {SUPERVISED_ROLES.includes(form.role) && (
+            <Field label="Supervisor">
+              <select value={form.supervisorId || ''} onChange={e => setForm({...form, supervisorId: e.target.value || undefined})} className={inputCls}>
+                <option value="">No supervisor assigned…</option>
+                {users.filter(x => SUPERVISOR_ROLES.includes(x.role) && x.status !== 'alumni' && x.id !== form.id).map(x => (
+                  <option key={x.id} value={x.id}>{x.name} ({rolePermissions[x.role].label})</option>
+                ))}
+              </select>
+            </Field>
+          )}
+          <Field label="Trainings">
+            <div className="space-y-2 p-2.5 border border-gray-200 rounded-xl">
+              {([
+                { label: 'Microfabrication training', done: 'trainingMicrofabDone', date: 'trainingMicrofabDate' },
+                { label: 'Biological training', done: 'trainingBioDone', date: 'trainingBioDate' },
+              ] as const).map(t => (
+                <div key={t.done} className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer flex-1">
+                    <input type="checkbox" checked={!!form[t.done]}
+                      onChange={e => setForm(f => ({ ...f, [t.done]: e.target.checked, [t.date]: e.target.checked ? (f[t.date] || new Date().toISOString().split('T')[0]) : undefined }))}
+                      className="w-4 h-4 rounded border-gray-300 text-green-600" />
+                    <span className="text-xs font-manrope text-gray-700">{t.label}</span>
+                  </label>
+                  {form[t.done] && <input type="date" value={form[t.date] || ''} onChange={e => setForm(f => ({ ...f, [t.date]: e.target.value || undefined }))} className="px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />}
+                </div>
+              ))}
+            </div>
+          </Field>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
               <input

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone } from 'lucide-react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound } from 'lucide-react';
 import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +20,7 @@ import ReagentsPage from './ReagentsPage';
 import CryoPage from './CryoPage';
 import WishlistPage from './WishlistPage';
 import ManualsPage from './ManualsPage';
+import TeamPage from './TeamPage';
 import LogPage from './LogPage';
 import AdminPage from './AdminPage';
 import AuthShell from './AuthShell';
@@ -395,6 +396,7 @@ const navItems = [
   { id: 'cryo', label: 'Cryo', icon: Snowflake, requiresPerm: null },
   { id: 'wishlist', label: 'Wishlist', icon: ShoppingCart, requiresPerm: 'canRequestOrders' as const },
   { id: 'manuals', label: 'Manuals', icon: BookOpen, requiresPerm: null },
+  { id: 'team', label: 'Users', icon: UsersRound, requiresPerm: null },
   { id: 'log', label: 'Activity Log', icon: ClipboardList, requiresPerm: 'canViewLog' as const },
   { id: 'database', label: 'Database', icon: Database, requiresPerm: 'canViewDatabase' as const },
   { id: 'admin', label: 'Admin Panel', icon: Settings, requiresPerm: 'canAdmin' as const },
@@ -488,6 +490,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       case 'cryo': return <CryoPage />;
       case 'wishlist': return <WishlistPage />;
       case 'manuals': return <ManualsPage />;
+      case 'team': return <TeamPage />;
       case 'log': return <LogPage />;
       case 'database': return <LogPage showDatabase />;
       case 'admin': return <AdminPage />;
@@ -690,8 +693,12 @@ export default function LabApp() {
     setStep(s);
   }, []);
 
+  // Alumni are also blocked server-side (is_lab_member requires active
+  // status), so this client check is just for the clearer error message.
   const resolveLabUser = useCallback(async (email: string): Promise<LabUser | null> => {
-    return findLabUserByEmail(email);
+    const u = await findLabUserByEmail(email);
+    if (u && u.status === 'alumni') return null;
+    return u;
   }, []);
 
   const evaluateMFA = useCallback(async (): Promise<AuthStep> => {

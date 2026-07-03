@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { LabUser, UserRole, UserAffiliation, generateAbbreviation } from '@/data/lab-data';
+import { LabUser, UserRole, UserAffiliation, UserStatus, generateAbbreviation } from '@/data/lab-data';
 
 export interface SupabaseLabUser {
   id: string;
@@ -11,6 +11,15 @@ export interface SupabaseLabUser {
   is_admin: boolean;
   certifications: string[];
   projects: string[];
+  status?: UserStatus | null;
+  person_code?: string | null;
+  supervisor_id?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  training_microfab_done?: boolean | null;
+  training_microfab_date?: string | null;
+  training_bio_done?: boolean | null;
+  training_bio_date?: string | null;
   created_at?: string;
 }
 
@@ -25,6 +34,15 @@ function toLabUser(row: SupabaseLabUser): LabUser {
     isAdmin: row.is_admin ?? false,
     certifications: row.certifications || [],
     projects: row.projects || [],
+    status: row.status || 'active',
+    personCode: row.person_code || undefined,
+    supervisorId: row.supervisor_id || undefined,
+    startDate: row.start_date || undefined,
+    endDate: row.end_date || undefined,
+    trainingMicrofabDone: row.training_microfab_done ?? false,
+    trainingMicrofabDate: row.training_microfab_date || undefined,
+    trainingBioDone: row.training_bio_done ?? false,
+    trainingBioDate: row.training_bio_date || undefined,
   };
 }
 
@@ -39,6 +57,15 @@ function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at'> {
     is_admin: u.isAdmin,
     certifications: u.certifications,
     projects: u.projects,
+    status: u.status || 'active',
+    person_code: u.personCode || null,
+    supervisor_id: u.supervisorId || null,
+    start_date: u.startDate || null,
+    end_date: u.endDate || null,
+    training_microfab_done: u.trainingMicrofabDone ?? false,
+    training_microfab_date: u.trainingMicrofabDate || null,
+    training_bio_done: u.trainingBioDone ?? false,
+    training_bio_date: u.trainingBioDate || null,
   };
 }
 

@@ -8,6 +8,8 @@ export type UserRole = 'admin' | 'pi' | 'researcher' | 'lab_manager' | 'project_
 
 export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'External';
 
+export type UserStatus = 'active' | 'alumni';
+
 export interface LabUser {
   id: string;
   email: string;
@@ -18,7 +20,24 @@ export interface LabUser {
   isAdmin: boolean;
   certifications: string[];
   projects: string[];
+  status?: UserStatus;          // undefined = active (legacy rows)
+  personCode?: string;          // codice persona Polimi
+  supervisorId?: string;        // for MSc students and guests
+  startDate?: string;           // YYYY-MM-DD
+  endDate?: string;             // YYYY-MM-DD, set when archived as alumni
+  trainingMicrofabDone?: boolean;
+  trainingMicrofabDate?: string;
+  trainingBioDone?: boolean;
+  trainingBioDate?: string;
 }
+
+export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
+
+// Roles senior enough to supervise MSc students and guests.
+export const SUPERVISOR_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd'];
+
+// Roles that require a supervisor to be assigned.
+export const SUPERVISED_ROLES: UserRole[] = ['msc', 'guest'];
 
 export function generateAbbreviation(name: string): string {
   const parts = name.trim().split(/\s+/);

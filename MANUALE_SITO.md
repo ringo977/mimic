@@ -142,7 +142,8 @@ mimic/
 │   ├── supabase-booking-settings.sql    # Migrazione app_settings + mezz'ore
 │   ├── supabase-security-hardening.sql  # Hardening: is_lab_member, anti-escalation, no-overlap
 │   ├── supabase-reagent-stock-rpc.sql   # RPC atomica per lo stock reagenti (no lost update)
-│   └── supabase-schema-reference.sql    # Schema completo delle tabelle (disaster recovery)
+│   ├── supabase-schema-reference.sql    # Schema completo delle tabelle (disaster recovery)
+│   └── supabase-user-profile-fields.sql # Campi profilo utente: status/alumni, codice persona, supervisor, training
 │
 ├── .github/workflows/
 │   └── keep-supabase-alive.yml  # Ping giornaliero per non far andare Supabase in pausa
@@ -348,6 +349,12 @@ Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + preno
 
 ### Tabelle Supabase usate (da `lib/supabase-data.ts`)
 `instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals`, **`app_settings`** (key/value JSONB per le impostazioni, es. orari prenotazione) (+ tabella utenti e storage file). Migrazione dedicata: `scripts/supabase-booking-settings.sql` (crea `app_settings` con RLS e converte `bookings.start_hour`/`end_hour` a `numeric` per le mezz'ore).
+
+### Profili utente e Alumni (luglio 2026)
+- Ogni utente ha in più: **codice persona** Polimi, **data di inizio/fine**, **supervisor** (obbligatorio concettualmente per MSc e guest, scelto tra i membri da PhD in su), **training** microfabrication e biological (spunta + data, solo admin). Migrazione: `scripts/supabase-user-profile-fields.sql`.
+- **Stato Alumni**: al posto della cancellazione, gli utenti si **archiviano** (Admin → Users → icona archivio). Lo storico resta intatto (prenotazioni passate, log, progetti, date); le prenotazioni future vengono cancellate; il **login è bloccato** (sia client sia a livello RLS: `is_lab_member()`/`is_lab_admin()` richiedono `status='active'`). Ricordarsi di disabilitare l'account auth su Supabase. Riattivabili in ogni momento.
+- La tabella admin Users è **snella** (nome, ruolo, affiliazione, admin, data) con **ricerca, filtro per ruolo e toggle Active/Alumni**; tutti i dettagli si aprono **cliccando sul nome** (scheda persona con certificazioni, training, supervisor, codice persona).
+- Nuova pagina **Users** nella sidebar, visibile a **tutti i membri**: rubrica del lab con info non sensibili (no codice persona), ricerca/filtri e sezione Alumni. Il trigger anti-escalation ora protegge anche i campi gestionali e le certificazioni.
 
 ### Stock reagenti (atomico)
 I prelievi/ricariche di stock passano dalla RPC `adjust_reagent_stock` (`scripts/supabase-reagent-stock-rpc.sql`): l'aggiornamento avviene in una singola UPDATE lato server (clampato tra 0 e max), quindi due persone che prelevano lo stesso reagente in contemporanea non si sovrascrivono più. Se la RPC non è installata l'app ricade sul vecchio salvataggio riga intera.
