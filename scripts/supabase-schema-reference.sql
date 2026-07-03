@@ -12,9 +12,11 @@
 --   3. Run supabase-booking-settings.sql     (app_settings + half hours)
 --   4. Run supabase-security-hardening.sql   (membership gate & co.)
 --   5. Run supabase-reagent-stock-rpc.sql    (atomic stock RPC)
---   6. Create the 'manuals' storage bucket (Storage → New bucket)
---   7. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
---   8. Recreate auth users (Authentication → Add user) and update
+--   6. Run supabase-user-profile-fields.sql  (profile fields + alumni)
+--   7. Run supabase-absences.sql             (absences table + policy)
+--   8. Create the 'manuals' storage bucket (Storage → New bucket)
+--   9. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--  10. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
 -- ============================================================
 
@@ -184,7 +186,8 @@ CREATE TABLE IF NOT EXISTS manuals (
 );
 
 -- app_settings is created by supabase-booking-settings.sql (step 3).
+-- absences is created by supabase-absences.sql (step 7).
 
 -- ============================================================
--- DONE. Continue with the RLS scripts (steps 2-5 in the header).
+-- DONE. Continue with the RLS scripts (steps 2-7 in the header).
 -- ============================================================

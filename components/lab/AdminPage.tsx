@@ -5,19 +5,19 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
   DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon,
-  Search, Archive, RotateCcw } from 'lucide-react';
+  Search, Archive, RotateCcw, CalendarOff } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
 import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
-  storageUnitTypes, Project, Certification, Location, BookingSettings,
+  storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 
-type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'backup';
+type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'absences' | 'backup';
 
 export default function AdminPage() {
   const ctx = useLabContext();
@@ -42,6 +42,7 @@ export default function AdminPage() {
       { id: 'manuals', label: 'Manuals', icon: BookOpen, count: ctx.manuals.length },
       { id: 'calendar', label: 'Calendar', icon: CalendarDays },
       { id: 'schedule', label: 'Hours', icon: Clock },
+      { id: 'absences', label: 'Absences', icon: CalendarOff },
     ]},
     { label: 'System', tabs: [
       { id: 'backup', label: 'Backup', icon: HardDrive },
@@ -81,6 +82,7 @@ export default function AdminPage() {
       {activeTab === 'manuals' && <ManualsTab />}
       {activeTab === 'calendar' && <CalendarTab />}
       {activeTab === 'schedule' && <ScheduleTab />}
+      {activeTab === 'absences' && <AbsenceSettingsTab />}
       {activeTab === 'backup' && <BackupTab />}
     </div>
   );
@@ -1980,6 +1982,102 @@ function ScheduleTab() {
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-manrope flex items-start gap-2">
         <AlertCircle size={14} className="shrink-0 mt-0.5" />
         <span>To share these hours across all users (and to store half-hour bookings), the Supabase migration <code className="bg-amber-100 px-1 rounded">scripts/supabase-booking-settings.sql</code> must be run once. Until then, changes apply only on this device.</span>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Absence policy settings Tab
+// ============================================================
+function AbsenceSettingsTab() {
+  const { absenceSettings, updateAbsenceSettings } = useLabContext();
+  const [draft, setDraft] = useState<AbsenceSettings>(absenceSettings);
+  const [saved, setSaved] = useState(false);
+  const [newBlackout, setNewBlackout] = useState({ start: '', end: '', label: '' });
+
+  const set = (patch: Partial<AbsenceSettings>) => { setDraft(d => ({ ...d, ...patch })); setSaved(false); };
+  const dirty = JSON.stringify(draft) !== JSON.stringify(absenceSettings);
+  const handleSave = () => { updateAbsenceSettings(draft); setSaved(true); };
+
+  const numField = (label: string, key: keyof AbsenceSettings, hint: string, min = 0, max = 31) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">{label}</label>
+      <input type="number" min={min} max={max} value={draft[key] as number}
+        onChange={e => set({ [key]: Number(e.target.value) } as Partial<AbsenceSettings>)}
+        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope outline-none focus:ring-2 focus:ring-[#4DC9FF]" />
+      <p className="text-[10px] text-gray-400 font-manrope mt-0.5">{hint}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-1">
+          <CalendarOff size={16} className="text-[#102C53]" />
+          <h2 className="text-sm font-bold text-gray-900 font-manrope">Absence policy thresholds</h2>
+        </div>
+        <p className="text-xs text-gray-500 font-manrope mb-4">These values drive the automatic approval rules on the Absences page (see the printable policy in <code className="bg-gray-100 px-1 rounded">docs/policy-assenze.html</code>).</p>
+
+        <div className="grid grid-cols-2 gap-4">
+          {numField('Auto-approve up to (working days)', 'autoApproveMaxDays', 'Longer requests always need approval', 0, 10)}
+          {numField('Notice required (working days)', 'noticeDaysShort', 'For short absences to be auto-approved', 0, 30)}
+          {numField('Smart working days / month', 'swMonthlyCap', 'Pre-approved monthly cap per person', 0, 31)}
+          {numField('Max consecutive SW days', 'swMaxConsecutive', 'More consecutive days need approval', 1, 10)}
+          {numField('Max people absent at once', 'maxConcurrentAbsent', 'Beyond this, requests need approval', 1, 50)}
+        </div>
+
+        <div className="mt-5">
+          <h3 className="text-xs font-bold text-gray-900 font-manrope mb-2">Restricted (blackout) periods</h3>
+          {draft.blackoutPeriods.length === 0 && <p className="text-xs text-gray-400 font-manrope mb-2">None defined. Requests overlapping a restricted period always need approval.</p>}
+          <div className="space-y-1.5 mb-3">
+            {draft.blackoutPeriods.map((b, i) => (
+              <div key={i} className="flex items-center gap-2 bg-red-50/60 border border-red-100 rounded-lg px-3 py-1.5">
+                <span className="text-xs font-manrope text-gray-700 flex-1">{formatDate(b.start)} → {formatDate(b.end)}{b.label ? ` — ${b.label}` : ''}</span>
+                <button onClick={() => set({ blackoutPeriods: draft.blackoutPeriods.filter((_, j) => j !== i) })}
+                  className="p-1 rounded hover:bg-red-100 text-red-500"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">From</label>
+              <input type="date" value={newBlackout.start} onChange={e => setNewBlackout(n => ({ ...n, start: e.target.value }))}
+                className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">To</label>
+              <input type="date" value={newBlackout.end} min={newBlackout.start} onChange={e => setNewBlackout(n => ({ ...n, end: e.target.value }))}
+                className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+            </div>
+            <div className="flex-1 min-w-[120px]">
+              <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">Label</label>
+              <input value={newBlackout.label} onChange={e => setNewBlackout(n => ({ ...n, label: e.target.value }))} placeholder="e.g. Grant deadline"
+                className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+            </div>
+            <button
+              onClick={() => {
+                if (!newBlackout.start || !newBlackout.end || newBlackout.end < newBlackout.start) return;
+                set({ blackoutPeriods: [...draft.blackoutPeriods, { ...newBlackout }].sort((a, b) => a.start.localeCompare(b.start)) });
+                setNewBlackout({ start: '', end: '', label: '' });
+              }}
+              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs font-semibold font-manrope hover:bg-gray-200">
+              <Plus size={13} className="inline -mt-0.5" /> Add
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center gap-3">
+          <button onClick={handleSave} disabled={!dirty} className="flex items-center gap-1.5 px-4 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <Save size={15} /> Save policy
+          </button>
+          {saved && !dirty && <span className="flex items-center gap-1 text-xs text-green-600 font-manrope"><CheckCircle2 size={14} /> Saved</span>}
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-manrope flex items-start gap-2">
+        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+        <span>Requires the Supabase migration <code className="bg-amber-100 px-1 rounded">scripts/supabase-absences.sql</code> (creates the <code className="bg-amber-100 px-1 rounded">absences</code> table and the default settings).</span>
       </div>
     </div>
   );

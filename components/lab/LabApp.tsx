@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound } from 'lucide-react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff } from 'lucide-react';
 import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +21,7 @@ import CryoPage from './CryoPage';
 import WishlistPage from './WishlistPage';
 import ManualsPage from './ManualsPage';
 import TeamPage from './TeamPage';
+import AbsencesPage from './AbsencesPage';
 import LogPage from './LogPage';
 import AdminPage from './AdminPage';
 import AuthShell from './AuthShell';
@@ -397,6 +398,8 @@ const navItems = [
   { id: 'wishlist', label: 'Wishlist', icon: ShoppingCart, requiresPerm: 'canRequestOrders' as const },
   { id: 'manuals', label: 'Manuals', icon: BookOpen, requiresPerm: null },
   { id: 'team', label: 'Users', icon: UsersRound, requiresPerm: null },
+  // Absence policy applies to staff — MSc students and guests don't see it
+  { id: 'absences', label: 'Absences', icon: CalendarOff, requiresPerm: null, hideForRoles: ['msc', 'guest'] },
   { id: 'log', label: 'Activity Log', icon: ClipboardList, requiresPerm: 'canViewLog' as const },
   { id: 'database', label: 'Database', icon: Database, requiresPerm: 'canViewDatabase' as const },
   { id: 'admin', label: 'Admin Panel', icon: Settings, requiresPerm: 'canAdmin' as const },
@@ -470,14 +473,19 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 }
 
 function AppShell({ onLogout }: { onLogout: () => void }) {
-  const { user, permissions, currentPage, setCurrentPage } = useLabContext();
+  const { user, permissions, currentPage, setCurrentPage, absences, canApproveAbsences } = useLabContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
 
   const filteredNav = navItems.filter(item => {
+    if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(user.role)) return false;
     if (!item.requiresPerm) return true;
     return (permissions as unknown as Record<string, boolean>)[item.requiresPerm];
   });
+
+  // Approvers see how many requests are waiting for them
+  const pendingAbsences = canApproveAbsences ? absences.filter(a => a.status === 'pending').length : 0;
+  const navBadge = (id: string) => id === 'absences' && pendingAbsences > 0 ? pendingAbsences : null;
 
   // Mobile bottom nav: show first 5 items
   const mobileNav = filteredNav.slice(0, 5);
@@ -491,6 +499,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       case 'wishlist': return <WishlistPage />;
       case 'manuals': return <ManualsPage />;
       case 'team': return <TeamPage />;
+      case 'absences': return <AbsencesPage />;
       case 'log': return <LogPage />;
       case 'database': return <LogPage showDatabase />;
       case 'admin': return <AdminPage />;
@@ -532,6 +541,9 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
               >
                 <Icon className="w-4.5 h-4.5 shrink-0" size={18} />
                 {item.label}
+                {navBadge(item.id) !== null && (
+                  <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{navBadge(item.id)}</span>
+                )}
               </button>
             );
           })}
@@ -585,6 +597,9 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
                   >
                     <Icon size={18} />
                     {item.label}
+                    {navBadge(item.id) !== null && (
+                      <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{navBadge(item.id)}</span>
+                    )}
                   </button>
                 );
               })}

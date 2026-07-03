@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Download, Calendar, FlaskConical, Snowflake, ShoppingCart, LogIn, BookOpen } from 'lucide-react';
+import { Search, Download, Calendar, FlaskConical, Snowflake, ShoppingCart, LogIn, BookOpen, CalendarOff } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { formatDateTime, formatTime } from '@/data/lab-data';
 
@@ -12,6 +12,7 @@ const categoryIcons: Record<string, typeof Calendar> = {
   wishlist: ShoppingCart,
   auth: LogIn,
   manual: BookOpen,
+  absence: CalendarOff,
 };
 
 const categoryColors: Record<string, string> = {
@@ -21,6 +22,7 @@ const categoryColors: Record<string, string> = {
   wishlist: 'bg-amber-100 text-amber-600',
   auth: 'bg-purple-100 text-purple-600',
   manual: 'bg-gray-100 text-gray-600',
+  absence: 'bg-rose-100 text-rose-600',
 };
 
 export default function LogPage({ showDatabase = false }: { showDatabase?: boolean }) {

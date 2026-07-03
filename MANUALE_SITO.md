@@ -143,7 +143,8 @@ mimic/
 │   ├── supabase-security-hardening.sql  # Hardening: is_lab_member, anti-escalation, no-overlap
 │   ├── supabase-reagent-stock-rpc.sql   # RPC atomica per lo stock reagenti (no lost update)
 │   ├── supabase-schema-reference.sql    # Schema completo delle tabelle (disaster recovery)
-│   └── supabase-user-profile-fields.sql # Campi profilo utente: status/alumni, codice persona, supervisor, training
+│   ├── supabase-user-profile-fields.sql # Campi profilo utente: status/alumni, codice persona, supervisor, training
+│   └── supabase-absences.sql            # Tabella absences + RLS + trigger anti self-approval + soglie policy
 │
 ├── .github/workflows/
 │   └── keep-supabase-alive.yml  # Ping giornaliero per non far andare Supabase in pausa
@@ -348,13 +349,26 @@ Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + preno
 `admin`, `pi`, `researcher`, `lab_manager`, `project_manager`, `postdoc`, `phd`, `msc`, `guest`. Ogni ruolo ha un set di permessi (`canRequestOrders`, `canViewLog`, `canViewDatabase`, `canUploadManuals`, `canAdmin`, ...). Esiste anche un set di permessi ridotti per utenti `External`. Per le prenotazioni esiste inoltre `canManageAllBookings` (admin/PI/lab_manager) per l'override di cancellazione.
 
 ### Tabelle Supabase usate (da `lib/supabase-data.ts`)
-`instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals`, **`app_settings`** (key/value JSONB per le impostazioni, es. orari prenotazione) (+ tabella utenti e storage file). Migrazione dedicata: `scripts/supabase-booking-settings.sql` (crea `app_settings` con RLS e converte `bookings.start_hour`/`end_hour` a `numeric` per le mezz'ore).
+`instruments`, `maintenance_logs`, `locations`, `projects`, `certifications`, `storage_units`, `reagents`, `bookings`, `absences`, `cryo_vials`, `wishlist_items`, `log_entries`, `manuals`, **`app_settings`** (key/value JSONB per le impostazioni, es. orari prenotazione) (+ tabella utenti e storage file). Migrazione dedicata: `scripts/supabase-booking-settings.sql` (crea `app_settings` con RLS e converte `bookings.start_hour`/`end_hour` a `numeric` per le mezz'ore).
 
 ### Profili utente e Alumni (luglio 2026)
 - Ogni utente ha in più: **codice persona** Polimi, **data di inizio/fine**, **supervisor** (obbligatorio concettualmente per MSc e guest, scelto tra i membri da PhD in su), **training** microfabrication e biological (spunta + data, solo admin). Migrazione: `scripts/supabase-user-profile-fields.sql`.
 - **Stato Alumni**: al posto della cancellazione, gli utenti si **archiviano** (Admin → Users → icona archivio). Lo storico resta intatto (prenotazioni passate, log, progetti, date); le prenotazioni future vengono cancellate; il **login è bloccato** (sia client sia a livello RLS: `is_lab_member()`/`is_lab_admin()` richiedono `status='active'`). Ricordarsi di disabilitare l'account auth su Supabase. Riattivabili in ogni momento.
 - La tabella admin Users è **snella** (nome, ruolo, affiliazione, admin, data) con **ricerca, filtro per ruolo e toggle Active/Alumni**; tutti i dettagli si aprono **cliccando sul nome** (scheda persona con certificazioni, training, supervisor, codice persona).
 - Nuova pagina **Users** nella sidebar, visibile a **tutti i membri**: rubrica del lab con info non sensibili (no codice persona), ricerca/filtri e sezione Alumni. Il trigger anti-escalation ora protegge anche i campi gestionali e le certificazioni.
+
+### Assenze e presenze (luglio 2026)
+- Pagina **Absences** nella sidebar, visibile a tutti i membri **tranne MSc students e guest**. Implementa la policy stampabile `docs/policy-assenze.html`. Migrazione: `scripts/supabase-absences.sql` (tabella `absences` + impostazioni in `app_settings`).
+- **Tipi**: permesso a ore, giorni off (1–2), ferie (>2 giorni), smart working, malattia, trasferta/conferenza. Ogni tipo ha colore e regole proprie.
+- **Approvazione a livelli** (calcolata automaticamente al momento della richiesta, con motivazioni mostrate sia al richiedente sia all'approvatore):
+  - ore, trasferta → registrate e basta; malattia → sempre registrata, anche retroattiva;
+  - 1–2 giorni con ≥2 giorni lavorativi di preavviso → **auto-approvate**, altrimenti pending;
+  - ferie >2 giorni → **sempre** approvazione del supervisor (preavviso consigliato: 2× la durata) + campo **handover** obbligatorio;
+  - smart working → pre-approvato se dichiarato **entro il venerdì della settimana precedente**, max **4 giorni/mese**, **1 giorno alla volta** (consecutivi → approvazione); oltre i limiti → pending.
+  - Guard-rail: periodi **blackout** (es. scadenze grant) e troppe persone assenti lo stesso giorno ⇒ la richiesta va in approvazione.
+- **Chi approva**: admin e PI (`canApproveAbsences`). Vedono la sezione "Awaiting your approval" e un **badge** col numero di pending sulla voce di menu. A livello DB un trigger impedisce ai non-admin di auto-approvarsi (possono solo cancellare le proprie richieste).
+- **Vista mensile "Who's out"**: griglia del mese con chip colorati per persona/tipo (tratteggiati se in attesa di approvazione), evidenza dei periodi blackout, navigazione mese per mese.
+- **Admin → Absences**: soglie modificabili (giorni auto-approvabili, preavviso, tetto e consecutività smart working, max assenti contemporanei) e gestione dei periodi blackout. Salvate in `app_settings` chiave `absence_settings`.
 
 ### Stock reagenti (atomico)
 I prelievi/ricariche di stock passano dalla RPC `adjust_reagent_stock` (`scripts/supabase-reagent-stock-rpc.sql`): l'aggiornamento avviene in una singola UPDATE lato server (clampato tra 0 e max), quindi due persone che prelevano lo stesso reagente in contemporanea non si sovrascrivono più. Se la RPC non è installata l'app ricade sul vecchio salvataggio riga intera.

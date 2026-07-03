@@ -2,13 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  LabUser, Booking, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
-  StorageUnit, Project, Certification, Location, BookingSettings,
+  LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
+  StorageUnit, Project, Certification, Location, BookingSettings, AbsenceSettings,
   rolePermissions, externalRolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals,
   mockStorageUnits, mockProjects, mockCertifications, mockLocations,
   generateId, migrateReagentCategories, migrateStorageUnits, mergeMockDefaults,
   getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
+  defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta,
 } from '@/data/lab-data';
 import { fetchLabUsers, insertLabUser, updateLabUser, deleteLabUser } from '@/lib/supabase-users';
 import {
@@ -24,9 +25,11 @@ import {
   fetchLogEntries, insertLogEntry,
   fetchManuals, upsertManual, deleteManual,
   fetchAppSetting, upsertAppSetting,
+  fetchAbsences, upsertAbsence, deleteAbsence,
 } from '@/lib/supabase-data';
 
 const BOOKING_SETTINGS_KEY = 'booking_settings';
+const ABSENCE_SETTINGS_KEY = 'absence_settings';
 
 interface LabContextType {
   user: LabUser;
@@ -40,6 +43,13 @@ interface LabContextType {
   bookingSettings: BookingSettings;
   updateBookingSettings: (s: BookingSettings) => void;
   canManageAllBookings: boolean;
+  absences: Absence[];
+  addAbsence: (a: Omit<Absence, 'id' | 'requestedAt'>) => void;
+  updateAbsence: (a: Absence) => void;
+  removeAbsence: (id: string) => void;
+  absenceSettings: AbsenceSettings;
+  updateAbsenceSettings: (s: AbsenceSettings) => void;
+  canApproveAbsences: boolean;
   reagents: Reagent[];
   withdrawReagent: (reagentId: string, amount: number, purpose: string, project: string) => void;
   addReagentStock: (reagentId: string, amount: number) => void;
@@ -104,6 +114,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
+  const [absences, setAbsences] = useState<Absence[]>([]);
+  const [absenceSettings, setAbsenceSettings] = useState<AbsenceSettings>(defaultAbsenceSettings);
   const [loaded, setLoaded] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -174,6 +186,12 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       const localSettings = localData.bookingSettings as Partial<BookingSettings> | undefined;
       setBookingSettings(sanitizeBookingSettings(sbSettings ?? localSettings ?? defaultBookingSettings));
 
+      // Absences (table may not exist yet if the migration wasn't run — degrade to empty)
+      const sbAbsences = await fetchAbsences();
+      setAbsences(sbAbsences ?? []);
+      const sbAbsSettings = await fetchAppSetting<Partial<AbsenceSettings>>(ABSENCE_SETTINGS_KEY);
+      setAbsenceSettings(sanitizeAbsenceSettings(sbAbsSettings ?? defaultAbsenceSettings));
+
       setLoaded(true);
     }
     loadData();
@@ -224,6 +242,32 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     setBookingSettings(clean);
     track(upsertAppSetting(BOOKING_SETTINGS_KEY, clean), 'Booking hours');
     addLogEntry({ userId: user.id, userName: user.name, action: 'Updated booking hours', category: 'booking', details: `Work ${clean.workStartHour}:00-${clean.workEndHour}:00, open ${clean.openStartHour}:00-${clean.openEndHour}:00, ${clean.slotMinutes}min slots` });
+  }, [user, addLogEntry, track]);
+
+  // ---- Absences ----
+  const addAbsence = useCallback((a: Omit<Absence, 'id' | 'requestedAt'>) => {
+    const full: Absence = { ...a, id: generateId(), requestedAt: new Date().toISOString() };
+    setAbsences(prev => [...prev, full]);
+    track(upsertAbsence(full), 'Absence request');
+    addLogEntry({ userId: a.userId, userName: a.userName, action: `Requested ${absenceTypeMeta[a.type].label}`, category: 'absence', details: `${a.startDate}${a.endDate !== a.startDate ? ` → ${a.endDate}` : ''} (${full.status.replace('_', '-')})` });
+  }, [addLogEntry, track]);
+
+  const updateAbsence = useCallback((a: Absence) => {
+    setAbsences(prev => prev.map(x => x.id === a.id ? a : x));
+    track(upsertAbsence(a), 'Absence update');
+    addLogEntry({ userId: user.id, userName: user.name, action: `${a.status === 'approved' ? 'Approved' : a.status === 'rejected' ? 'Rejected' : a.status === 'cancelled' ? 'Cancelled' : 'Updated'} absence of ${a.userName}`, category: 'absence', details: `${absenceTypeMeta[a.type].label} ${a.startDate}${a.endDate !== a.startDate ? ` → ${a.endDate}` : ''}` });
+  }, [user, addLogEntry, track]);
+
+  const removeAbsence = useCallback((id: string) => {
+    setAbsences(prev => prev.filter(a => a.id !== id));
+    track(deleteAbsence(id), 'Absence deletion');
+  }, [track]);
+
+  const updateAbsenceSettings = useCallback((s: AbsenceSettings) => {
+    const clean = sanitizeAbsenceSettings(s);
+    setAbsenceSettings(clean);
+    track(upsertAppSetting(ABSENCE_SETTINGS_KEY, clean), 'Absence settings');
+    addLogEntry({ userId: user.id, userName: user.name, action: 'Updated absence policy settings', category: 'absence', details: `auto ≤${clean.autoApproveMaxDays}d, notice ${clean.noticeDaysShort}d, SW ${clean.swMonthlyCap}/month` });
   }, [user, addLogEntry, track]);
 
   // ---- Reagents ----
@@ -369,6 +413,9 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       bookings, addBooking, updateBooking, removeBooking,
       bookingSettings, updateBookingSettings,
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
+      absences, addAbsence, updateAbsence, removeAbsence,
+      absenceSettings, updateAbsenceSettings,
+      canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(user.role),
       reagents, withdrawReagent, addReagentStock,
       cryoVials, addCryoVial, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus,

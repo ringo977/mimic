@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import {
-  Booking, Reagent, CryoVial, WishlistItem, LogEntry,
+  Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
   Instrument, MaintenanceLog, Manual, StorageUnit, Project, Certification, Location,
 } from '@/data/lab-data';
 
@@ -254,6 +254,51 @@ export async function upsertBooking(b: Booking) {
 }
 
 export async function deleteBooking(id: string) { return deleteRow('bookings', id); }
+
+// ============================================================
+// Absences
+// ============================================================
+interface SupabaseAbsence {
+  id: string; user_id: string; user_name: string; type: string;
+  start_date: string; end_date: string;
+  start_hour: number | null; end_hour: number | null;
+  notes: string | null; handover: string | null;
+  status: string; flags: string | null; requested_at: string;
+  decided_by: string | null; decided_at: string | null; decision_note: string | null;
+}
+
+function toAbsence(r: SupabaseAbsence): Absence {
+  return {
+    id: r.id, userId: r.user_id, userName: r.user_name, type: r.type as Absence['type'],
+    startDate: r.start_date, endDate: r.end_date,
+    startHour: r.start_hour ?? undefined, endHour: r.end_hour ?? undefined,
+    notes: r.notes || undefined, handover: r.handover || undefined,
+    status: r.status as Absence['status'], flags: r.flags || undefined,
+    requestedAt: r.requested_at,
+    decidedBy: r.decided_by || undefined, decidedAt: r.decided_at || undefined,
+    decisionNote: r.decision_note || undefined,
+  };
+}
+
+export async function fetchAbsences(): Promise<Absence[] | null> {
+  const rows = await fetchAll<SupabaseAbsence>('absences', 'start_date');
+  if (!rows) return null;
+  return rows.map(toAbsence);
+}
+
+export async function upsertAbsence(a: Absence) {
+  return upsertRow('absences', {
+    id: a.id, user_id: a.userId, user_name: a.userName, type: a.type,
+    start_date: a.startDate, end_date: a.endDate,
+    start_hour: a.startHour ?? null, end_hour: a.endHour ?? null,
+    notes: a.notes ?? null, handover: a.handover ?? null,
+    status: a.status, flags: a.flags ?? null, requested_at: a.requestedAt,
+    decided_by: a.decidedBy ?? null, decided_at: a.decidedAt ?? null,
+    decision_note: a.decisionNote ?? null,
+  });
+}
+
+export async function deleteAbsence(id: string) { return deleteRow('absences', id); }
 
 // Fresh fetch of bookings for one instrument on one date — used to re-check
 // conflicts right before confirming, reducing double-booking races.

@@ -39,6 +39,219 @@ export const SUPERVISOR_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_m
 // Roles that require a supervisor to be assigned.
 export const SUPERVISED_ROLES: UserRole[] = ['msc', 'guest'];
 
+// ============================================================
+// Absences (policy: docs/policy-assenze.html)
+// ============================================================
+
+export type AbsenceType = 'hours' | 'day_off' | 'vacation' | 'smart_working' | 'sick' | 'trip';
+export type AbsenceStatus = 'pending' | 'auto_approved' | 'approved' | 'rejected' | 'cancelled';
+
+export interface Absence {
+  id: string;
+  userId: string;
+  userName: string;
+  type: AbsenceType;
+  startDate: string;         // YYYY-MM-DD
+  endDate: string;           // = startDate for single-day types
+  startHour?: number;        // only for 'hours'
+  endHour?: number;
+  notes?: string;
+  handover?: string;         // required for vacation (>2 days)
+  status: AbsenceStatus;
+  flags?: string;            // why the request needed manual approval
+  requestedAt: string;       // ISO timestamp
+  decidedBy?: string;
+  decidedAt?: string;
+  decisionNote?: string;
+}
+
+export const absenceTypeMeta: Record<AbsenceType, { label: string; short: string; color: string; fullDay: boolean }> = {
+  hours:         { label: 'Short leave (hours)',   short: 'Hours', color: '#64748b', fullDay: false },
+  day_off:       { label: 'Day(s) off (1–2 days)', short: 'Off',   color: '#f59e0b', fullDay: true },
+  vacation:      { label: 'Vacation (>2 days)',    short: 'Vac',   color: '#8b5cf6', fullDay: true },
+  smart_working: { label: 'Smart working',         short: 'SW',    color: '#3b82f6', fullDay: true },
+  sick:          { label: 'Sick leave',            short: 'Sick',  color: '#ef4444', fullDay: true },
+  trip:          { label: 'Trip / conference',     short: 'Trip',  color: '#06b6d4', fullDay: true },
+};
+
+export interface AbsenceSettings {
+  autoApproveMaxDays: number;   // day_off auto-approval up to N working days
+  noticeDaysShort: number;      // working days of notice for day_off auto-approval
+  swMonthlyCap: number;         // pre-approved smart working days per month
+  swMaxConsecutive: number;     // SW days in a row without approval
+  maxConcurrentAbsent: number;  // people absent the same day before requests need approval
+  blackoutPeriods: { start: string; end: string; label: string }[];
+}
+
+export const defaultAbsenceSettings: AbsenceSettings = {
+  autoApproveMaxDays: 2,
+  noticeDaysShort: 2,
+  swMonthlyCap: 4,
+  swMaxConsecutive: 1,
+  maxConcurrentAbsent: 3,
+  blackoutPeriods: [],
+};
+
+export function sanitizeAbsenceSettings(s: Partial<AbsenceSettings> | null | undefined): AbsenceSettings {
+  const d = defaultAbsenceSettings;
+  if (!s) return { ...d, blackoutPeriods: [] };
+  const num = (v: unknown, fallback: number, min: number, max: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+  };
+  return {
+    autoApproveMaxDays: num(s.autoApproveMaxDays, d.autoApproveMaxDays, 0, 10),
+    noticeDaysShort: num(s.noticeDaysShort, d.noticeDaysShort, 0, 30),
+    swMonthlyCap: num(s.swMonthlyCap, d.swMonthlyCap, 0, 31),
+    swMaxConsecutive: num(s.swMaxConsecutive, d.swMaxConsecutive, 1, 10),
+    maxConcurrentAbsent: num(s.maxConcurrentAbsent, d.maxConcurrentAbsent, 1, 50),
+    blackoutPeriods: Array.isArray(s.blackoutPeriods)
+      ? s.blackoutPeriods.filter(b => b && b.start && b.end).map(b => ({ start: b.start, end: b.end, label: b.label || '' }))
+      : [],
+  };
+}
+
+// ---- Date helpers (local, YYYY-MM-DD strings) ----
+export function isWorkingDay(dateStr: string): boolean {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const day = new Date(y, m - 1, d).getDay();
+  return day !== 0 && day !== 6;
+}
+
+export function addDaysStr(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + days, 12);
+  return dt.toLocaleDateString('en-CA');
+}
+
+/** Working days strictly between today and start (how much notice was given). */
+export function workingDaysOfNotice(todayStr: string, startStr: string): number {
+  if (startStr <= todayStr) return 0;
+  let n = 0;
+  let cur = addDaysStr(todayStr, 1);
+  while (cur < startStr) {
+    if (isWorkingDay(cur)) n++;
+    cur = addDaysStr(cur, 1);
+  }
+  return n;
+}
+
+/** Working days covered by [start, end] inclusive. */
+export function workingDaysCovered(startStr: string, endStr: string): number {
+  let n = 0;
+  for (let cur = startStr; cur <= endStr; cur = addDaysStr(cur, 1)) {
+    if (isWorkingDay(cur)) n++;
+  }
+  return n;
+}
+
+/** Deadline to declare smart working for day D: end of the Friday of the previous week. */
+export function swDeclarationDeadline(dayStr: string): string {
+  const [y, m, d] = dayStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d, 12);
+  const dow = (dt.getDay() + 6) % 7; // 0 = Monday
+  dt.setDate(dt.getDate() - dow - 3); // back to previous Friday
+  return dt.toLocaleDateString('en-CA');
+}
+
+const ACTIVE_STATUSES: AbsenceStatus[] = ['pending', 'auto_approved', 'approved'];
+export function isActiveAbsence(a: Absence): boolean { return ACTIVE_STATUSES.includes(a.status); }
+
+/**
+ * Applies the lab policy to a request and decides whether it can be
+ * auto-approved. Returns the reasons that force manual approval, so both
+ * the requester and the approver see exactly why.
+ */
+export function evaluateAbsenceRequest(
+  req: Pick<Absence, 'userId' | 'type' | 'startDate' | 'endDate'>,
+  existing: Absence[],
+  settings: AbsenceSettings,
+  todayStr: string,
+): { status: 'auto_approved' | 'pending'; reasons: string[] } {
+  const reasons: string[] = [];
+  const others = existing.filter(a => isActiveAbsence(a));
+  const days = workingDaysCovered(req.startDate, req.endDate);
+
+  // Blackout periods block auto-approval for every type except sick leave.
+  if (req.type !== 'sick') {
+    const hit = settings.blackoutPeriods.find(b => req.startDate <= b.end && req.endDate >= b.start);
+    if (hit) reasons.push(`Falls in a restricted period${hit.label ? ` (${hit.label})` : ''}.`);
+  }
+
+  // Too many people already absent on the same day(s)? (full-day types only)
+  if (absenceTypeMeta[req.type].fullDay && req.type !== 'smart_working') {
+    for (let cur = req.startDate; cur <= req.endDate; cur = addDaysStr(cur, 1)) {
+      if (!isWorkingDay(cur)) continue;
+      const absent = new Set(others
+        .filter(a => a.userId !== req.userId && absenceTypeMeta[a.type].fullDay && a.type !== 'smart_working')
+        .filter(a => a.startDate <= cur && a.endDate >= cur)
+        .map(a => a.userId));
+      if (absent.size + 1 > settings.maxConcurrentAbsent) {
+        reasons.push(`${absent.size} other member${absent.size > 1 ? 's are' : ' is'} already absent on ${cur}.`);
+        break;
+      }
+    }
+  }
+
+  switch (req.type) {
+    case 'hours':
+    case 'sick':
+    case 'trip':
+      // Recorded, not approved (sick ignores every guard).
+      return req.type === 'sick' ? { status: 'auto_approved', reasons: [] } : (reasons.length ? { status: 'pending', reasons } : { status: 'auto_approved', reasons: [] });
+
+    case 'day_off': {
+      if (days > settings.autoApproveMaxDays) reasons.push(`Longer than ${settings.autoApproveMaxDays} working days — use "Vacation" or get approval.`);
+      const notice = workingDaysOfNotice(todayStr, req.startDate);
+      if (notice < settings.noticeDaysShort) reasons.push(`Less than ${settings.noticeDaysShort} working days of notice (${notice}).`);
+      break;
+    }
+
+    case 'vacation': {
+      reasons.push('Vacations longer than 2 days always require supervisor approval.');
+      const notice = workingDaysOfNotice(todayStr, req.startDate);
+      if (notice < days * 2) reasons.push(`Recommended notice is twice the duration (${days * 2} working days; given: ${notice}).`);
+      break;
+    }
+
+    case 'smart_working': {
+      if (days > settings.swMaxConsecutive) {
+        reasons.push(`More than ${settings.swMaxConsecutive} smart working day${settings.swMaxConsecutive > 1 ? 's' : ''} in a row.`);
+      }
+      // Consecutive with an existing SW day (weekends don't reset)
+      const mySW = others.filter(a => a.userId === req.userId && a.type === 'smart_working');
+      const prevWork = (() => { let c = addDaysStr(req.startDate, -1); while (!isWorkingDay(c)) c = addDaysStr(c, -1); return c; })();
+      const nextWork = (() => { let c = addDaysStr(req.endDate, 1); while (!isWorkingDay(c)) c = addDaysStr(c, 1); return c; })();
+      if (mySW.some(a => a.endDate === prevWork || a.startDate === nextWork)) {
+        reasons.push('Adjacent to another smart working day (consecutive days need approval).');
+      }
+      // Monthly cap (count both months if the range spans two)
+      const months = new Set([req.startDate.slice(0, 7), req.endDate.slice(0, 7)]);
+      for (const month of Array.from(months)) {
+        let used = 0;
+        mySW.forEach(a => {
+          for (let cur = a.startDate; cur <= a.endDate; cur = addDaysStr(cur, 1)) {
+            if (cur.slice(0, 7) === month && isWorkingDay(cur)) used++;
+          }
+        });
+        let requested = 0;
+        for (let cur = req.startDate; cur <= req.endDate; cur = addDaysStr(cur, 1)) {
+          if (cur.slice(0, 7) === month && isWorkingDay(cur)) requested++;
+        }
+        if (used + requested > settings.swMonthlyCap) {
+          reasons.push(`Monthly smart working cap exceeded (${used} used + ${requested} requested > ${settings.swMonthlyCap}).`);
+        }
+      }
+      // Weekly planning: declare by Friday of the previous week
+      const deadline = swDeclarationDeadline(req.startDate);
+      if (todayStr > deadline) reasons.push(`Declared late: smart working must be planned by the Friday of the previous week (deadline was ${deadline}).`);
+      break;
+    }
+  }
+
+  return reasons.length ? { status: 'pending', reasons } : { status: 'auto_approved', reasons: [] };
+}
+
 export function generateAbbreviation(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length < 2) return name.substring(0, 3).toUpperCase();
@@ -295,7 +508,7 @@ export interface LogEntry {
   userId: string;
   userName: string;
   action: string;
-  category: 'booking' | 'reagent' | 'cryo' | 'wishlist' | 'auth' | 'manual';
+  category: 'booking' | 'reagent' | 'cryo' | 'wishlist' | 'auth' | 'manual' | 'absence';
   details: string;
 }
 
