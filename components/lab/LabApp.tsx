@@ -32,7 +32,6 @@ function LoginScreen({ authError }: { authError?: string }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,38 +44,14 @@ function LoginScreen({ authError }: { authError?: string }) {
     // NOTE: membership in lab_users is validated AFTER authentication, in the
     // onAuthStateChange handler (resolveLabUser). With RLS enabled, lab_users is
     // not readable while signed out, so we must NOT pre-check it here.
-
-    if (isSignUp) {
-      if (password.length < 8) {
-        setError('Password must be at least 8 characters.');
-        setLoading(false);
-        return;
-      }
-      if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-        setError('Password must contain uppercase, lowercase, and a number.');
-        setLoading(false);
-        return;
-      }
-      const { error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) {
-        if (signUpError.message.includes('already registered') || signUpError.message.includes('already been registered')) {
-          // Try signing in instead
-          const { error: fallbackError } = await supabase.auth.signInWithPassword({ email, password });
-          if (fallbackError) {
-            setError('This email is registered but the password is incorrect, or it was created with a different method. Contact the lab admin.');
-          }
-        } else {
-          setError(signUpError.message);
-        }
-      }
-    } else {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        if (signInError.message.includes('Invalid login')) {
-          setError('Invalid email or password. If this is your first time, click "Create account".');
-        } else {
-          setError(signInError.message);
-        }
+    // Public sign-ups are disabled in Supabase: accounts are created by the
+    // lab admin (Dashboard → Authentication → Add user / Send invitation).
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      if (signInError.message.includes('Invalid login')) {
+        setError('Invalid email or password. If you never received credentials, contact the lab admin.');
+      } else {
+        setError(signInError.message);
       }
     }
     setLoading(false);
@@ -88,7 +63,7 @@ function LoginScreen({ authError }: { authError?: string }) {
     <AuthShell>
       <div className="bg-white rounded-2xl shadow-2xl p-8">
         <p className="text-center text-sm text-gray-600 mb-6 font-manrope">
-          {isSignUp ? 'Create your account to access the lab.' : 'Sign in with your credentials.'}
+          Sign in with your credentials.
         </p>
 
         {displayError && (
@@ -116,7 +91,7 @@ function LoginScreen({ authError }: { authError?: string }) {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder={isSignUp ? 'Min 8 chars, upper + lower + number' : 'Enter your password'}
+              placeholder="Enter your password"
               className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
               required
               disabled={loading}
@@ -128,32 +103,23 @@ function LoginScreen({ authError }: { authError?: string }) {
             className="w-full py-3.5 bg-[#102C53] text-white rounded-xl font-semibold hover:bg-[#1a3d6e] transition-colors font-manrope flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Lock className="w-4 h-4" />
-            {loading ? 'Please wait...' : isSignUp ? 'Create account' : 'Sign in'}
+            {loading ? 'Please wait...' : 'Sign in'}
           </button>
         </form>
 
-        <div className="mt-5 pt-4 border-t border-gray-100 text-center space-y-2">
-          <button
-            type="button"
-            onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
-            className="text-xs text-[#4DC9FF] hover:text-[#102C53] font-manrope font-medium transition-colors block w-full"
+        <div className="mt-5 pt-4 border-t border-gray-100 text-center">
+          <Link
+            href="/lab/reset-password"
+            className="text-xs text-gray-500 hover:text-[#102C53] font-manrope font-medium transition-colors inline-block"
           >
-            {isSignUp ? 'Already have an account? Sign in' : 'First time? Create account'}
-          </button>
-          {!isSignUp && (
-            <Link
-              href="/lab/reset-password"
-              className="text-xs text-gray-500 hover:text-[#102C53] font-manrope font-medium transition-colors inline-block"
-            >
-              Forgot password?
-            </Link>
-          )}
+            Forgot password?
+          </Link>
         </div>
 
         <div className="mt-3">
           <p className="text-xs text-gray-400 text-center font-manrope">
             Access is restricted to authorized lab members.<br />
-            Contact the lab admin if you need access.
+            Accounts are created by the lab admin — contact us to get access.
           </p>
         </div>
       </div>
