@@ -65,31 +65,33 @@ export default function TeamPage() {
       {filtered.length === 0 ? (
         <p className="text-sm text-gray-400 font-manrope text-center py-10">No {statusFilter === 'alumni' ? 'alumni' : 'members'} match your search.</p>
       ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden divide-y divide-gray-100">
           {filtered.map(u => {
             const supervisor = users.find(x => x.id === u.supervisorId);
             const isAlumni = u.status === 'alumni';
             return (
               <button key={u.id} onClick={() => setViewing(u)}
-                className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all text-left flex items-start gap-3">
-                <span className={`inline-flex items-center justify-center w-11 h-11 rounded-2xl text-white text-xs font-bold font-manrope shrink-0 ${isAlumni ? 'bg-gray-400' : 'bg-[#102C53]'}`}>
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors text-left">
+                <span className={`inline-flex items-center justify-center w-9 h-9 rounded-xl text-white text-[10px] font-bold font-manrope shrink-0 ${isAlumni ? 'bg-gray-400' : 'bg-[#102C53]'}`}>
                   {u.abbreviation || generateAbbreviation(u.name)}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 font-manrope truncate">{u.name}</p>
-                  <p className="text-[11px] text-gray-500 font-manrope">{rolePermissions[u.role].label} · {u.affiliation}</p>
+                  <p className="text-[11px] text-gray-400 font-manrope truncate sm:hidden">{rolePermissions[u.role].label} · {u.affiliation}</p>
+                  <p className="text-[11px] text-gray-400 font-manrope truncate hidden sm:flex items-center gap-1"><Mail size={10} className="shrink-0" />{u.email}</p>
+                </div>
+                <div className="hidden sm:block text-right shrink-0 w-40">
+                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium font-manrope">{rolePermissions[u.role].label}</span>
+                  <p className="text-[10px] text-gray-400 font-manrope mt-0.5">{u.affiliation}</p>
+                </div>
+                <div className="hidden md:block text-right shrink-0 w-44">
                   {isAlumni ? (
-                    <p className="text-[10px] text-gray-400 font-manrope mt-1">
-                      {u.startDate ? formatDate(u.startDate) : '…'} – {u.endDate ? formatDate(u.endDate) : '…'}
-                    </p>
-                  ) : (
-                    <>
-                      <p className="text-[10px] text-gray-400 font-manrope mt-1 flex items-center gap-1 truncate"><Mail size={10} className="shrink-0" />{u.email}</p>
-                      {SUPERVISED_ROLES.includes(u.role) && supervisor && (
-                        <p className="text-[10px] text-gray-400 font-manrope flex items-center gap-1 truncate"><UserCheck size={10} className="shrink-0" />{supervisor.name}</p>
-                      )}
-                    </>
-                  )}
+                    <p className="text-[10px] text-gray-400 font-manrope">{u.startDate ? formatDate(u.startDate) : '…'} – {u.endDate ? formatDate(u.endDate) : '…'}</p>
+                  ) : SUPERVISED_ROLES.includes(u.role) && supervisor ? (
+                    <p className="text-[10px] text-gray-400 font-manrope flex items-center justify-end gap-1 truncate"><UserCheck size={10} className="shrink-0" />{supervisor.name}</p>
+                  ) : u.startDate ? (
+                    <p className="text-[10px] text-gray-400 font-manrope">since {formatDate(u.startDate)}</p>
+                  ) : null}
                 </div>
               </button>
             );
