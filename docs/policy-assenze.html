@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>MiMic Lab — Policy assenze e presenze</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1a1a;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 32px 24px;
+    line-height: 1.5;
+    font-size: 11pt;
+  }
+  header { border-bottom: 3px solid #102C53; padding-bottom: 12px; margin-bottom: 20px; }
+  h1 { color: #102C53; font-size: 19pt; margin: 0 0 2px; }
+  .subtitle { color: #666; font-size: 10pt; margin: 0; }
+  h2 {
+    color: #102C53; font-size: 13pt; margin: 22px 0 8px;
+    border-bottom: 1px solid #d8dee8; padding-bottom: 3px;
+  }
+  h3 { font-size: 11pt; margin: 14px 0 4px; }
+  p { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 10pt; }
+  th { background: #102C53; color: #fff; text-align: left; padding: 7px 10px; font-weight: 600; }
+  td { border: 1px solid #cfd6e2; padding: 7px 10px; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f6fa; }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 8.5pt; font-weight: 700; white-space: nowrap;
+  }
+  .b-green  { background: #d9f2e3; color: #116632; }
+  .b-amber  { background: #fdeeca; color: #8a5a00; }
+  .b-red    { background: #fadcdc; color: #a11212; }
+  .b-blue   { background: #dbeafe; color: #1c4ed8; }
+  .b-gray   { background: #e8e8e8; color: #444; }
+  ul { margin: 6px 0 6px 4px; padding-left: 18px; }
+  li { margin: 3px 0; }
+  .box {
+    border: 1px solid #cfd6e2; border-left: 4px solid #102C53;
+    background: #f4f6fa; border-radius: 4px; padding: 10px 14px; margin: 12px 0;
+  }
+  .box.warn { border-left-color: #b45309; background: #fdf6e7; }
+  footer {
+    margin-top: 28px; padding-top: 10px; border-top: 1px solid #d8dee8;
+    font-size: 9pt; color: #888; display: flex; justify-content: space-between;
+  }
+  .sign { margin-top: 34px; display: flex; gap: 60px; }
+  .sign div { flex: 1; border-top: 1px solid #999; padding-top: 4px; font-size: 9.5pt; color: #555; }
+  @media print {
+    body { padding: 0; font-size: 10.5pt; }
+    .no-print { display: none; }
+  }
+  .no-print {
+    background: #102C53; color: #fff; padding: 10px 16px; border-radius: 8px;
+    font-size: 10pt; margin-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+
+<p class="no-print">💡 Per stampare o salvare in PDF: <strong>Cmd+P</strong> (questo riquadro non verrà stampato).</p>
+
+<header>
+  <h1>Policy assenze e presenze</h1>
+  <p class="subtitle">MiMic Lab — Politecnico di Milano &nbsp;·&nbsp; BOZZA v0.3 — luglio 2026 &nbsp;·&nbsp; Referenti: Marco Rasponi, Paola Occhetta</p>
+</header>
+
+<h2>1. Scopo</h2>
+<p>Questa policy serve al <strong>coordinamento del laboratorio</strong>: sapere per tempo chi è presente, pianificare esperimenti, colture e scadenze, ed evitare che il lab resti scoperto. <strong>Non sostituisce</strong> i canali ufficiali di Ateneo per ferie e permessi del personale strutturato, né le regole specifiche di dottorandi e assegnisti: quelle procedure restano invariate.</p>
+
+<h2>2. Regole per tipo di assenza</h2>
+<table>
+  <tr>
+    <th style="width:23%">Tipo</th>
+    <th style="width:20%">Preavviso minimo</th>
+    <th style="width:22%">Approvazione</th>
+    <th>Note</th>
+  </tr>
+  <tr>
+    <td><strong>Permesso breve</strong><br>(alcune ore in un giorno)</td>
+    <td>Entro la mattina stessa</td>
+    <td><span class="badge b-green">Nessuna</span></td>
+    <td>Basta segnarlo sul calendario condiviso.</td>
+  </tr>
+  <tr>
+    <td><strong>Giorno/i off</strong><br>(1–2 giorni interi)</td>
+    <td>2 giorni lavorativi</td>
+    <td><span class="badge b-amber">Auto-approvato</span></td>
+    <td>Con preavviso regolare l'assenza è approvata automaticamente; i supervisor ricevono notifica e possono opporsi. Con preavviso inferiore serve l'ok esplicito.</td>
+  </tr>
+  <tr>
+    <td><strong>Ferie</strong><br>(più di 2 giorni consecutivi)</td>
+    <td>Almeno il doppio della durata (es. 1 settimana off → richiesta 2 settimane prima)</td>
+    <td><span class="badge b-red">Supervisor</span></td>
+    <td>Serve l'ok di <strong>uno</strong> tra Marco e Paola. Obbligatorio indicare le consegne (v. §3).</td>
+  </tr>
+  <tr>
+    <td><strong>Smart working</strong></td>
+    <td>Entro il <strong>venerdì della settimana precedente</strong></td>
+    <td><span class="badge b-green">Pre-approvato</span><br><span style="font-size:8.5pt;color:#666">entro i limiti (§5)</span></td>
+    <td>Non è un'assenza: la persona lavora. Va pianificato su base settimanale per la visibilità della presenza fisica in lab. Limiti: max <strong>4 giorni/mese</strong> e <strong>1 giorno per volta</strong> (v. §5).</td>
+  </tr>
+  <tr>
+    <td><strong>Malattia</strong></td>
+    <td>—</td>
+    <td><span class="badge b-gray">Registrazione</span></td>
+    <td>Comunicare appena possibile; si registra a posteriori, senza approvazione.</td>
+  </tr>
+  <tr>
+    <td><strong>Trasferta / conferenza</strong></td>
+    <td>Appena nota</td>
+    <td><span class="badge b-blue">Notifica</span></td>
+    <td>Assenza dal lab ma non ferie. Segnata con tipo dedicato.</td>
+  </tr>
+</table>
+
+<h2>3. Consegne per assenze lunghe</h2>
+<p>Per ogni richiesta <strong>superiore a 2 giorni</strong> va indicato chi copre le attività in corso:</p>
+<ul>
+  <li>colture cellulari e passaggi programmati;</li>
+  <li>prenotazioni strumenti già attive nel periodo (da cancellare o cedere);</li>
+  <li>scadenze di progetto o consegne che cadono nel periodo.</li>
+</ul>
+<p>La richiesta senza consegne compilate non è considerata completa.</p>
+
+<h2>4. Guardrail di gruppo</h2>
+<ul>
+  <li><strong>Tetto di compresenza:</strong> se in un giorno risultano assenti più di <em>[N — da definire, es. 3]</em> persone, o una persona con ruolo critico (es. responsabile colture), la richiesta perde l'auto-approvazione e va valutata dai supervisor.</li>
+  <li><strong>Periodi bloccati:</strong> i supervisor possono marcare finestre "no ferie salvo eccezioni" (scadenze grant, review sperimentali, visite). In quei giorni nessuna auto-approvazione.</li>
+  <li><strong>Modifiche:</strong> un'assenza approvata si può cancellare liberamente; spostarla equivale a una nuova richiesta con le stesse regole di preavviso.</li>
+</ul>
+
+<div class="box">
+  <strong>Principio generale.</strong> Il preavviso non è burocrazia: serve a chi resta. La regola pratica è <em>"più lunga l'assenza, più lungo il preavviso"</em> — e in caso di dubbio, parlarne prima con Marco o Paola vale più di qualsiasi modulo.
+</div>
+
+<h2>5. Limiti allo smart working</h2>
+<ul>
+  <li><strong>Pianificazione settimanale:</strong> i giorni di smart working si dichiarano <strong>entro il venerdì della settimana precedente</strong>. Così ogni venerdì è chiaro chi sarà fisicamente in lab la settimana successiva. Richieste fuori termine perdono la pre-approvazione e richiedono l'ok esplicito di un supervisor.</li>
+  <li><strong>Tetto mensile:</strong> massimo <strong>4 giorni di smart working al mese</strong> pre-approvati. I giorni non usati <strong>non si riportano</strong> al mese successivo.</li>
+  <li><strong>Un giorno per volta:</strong> due o più giorni <strong>consecutivi</strong> richiedono l'ok esplicito di un supervisor. "Consecutivi" si intende sui giorni lavorativi: venerdì + lunedì successivo contano come consecutivi.</li>
+  <li>I giorni concessi in deroga (es. il secondo consecutivo approvato) <strong>contano comunque</strong> nel tetto dei 4 mensili.</li>
+  <li>Eventuali <strong>accordi individuali</strong> diversi (esigenze strutturali documentate) vanno concordati esplicitamente con i supervisor e prevalgono su questi limiti.</li>
+</ul>
+
+<div class="box warn">
+  <strong>Da definire insieme al gruppo:</strong> valore del tetto di compresenza (§4), eventuali ruoli critici nominativi, e conferma delle soglie smart working (§5: 4 giorni/mese, 1 per volta).
+</div>
+
+<h2>6. Come si segnala (operativo)</h2>
+<p>Tutte le assenze si inseriscono nel <strong>calendario del Lab Manager</strong> (sezione dedicata, in arrivo), con tipo, date e — dove richiesto — consegne. Stati possibili: <em>in attesa</em>, <em>auto-approvata</em>, <em>approvata</em>, <em>respinta</em>. Fino all'attivazione della sezione dedicata: email a Marco e Paola con le stesse informazioni.</p>
+
+<div class="sign">
+  <div>Data</div>
+  <div>Il/la richiedente</div>
+  <div>Il supervisor (per assenze &gt; 2 gg)</div>
+</div>
+
+<footer>
+  <span>MiMic Lab — Policy assenze e presenze (bozza v0.3)</span>
+  <span>Pagina unica — luglio 2026</span>
+</footer>
+
+</body>
+</html>
