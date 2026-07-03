@@ -100,6 +100,13 @@ export async function upsertMaintenanceLog(m: MaintenanceLog) {
 
 export async function deleteMaintenanceLog(id: string) { return deleteRow('maintenance_logs', id); }
 
+// Bulk cleanup when an instrument is deleted (avoids orphaned history rows).
+export async function deleteMaintenanceLogsForInstrument(instrumentId: string): Promise<boolean> {
+  const { error } = await supabase.from('maintenance_logs').delete().eq('instrument_id', instrumentId);
+  if (error) { console.error('Failed to delete maintenance logs:', error.message); return false; }
+  return true;
+}
+
 // ============================================================
 // Locations
 // ============================================================

@@ -12,7 +12,7 @@ import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels } from '@/data/lab-data';
-import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog } from '@/lib/supabase-data';
+import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 
 type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'backup';
 
@@ -257,7 +257,7 @@ function SortTh({ label, k, sortKey, sortAsc, toggle, align }: { label: string; 
 // Users Tab
 // ============================================================
 function UsersTab() {
-  const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications } = useLabContext();
+  const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications, bookings, removeBooking } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<LabUser | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -375,7 +375,17 @@ function UsersTab() {
               <td className="px-3 py-2 text-gray-500 max-w-[150px] truncate">{u.projects.join(', ')}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => open(u)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => confirmDelete('Delete User?', `"${u.name}" will be permanently removed.`, () => removeUser(u.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => {
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const futureBookings = bookings.filter(b => b.userId === u.id && b.date >= todayStr);
+                  const parts = [`"${u.name}" will be permanently removed.`];
+                  if (futureBookings.length > 0) parts.push(`${futureBookings.length} upcoming booking${futureBookings.length > 1 ? 's' : ''} will be cancelled (past ones are kept for the records).`);
+                  parts.push('Note: the login account must also be removed in the Supabase dashboard (Authentication → Users).');
+                  confirmDelete('Delete User?', parts.join(' '), () => {
+                    futureBookings.forEach(b => removeBooking(b.id));
+                    removeUser(u.id);
+                  });
+                }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
@@ -439,7 +449,7 @@ function UsersTab() {
 // Projects Tab
 // ============================================================
 function ProjectsTab() {
-  const { projects, addProject, updateProject, removeProject, users } = useLabContext();
+  const { projects, addProject, updateProject, removeProject, users, updateUser } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Project | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -500,7 +510,16 @@ function ProjectsTab() {
                 <td className="px-3 py-2 text-gray-500">{members.length > 0 ? members.map(m => m.name.split(' ')[0]).join(', ') : '—'}</td>
                 <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                   <button onClick={() => open(p)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                  <button onClick={() => confirmDelete('Delete Project?', `"${p.name}" will be permanently removed.`, () => removeProject(p.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                  <button onClick={() => {
+                    const inProject = users.filter(u => u.projects.includes(p.id));
+                    const msg = inProject.length > 0
+                      ? `"${p.name}" will be permanently removed and unassigned from ${inProject.length} member${inProject.length > 1 ? 's' : ''}.`
+                      : `"${p.name}" will be permanently removed.`;
+                    confirmDelete('Delete Project?', msg, () => {
+                      inProject.forEach(u => updateUser({ ...u, projects: u.projects.filter(x => x !== p.id) }));
+                      removeProject(p.id);
+                    });
+                  }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                 </div></td>
               </tr>
             );
@@ -602,7 +621,16 @@ function CertificationsTab() {
                   <td className="px-3 py-2 text-gray-500">{certUsers.length}</td>
                   <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                     <button onClick={() => open(c)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                    <button onClick={() => confirmDelete('Delete Certification?', `"${c.name}" will be permanently removed.`, () => removeCertification(c.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                    <button onClick={() => {
+                      const holders = users.filter(u => u.certifications.includes(c.id));
+                      const msg = holders.length > 0
+                        ? `"${c.name}" will be permanently removed and revoked from ${holders.length} member${holders.length > 1 ? 's' : ''}.`
+                        : `"${c.name}" will be permanently removed.`;
+                      confirmDelete('Delete Certification?', msg, () => {
+                        holders.forEach(u => updateUser({ ...u, certifications: u.certifications.filter(x => x !== c.id) }));
+                        removeCertification(c.id);
+                      });
+                    }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                   </div></td>
                 </tr>
               );
@@ -664,7 +692,7 @@ function CertificationsTab() {
 // Locations Tab
 // ============================================================
 function LocationsTab() {
-  const { locations, addLocation, updateLocation, removeLocation, instruments, storageUnits } = useLabContext();
+  const { locations, addLocation, updateLocation, removeLocation, instruments, storageUnits, updateInstrument, updateStorageUnit } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Location | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -718,7 +746,18 @@ function LocationsTab() {
                 </div>
                 <div className="flex gap-0.5">
                   <button onClick={() => open(l)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={12} /></button>
-                  <button onClick={() => confirmDelete('Delete Location?', `"${l.name}" will be permanently removed.`, () => removeLocation(l.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                  <button onClick={() => {
+                    const instHere = instruments.filter(i => i.locationId === l.id);
+                    const suHere = storageUnits.filter(s => s.locationId === l.id);
+                    const parts = [`"${l.name}" will be permanently removed.`];
+                    if (instHere.length > 0) parts.push(`${instHere.length} instrument${instHere.length > 1 ? 's' : ''} will be unlinked (name kept as text).`);
+                    if (suHere.length > 0) parts.push(`${suHere.length} storage unit${suHere.length > 1 ? 's' : ''} will be unlinked (name kept as text).`);
+                    confirmDelete('Delete Location?', parts.join(' '), () => {
+                      instHere.forEach(i => updateInstrument({ ...i, locationId: undefined }));
+                      suHere.forEach(s => updateStorageUnit({ ...s, locationId: undefined }));
+                      removeLocation(l.id);
+                    });
+                  }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
                 </div>
               </div>
               {l.notes && <p className="text-[11px] text-gray-500 font-manrope mb-2">{l.notes}</p>}
@@ -751,7 +790,7 @@ function LocationsTab() {
 // Instruments Tab
 // ============================================================
 function InstrumentsTab() {
-  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry } = useLabContext();
+  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry, bookings, removeBooking, certifications, updateCertification } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Instrument | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -872,7 +911,19 @@ function InstrumentsTab() {
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => openMaintenance(i.id)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600" title="Maintenance log"><FileText size={13} /></button>
                 <button onClick={() => open(i)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
-                <button onClick={() => confirmDelete('Delete Instrument?', `"${i.name}" will be permanently removed.`, () => removeInstrument(i.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                <button onClick={() => {
+                  const bookingsHere = bookings.filter(b => b.instrumentId === i.id);
+                  const certsHere = certifications.filter(c => c.instrumentId === i.id);
+                  const parts = [`"${i.name}" will be permanently removed, along with its maintenance history.`];
+                  if (bookingsHere.length > 0) parts.push(`${bookingsHere.length} booking${bookingsHere.length > 1 ? 's' : ''} (past and future) will be deleted.`);
+                  if (certsHere.length > 0) parts.push(`${certsHere.length} certification${certsHere.length > 1 ? 's' : ''} will be unlinked (kept as general).`);
+                  confirmDelete('Delete Instrument?', parts.join(' '), () => {
+                    bookingsHere.forEach(b => removeBooking(b.id));
+                    certsHere.forEach(c => updateCertification({ ...c, instrumentId: undefined }));
+                    deleteMaintenanceLogsForInstrument(i.id);
+                    removeInstrument(i.id);
+                  });
+                }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ); })}
