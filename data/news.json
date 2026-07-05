@@ -1,6 +1,72 @@
 {
   "news": [
     {
+      "id": 33,
+      "date": "2026-06-22",
+      "title": "MiMic Lab Shines with Three Awards at EUROoCS 2026 in Braga",
+      "excerpt": "A large MiMic Lab delegation took part in the EUROoCS Annual Meeting 2026, held June 22–24 at the Altice Forum in Braga, Portugal, and hosted by the International Iberian Nanotechnology Laboratory (INL). As the flagship event of the European Organ-on-Chip Society — chaired by our PI Prof. Marco Rasponi — the meeting gathered the international organ-on-chip and microphysiological systems community for two and a half days of plenary and keynote lectures, scientific sessions, and poster presentations spanning disease and multi-organ models, biofabrication, PK/PD modelling, standardization and toxicity.\n\nThe week was a triumph for the group, which brought home three awards. PhD student Sonia Peddio received the 3rd Best Oral Award among Young Investigators, while PhD student Viola Antonello won the Poster Presentation Award. Our collaborator Stefano Piazza was honoured with the Best Oral Award among Senior Investigators, presenting the PHOENIX project. Dr. Mattia Ballerini and Dr. Alberto Mantegazza delivered talks, and Prof. Paola Occhetta joined the young investigators' round table, while Prof. Marco Rasponi chaired the society meeting and closed the conference. The strong MiMic Lab presence reaffirmed the group's central role in the European MPS landscape.",
+      "tag": "Award",
+      "link": "https://euroocs.eu/annual-meeting/",
+      "image": "/images/news/EUROoCS2026/EUROoCS2026-MiMic-Team.jpeg",
+      "gallery": [
+        "/images/news/EUROoCS2026/EUROoCS2026-MiMic-Team.jpeg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Awards-Peddio-Piazza.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Party-Antonello-Peddio.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Meeting-Rasponi1.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Meeting-Rasponi2.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Ballerini-speaker.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Mantegazza-speaker.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Occhetta-round-table-young1.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Occhetta-round-table-young2.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Aterini-break.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Peddio-Pata-Lucifora-crowd.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Closure-Rasponi1.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Closure-Rasponi2.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-Party-Rasponi.jpg",
+        "/images/news/EUROoCS2026/EUROoCS2026-MiMic-Team-Restaurant.jpeg"
+      ],
+      "captions": [
+        "The MiMic Lab team at EUROoCS 2026 in Braga, Portugal",
+        "Award winners: Sonia Peddio (3rd Best Oral, Young Investigators) and Stefano Piazza (Best Oral, Senior Investigators, for the PHOENIX project)",
+        "Celebrating the awards — Viola Antonello (Poster Presentation Award) and Sonia Peddio (3rd Best Oral, Young Investigators)",
+        "Prof. Marco Rasponi chairing the EUROoCS society meeting as Chair of the society",
+        "Prof. Marco Rasponi during the EUROoCS members' meeting",
+        "Dr. Mattia Ballerini presenting his work as an invited speaker",
+        "Dr. Alberto Mantegazza delivering his talk",
+        "Prof. Paola Occhetta at the Young Investigators' round table",
+        "Prof. Paola Occhetta joining the discussion at the Young Investigators' round table",
+        "Bianca Aterini during a conference break",
+        "MiMic Lab PhD students Sonia Peddio, Marina Pata and Teresa Lucifora among the conference crowd",
+        "Prof. Marco Rasponi closing the EUROoCS 2026 conference",
+        "Prof. Marco Rasponi at the closing ceremony",
+        "Celebrations at the conference social dinner",
+        "The MiMic Lab team at the conference dinner in Braga"
+      ]
+    },
+    {
+      "id": 32,
+      "date": "2026-05-26",
+      "title": "MiMic Lab at the MPS World Summit 2026 in Washington, DC",
+      "excerpt": "MiMic Lab joined the international MPS community at the MPS World Summit 2026, held May 26–29 at the Walter E. Washington Convention Center in Washington, DC — the premier global forum for Microphysiological Systems. Our PI Prof. Paola Occhetta delivered a talk, while Dr. Mattia Ballerini and Dr. Alberto Mantegazza presented posters showcasing the lab's mechanically active organ-on-chip models. The summit brought together researchers, industry innovators, and regulatory experts advancing organ-on-chip technologies for drug development, disease modeling, and regulatory science.",
+      "tag": "Conference"
+    },
+    {
+      "id": 31,
+      "date": "2026-05-18",
+      "title": "Marco Rasponi Invited to Microfluidic Horizons 2026 in Padua",
+      "excerpt": "Prof. Marco Rasponi was invited to deliver a Perspective Talk at Microfluidic Horizons 2026, the international microfluidics conference hosted by the University of Padua and held May 18–22 at the San Gaetano Centre. Bringing together leading scientists, engineers, and innovators from around the world, the conference explored the latest advances in microfluidic science and technology through plenary lectures, oral and poster sessions, and interactive discussions — with organ-on-chip systems featuring prominently among the emerging applications.",
+      "tag": "Conference",
+      "link": "https://www.microfluidics2026.it/"
+    },
+    {
+      "id": 30,
+      "date": "2026-04-21",
+      "title": "MiMic Lab at TERMIS-EU 2026 in Palma de Mallorca",
+      "excerpt": "Several MiMic Lab members attended the TERMIS-EU 2026 Conference, held April 21–24 at the Palau de Congressos de Palma in Palma de Mallorca, Spain. Under the theme \"Accelerating multidisciplinary innovation to close the gap in clinical translation\", the meeting of the Tissue Engineering and Regenerative Medicine International Society brought together academic and clinical researchers and industry experts to share advances in tissue engineering and regenerative medicine. Our group presented its latest work on mechanically active organ-on-chip platforms for tissue engineering, together with the BuonMarrow partners from Politecnico di Milano, the Institute for Bioengineering of Catalonia (IBEC), and Lund University, fostering collaborations at the interface between organ-on-chip technologies and regenerative approaches.",
+      "tag": "Conference",
+      "link": "https://eu2026.termis.org/"
+    },
+    {
       "id": 29,
       "date": "2026-03-25",
       "title": "PHOENIX Consortium at THE 3R LÄND Conference in Tübingen",
