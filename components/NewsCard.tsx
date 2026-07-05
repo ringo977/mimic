@@ -13,6 +13,7 @@ interface NewsItem {
   excerpt: string;
   image?: string;
   tag: string;
+  tags?: string[];
   gallery?: string[];
   captions?: string[];
   link?: string;
@@ -35,6 +36,7 @@ export default function NewsCard({ news }: NewsCardProps) {
   const [currentImage, setCurrentImage] = useState(0);
   const prefix = siteBasePath;
 
+  const displayTags = news.tags && news.tags.length > 0 ? news.tags : [news.tag];
   const hasGallery = news.gallery && news.gallery.length > 1;
 
   const nextImage = (e: React.MouseEvent) => {
@@ -80,9 +82,13 @@ export default function NewsCard({ news }: NewsCardProps) {
           )}
 
           <div className="flex items-center justify-between mb-3">
-            <span className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[news.tag] || 'bg-gray-100 text-gray-800'}`}>
-              {news.tag}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {displayTags.map(t => (
+                <span key={t} className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[t] || 'bg-gray-100 text-gray-800'}`}>
+                  {t}
+                </span>
+              ))}
+            </div>
             <div className="flex items-center text-gray-500 text-sm">
               <Calendar size={14} className="mr-1" />
               {new Date(news.date).toLocaleDateString('en-US', {
@@ -122,10 +128,12 @@ export default function NewsCard({ news }: NewsCardProps) {
               {/* Modal Header */}
               <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-6 py-4 flex items-start justify-between rounded-t-2xl">
                 <div className="flex-1 pr-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[news.tag] || 'bg-gray-100 text-gray-800'}`}>
-                      {news.tag}
-                    </span>
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    {displayTags.map(t => (
+                      <span key={t} className={`text-xs px-3 py-1 rounded-full font-medium ${tagColors[t] || 'bg-gray-100 text-gray-800'}`}>
+                        {t}
+                      </span>
+                    ))}
                     <div className="flex items-center text-gray-500 text-sm">
                       <Calendar size={14} className="mr-1" />
                       {new Date(news.date).toLocaleDateString('en-US', {

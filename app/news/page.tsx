@@ -11,7 +11,10 @@ export default function NewsPage() {
 
   const filteredNews = selectedTag === 'all' 
     ? newsData.news 
-    : newsData.news.filter(item => item.tag === selectedTag);
+    : newsData.news.filter(item => {
+        const itemTags = 'tags' in item && Array.isArray(item.tags) && item.tags.length > 0 ? item.tags : [item.tag];
+        return itemTags.includes(selectedTag);
+      });
 
   return (
     <div className="relative z-10 pb-20">
