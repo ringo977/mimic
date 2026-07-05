@@ -70,6 +70,22 @@
       "link": "https://eu2026.termis.org/"
     },
     {
+      "id": 34,
+      "date": "2026-04-13",
+      "title": "MiMic Lab at the 3rd ANTHEM Scientific Meeting",
+      "excerpt": "The MiMic Lab took part in the 3rd Scientific Meeting of the ANTHEM project, held on April 13–14, 2026, in the Aula \"Carlo De Carli\" at Politecnico di Milano. ANTHEM (AdvaNced Technologies for Human-centrEd Medicine), funded under the National Complementary Plan (PNC), gathers partners across academia, healthcare and industry to develop human-centred medical technologies. The meeting opened with addresses by Prof. Donatella Sciuto, Rector of Politecnico di Milano; Prof. Andrea Aliverti, Spoke leader (Politecnico di Milano); Dr. Oscar Bianchi, President of AVIS Nazionale; and Prof. Stefano Paleari, President of Fondazione Anthem. Within Pilot 3.2, our PhD student Bianca Aterini presented her work \"Environmental Determinants on Human Health: A Breathing Lung-on-Chip Platform for Toxicological Assessment\", showcasing the lab's mechanically active lung-on-chip platform for the toxicological assessment of airborne pollutants.",
+      "tag": "Conference",
+      "image": "/images/news/ANTHEM2026/ANTHEM2026-Opening.jpg",
+      "gallery": [
+        "/images/news/ANTHEM2026/ANTHEM2026-Opening.jpg",
+        "/images/news/ANTHEM2026/ANTHEM2026-Aterini.jpg"
+      ],
+      "captions": [
+        "Opening session with Prof. Donatella Sciuto (Rector of Politecnico di Milano), Prof. Andrea Aliverti (Spoke leader, Politecnico di Milano), Dr. Oscar Bianchi (President of AVIS Nazionale) and Prof. Stefano Paleari (President of Fondazione Anthem)",
+        "Bianca Aterini presenting \"Environmental Determinants on Human Health: A Breathing Lung-on-Chip Platform for Toxicological Assessment\" within Pilot 3.2"
+      ]
+    },
+    {
       "id": 29,
       "date": "2026-03-25",
       "title": "PHOENIX Consortium at THE 3R LÄND Conference in Tübingen",
