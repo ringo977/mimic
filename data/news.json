@@ -53,7 +53,18 @@
       "date": "2026-05-26",
       "title": "MiMic Lab at the MPS World Summit 2026 in Washington, DC",
       "excerpt": "MiMic Lab joined the international MPS community at the MPS World Summit 2026, held May 26–29 at the Walter E. Washington Convention Center in Washington, DC — the premier global forum for Microphysiological Systems. Our PI Prof. Paola Occhetta delivered a talk, while Dr. Mattia Ballerini and Dr. Alberto Mantegazza presented posters showcasing the lab's mechanically active organ-on-chip models. The summit brought together researchers, industry innovators, and regulatory experts advancing organ-on-chip technologies for drug development, disease modeling, and regulatory science.",
-      "tag": "Conference"
+      "tag": "Conference",
+      "image": "/images/news/MPS2026/MPS2026-Occhetta-talk.jpg",
+      "gallery": [
+        "/images/news/MPS2026/MPS2026-Occhetta-talk.jpg",
+        "/images/news/MPS2026/MPS2026-Ballerini-poster.jpg",
+        "/images/news/MPS2026/MPS2026-Mantegazza-poster.jpg"
+      ],
+      "captions": [
+        "Prof. Paola Occhetta presenting \"A modular Joint-on-Chip platform to decode mechanical, inflammatory, and osteochondral drivers of early osteoarthritis\"",
+        "Dr. Mattia Ballerini with his poster \"A Human Cardiac Fibrosis-on-Chip Platform for the Evaluation of Extracellular Vesicle-Based Antifibrotic Therapies\"",
+        "Dr. Alberto Mantegazza with his poster \"AI-Adaptive Mechanical Stimulation Accelerates hiPSC-CM Maturation in Heart-on-Chip for Precision Pharmacology\""
+      ]
     },
     {
       "id": 31,
