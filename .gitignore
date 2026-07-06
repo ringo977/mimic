@@ -58,3 +58,6 @@ public/images/team/sofia_belardinelli_originale.jpg
 
 # Internal conference program (not published on the site)
 public/images/news/EUROoCS2026/EUROoCS2026-Full-program.pdf
+
+# Reference-only material (conference programmes etc., kept locally, never published)
+/reference/

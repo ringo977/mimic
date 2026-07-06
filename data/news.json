@@ -78,9 +78,26 @@
       "id": 30,
       "date": "2026-04-21",
       "title": "MiMic Lab at TERMIS-EU 2026 in Palma de Mallorca",
-      "excerpt": "Several MiMic Lab members attended the TERMIS-EU 2026 Conference, held April 21–24 at the Palau de Congressos de Palma in Palma de Mallorca, Spain. Under the theme \"Accelerating multidisciplinary innovation to close the gap in clinical translation\", the meeting of the Tissue Engineering and Regenerative Medicine International Society brought together academic and clinical researchers and industry experts to share advances in tissue engineering and regenerative medicine. Our group presented its latest work on mechanically active organ-on-chip platforms for tissue engineering, together with the BuonMarrow partners from Politecnico di Milano, the Institute for Bioengineering of Catalonia (IBEC), and Lund University, fostering collaborations at the interface between organ-on-chip technologies and regenerative approaches.",
+      "excerpt": "Several MiMic Lab members attended the TERMIS-EU 2026 Conference, held April 21–24 at the Palau de Congressos de Palma in Palma de Mallorca, Spain. Under the theme \"Accelerating multidisciplinary innovation to close the gap in clinical translation\", the meeting of the Tissue Engineering and Regenerative Medicine International Society brought together academic and clinical researchers and industry experts to share advances in tissue engineering and regenerative medicine. Our group presented its latest work on mechanically active organ-on-chip platforms for tissue engineering, together with the BuonMarrow partners from Politecnico di Milano, the Institute for Bioengineering of Catalonia (IBEC), and Lund University, fostering collaborations at the interface between organ-on-chip technologies and regenerative approaches. Prof. Paola Occhetta also took part in the \"From Lab to Market\" session of the TERMIS Startup Competition.",
       "tag": "Conference",
-      "link": "https://eu2026.termis.org/"
+      "link": "https://eu2026.termis.org/",
+      "image": "/images/news/TERMIS2026/TERMIS2026-Rasponi-talk.jpg",
+      "gallery": [
+        "/images/news/TERMIS2026/TERMIS2026-Rasponi-talk.jpg",
+        "/images/news/TERMIS2026/TERMIS2026-Occhetta-talk.jpg",
+        "/images/news/TERMIS2026/TERMIS2026-Pennati-talk.jpg",
+        "/images/news/TERMIS2026/TERMIS2026-BuonMarrow-team.jpg",
+        "/images/news/TERMIS2026/TERMIS2026-Lab-to-Market1.jpg",
+        "/images/news/TERMIS2026/TERMIS2026-Lab-to-Market2.jpg"
+      ],
+      "captions": [
+        "Prof. Marco Rasponi presenting the MiMic Lab's mechanically active organ-on-chip platforms",
+        "Prof. Paola Occhetta presenting the Cartilage-on-Chip model for early osteoarthritis",
+        "Prof. Giancarlo Pennati presenting the BuonMarrow project, with acknowledgements to the Lund University and MiMic Lab teams",
+        "The BuonMarrow consortium at TERMIS-EU 2026, with partners from Politecnico di Milano, Lund University and the Institute for Bioengineering of Catalonia (IBEC)",
+        "Prof. Paola Occhetta in the \"From Lab to Market: Turning TERM Research into Startups\" session of the TERMIS Startup Competition",
+        "Speakers and organizers of the \"From Lab to Market\" session at the TERMIS Startup Competition, with Prof. Paola Occhetta"
+      ]
     },
     {
       "id": 34,
