@@ -72,7 +72,10 @@
       "title": "Marco Rasponi Invited to Microfluidic Horizons 2026 in Padua",
       "excerpt": "Prof. Marco Rasponi was invited to deliver a Perspective Talk at Microfluidic Horizons 2026, the international microfluidics conference hosted by the University of Padua and held May 18–22 at the San Gaetano Centre. Bringing together leading scientists, engineers, and innovators from around the world, the conference explored the latest advances in microfluidic science and technology through plenary lectures, oral and poster sessions, and interactive discussions — with organ-on-chip systems featuring prominently among the emerging applications.",
       "tag": "Conference",
-      "link": "https://www.microfluidics2026.it/"
+      "link": "https://www.microfluidics2026.it/",
+      "image": "/images/news/Horizon2026/Horizon2026-Rasponi-talk.jpg",
+      "gallery": ["/images/news/Horizon2026/Horizon2026-Rasponi-talk.jpg"],
+      "captions": ["Prof. Marco Rasponi delivering his Perspective Talk at Microfluidic Horizons 2026 in Padua"]
     },
     {
       "id": 30,
