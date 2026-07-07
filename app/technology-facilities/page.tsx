@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { Cpu, Layers, Microscope, Droplets, Zap, Settings, Pipette, FlaskConical, Shield, ExternalLink } from 'lucide-react';
 import FacilityGallery from '@/components/FacilityGallery';
+import { siteBasePath } from '@/lib/site-base-path';
 
 export const metadata: Metadata = {
   title: 'Technology & Facilities | MiMic Lab',
@@ -79,6 +80,23 @@ export default function TechnologyFacilitiesPage() {
               Our multidisciplinary team combines expertise in microfabrication, bioengineering, 
               electronics, and cell biology to develop integrated platforms that push the boundaries 
               of in vitro modeling.
+            </p>
+          </div>
+
+          <div className="max-w-4xl mx-auto mb-16">
+            <div className="rounded-2xl overflow-hidden shadow-lg bg-black">
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              >
+                <source src={`${siteBasePath}/videos/ubeat-platform.mp4`} type="video/mp4" />
+              </video>
+            </div>
+            <p className="text-center text-gray-500 text-sm mt-3">
+              The patented uBeat&reg; platform: three-chamber organ-on-chip device with integrated mechanical actuation.
             </p>
           </div>
 
