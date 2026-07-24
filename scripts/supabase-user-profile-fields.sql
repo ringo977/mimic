@@ -17,6 +17,10 @@
 -- changed by admins — not even on one's own row.
 -- ============================================================
 
+-- Present in supabase-schema-reference.sql but missing on databases
+-- created from the original schema (pre-July 2026).
+ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS abbreviation text;
+
 ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'active';
 ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS person_code text;
 ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS supervisor_id text;
