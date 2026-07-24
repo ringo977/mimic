@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+Disallow: /lab/
+
+Sitemap: https://mimic.polimi.it/sitemap.xml
