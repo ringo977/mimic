@@ -95,7 +95,7 @@ export async function findLabUserByEmail(email: string): Promise<LabUser | null>
   return toLabUser(data);
 }
 
-export async function insertLabUser(u: LabUser): Promise<LabUser | null> {
+export async function insertLabUser(u: LabUser): Promise<{ user: LabUser | null; error?: string }> {
   const { data, error } = await supabase
     .from('lab_users')
     .insert(toSupabaseRow(u))
@@ -104,12 +104,12 @@ export async function insertLabUser(u: LabUser): Promise<LabUser | null> {
 
   if (error) {
     console.error('Failed to insert user:', error.message);
-    return null;
+    return { user: null, error: error.message };
   }
-  return toLabUser(data);
+  return { user: toLabUser(data) };
 }
 
-export async function updateLabUser(u: LabUser): Promise<boolean> {
+export async function updateLabUser(u: LabUser): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
     .from('lab_users')
     .update(toSupabaseRow(u))
@@ -117,12 +117,12 @@ export async function updateLabUser(u: LabUser): Promise<boolean> {
 
   if (error) {
     console.error('Failed to update user:', error.message);
-    return false;
+    return { ok: false, error: error.message };
   }
-  return true;
+  return { ok: true };
 }
 
-export async function deleteLabUser(id: string): Promise<boolean> {
+export async function deleteLabUser(id: string): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
     .from('lab_users')
     .delete()
@@ -130,7 +130,7 @@ export async function deleteLabUser(id: string): Promise<boolean> {
 
   if (error) {
     console.error('Failed to delete user:', error.message);
-    return false;
+    return { ok: false, error: error.message };
   }
-  return true;
+  return { ok: true };
 }

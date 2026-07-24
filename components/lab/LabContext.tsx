@@ -344,22 +344,22 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   // ---- Users (Supabase) ----
   const addUser = useCallback(async (u: LabUser) => {
-    const result = await insertLabUser(u);
-    if (!result) setSyncError(`User "${u.name}": the change was NOT saved to the server. Check your connection, then reload and retry.`);
+    const { user: result, error } = await insertLabUser(u);
+    if (!result) setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
     setUsers(prev => [...prev, result || u]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Added user ${u.name}`, category: 'auth', details: `${u.role}, ${u.email}` });
   }, [user, addLogEntry]);
 
   const updateUser = useCallback(async (u: LabUser) => {
-    const ok = await updateLabUser(u);
-    if (!ok) setSyncError(`User "${u.name}": the change was NOT saved to the server. Check your connection, then reload and retry.`);
+    const { ok, error } = await updateLabUser(u);
+    if (!ok) setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
     setUsers(prev => prev.map(x => x.id === u.id ? u : x));
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated user ${u.name}`, category: 'auth', details: u.role });
   }, [user, addLogEntry]);
 
   const removeUser = useCallback(async (id: string) => {
-    const ok = await deleteLabUser(id);
-    if (!ok) setSyncError('User removal: the change was NOT saved to the server. Check your connection, then reload and retry.');
+    const { ok, error } = await deleteLabUser(id);
+    if (!ok) setSyncError(`User removal was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
     setUsers(prev => {
       const u2 = prev.find(x => x.id === id);
       if (u2) addLogEntry({ userId: user.id, userName: user.name, action: `Removed user ${u2.name}`, category: 'auth', details: u2.email });
