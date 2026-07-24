@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff } from 'lucide-react';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff, BarChart3 } from 'lucide-react';
 import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
@@ -24,6 +24,7 @@ import TeamPage from './TeamPage';
 import AbsencesPage from './AbsencesPage';
 import LogPage from './LogPage';
 import AdminPage from './AdminPage';
+import SiteStatsPage from './SiteStatsPage';
 import AuthShell from './AuthShell';
 
 // ============================================================
@@ -402,6 +403,7 @@ const navItems = [
   { id: 'absences', label: 'Absences', icon: CalendarOff, requiresPerm: null, hideForRoles: ['msc', 'guest'] },
   { id: 'log', label: 'Activity Log', icon: ClipboardList, requiresPerm: 'canViewLog' as const },
   { id: 'database', label: 'Database', icon: Database, requiresPerm: 'canViewDatabase' as const },
+  { id: 'sitestats', label: 'Site Stats', icon: BarChart3, requiresPerm: 'canAdmin' as const },
   { id: 'admin', label: 'Admin Panel', icon: Settings, requiresPerm: 'canAdmin' as const },
 ];
 
@@ -502,6 +504,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       case 'absences': return <AbsencesPage />;
       case 'log': return <LogPage />;
       case 'database': return <LogPage showDatabase />;
+      case 'sitestats': return <SiteStatsPage />;
       case 'admin': return <AdminPage />;
       default: return <DashboardPage onNavigate={setCurrentPage} />;
     }

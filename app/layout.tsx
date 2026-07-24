@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import GridBackground from "@/components/GridBackground";
 import ScrollToTop from "@/components/ScrollToTop";
 import CookieConsent from "@/components/CookieConsent";
+import SiteAnalytics from "@/components/SiteAnalytics";
 import { siteBasePath } from "@/lib/site-base-path";
 
 const manrope = Manrope({ 
@@ -58,6 +59,7 @@ export default function RootLayout({
         <Footer />
         <ScrollToTop />
         <CookieConsent />
+        <SiteAnalytics />
       </body>
     </html>
   );

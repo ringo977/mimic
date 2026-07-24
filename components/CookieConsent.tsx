@@ -23,6 +23,10 @@ function getStoredPreferences(): CookiePreferences | null {
 
 function storePreferences(prefs: CookiePreferences) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  if (prefs.analytics) {
+    // Lets SiteAnalytics count the current page when consent is granted.
+    window.dispatchEvent(new Event('mimic-consent-granted'));
+  }
 }
 
 export default function CookieConsent() {
