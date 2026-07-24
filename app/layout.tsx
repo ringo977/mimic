@@ -31,6 +31,9 @@ export const metadata: Metadata = {
     icon: `${siteBasePath}/icon.svg`,
     apple: `${siteBasePath}/icon.svg`,
   },
+  verification: {
+    google: "kIiXrjP9psjFQ0PZ77po6fsbmmEVqPb14sq-XCRTOvk",
+  },
   openGraph: {
     title: "MiMic Lab | Politecnico di Milano",
     description: "Advanced microfluidic systems and MiMic research",
