@@ -1,6 +1,22 @@
 {
   "publications": [
     {
+      "id": 106,
+      "authors": [
+        "Cretti, G.",
+        "Ballerini, M.",
+        "Mantegazza, A.",
+        "Occhetta, P.",
+        "Rasponi, M."
+      ],
+      "title": "A U-shaped Microfluidic Platform for Culturing Vascularized Colorectal Cancer Spheroids Reveals Tumor–Endothelial Crosstalk and Invasion-Associated Remodeling",
+      "journal": "Advanced Materials Technologies",
+      "year": 2026,
+      "pages": "e71277",
+      "doi": "10.1002/admt.71277",
+      "type": "Journal Article"
+    },
+    {
       "id": 104,
       "authors": [
         "Pereira-Sousa, D.",
