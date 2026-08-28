@@ -50,14 +50,9 @@ Token MiMic Push.rtf
 next-env.d.ts
 .claude/
 
-# Original uncompressed photos (keep locally, exclude from repo/deploy)
-public/images/news/Post/
-public/images/news/Pennati_MPS2025_award.jpg
-public/images/news/Bianca Aterini EUROTOX2025 Ecopa.jpg
-public/images/team/sofia_belardinelli_originale.jpg
-
-# Internal conference program (not published on the site)
-public/images/news/EUROoCS2026/EUROoCS2026-Full-program.pdf
+# Original uncompressed photos + internal documents, kept locally only.
+# Outside public/ so they never end up in the build or on the server.
+/assets-originals/
 
 # Reference-only material (conference programmes etc., kept locally, never published)
 /reference/

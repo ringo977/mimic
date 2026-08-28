@@ -54,11 +54,7 @@ rsync -a --delete \
   --exclude='.vercel' \
   --exclude='mimic passwd.txt' \
   --exclude='.claude' \
-  --exclude='public/images/news/Post' \
-  --exclude='EUROoCS2026-Full-program.pdf' \
-  --exclude='Pennati_MPS2025_award.jpg' \
-  --exclude='Bianca Aterini EUROTOX2025 Ecopa.jpg' \
-  --exclude='sofia_belardinelli_originale.jpg' \
+  --exclude='assets-originals' \
   "$ROOT/" "$TARGET/"
 
 # ── Step 3: Commit and push ─────────────────────────────────────────

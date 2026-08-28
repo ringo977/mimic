@@ -287,8 +287,7 @@ npm run build && du -sh out/
 find public/images -size +500k -exec ls -lhS {} +   # trova le immagini grandi
 ```
 
-File esclusi da git e dal deploy (in `.gitignore` **e** in `scripts/sync-gitlab.sh`):
-`public/images/news/Post/`, `Pennati_MPS2025_award.jpg`, `Bianca Aterini EUROTOX2025 Ecopa.jpg`, `sofia_belardinelli_originale.jpg`. Se aggiungi immagini grandi che non devono essere pubblicate, aggiungile a **entrambi** gli elenchi.
+Le foto originali ad alta risoluzione e i documenti interni (programmi congressi ecc.) vanno in `assets-originals/` nella root del progetto, **mai** in `public/`: tutto ciò che sta in `public/` finisce nella build e viene pubblicato sul server. La cartella `assets-originals/` è esclusa da git e dal sync GitLab, e resta solo sul Mac locale.
 
 ---
 

@@ -76,8 +76,4 @@ Internal lab management tool using Supabase. Completely separate from public con
 
 ## Files excluded from git/deploy
 
-These are in `.gitignore` AND excluded in `scripts/sync-gitlab.sh`:
-- `public/images/news/Post/`
-- `Pennati_MPS2025_award.jpg`, `Bianca Aterini EUROTOX2025 Ecopa.jpg`, `sofia_belardinelli_originale.jpg`
-
-If adding new large images that shouldn't be deployed, add them to both `.gitignore` and the `rsync --exclude` list in `sync-gitlab.sh`.
+Original hi-res photos and internal documents live in `assets-originals/` (project root), which is in `.gitignore` and excluded in `scripts/sync-gitlab.sh`. NEVER put them in `public/`: everything in `public/` is copied into `out/` and uploaded to the production server, even if gitignored.

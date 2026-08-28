@@ -583,10 +583,8 @@ The total build output (`out/` directory) must stay **under 100 MB**. Currently 
 **Rules to stay under the limit:**
 - Never commit original uncompressed photos (multi-MB PNGs from phones/cameras)
 - Always optimize images before committing
-- The following are excluded from git (`.gitignore`):
-  - `public/images/news/Post/` (original source photos)
-  - `Pennati_MPS2025_award.jpg`, `Bianca Aterini EUROTOX2025 Ecopa.jpg`, `sofia_belardinelli_originale.jpg`
-- The sync script (`sync-gitlab.sh`) also excludes these via `--exclude` flags
+- Keep original photos and internal documents in `assets-originals/` (project root), NEVER in `public/` — everything in `public/` gets copied into `out/` and uploaded to the server, even if gitignored
+- `assets-originals/` is excluded from git (`.gitignore`) and from the GitLab sync (`sync-gitlab.sh`); it lives only on the local Mac
 
 **Check build size:**
 ```bash
