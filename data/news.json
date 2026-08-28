@@ -7,12 +7,14 @@
       "excerpt": "A new MiMic Lab study, published open access in Advanced Materials Technologies, introduces a closed U-shaped microfluidic platform that overcomes a long-standing trade-off in tumour-on-chip models: achieving reproducible positioning and size control of a single tumour spheroid while vascularizing its entire surface symmetrically.\n\nThe device traps one pre-formed colorectal cancer spheroid at a defined position, uniformly embedded in a fibrin matrix populated with GFP-labelled endothelial cells, enabling volumetric tumour–endothelial interactions and longitudinal imaging of the same construct over time. The work shows that tumour spheroids release a measurable pro-angiogenic secretory profile, and that VEGF gradients drive multicellular sprouting from endothelial monolayers.\n\nThe crosstalk proved to be bidirectional. In tumour–vascular co-cultures the endothelium underwent hyperbranched remodeling, with higher junction density, branching and total vessel length than endothelial-only controls, while extracellular VEGF dropped markedly — consistent with endothelial binding and uptake of the ligand. Reciprocally, the vascularized tumours developed surface protrusions and anisotropic growth, lost epithelial junction organization and upregulated mesenchymal-associated markers, hallmarks of early invasion. The platform offers a tractable, quantitative framework for studying the earliest steps of tumour–vascular remodeling.\n\nThe study is first-authored by PhD student Giacomo Cretti, with Dr. Mattia Ballerini and Dr. Alberto Mantegazza, and was coordinated by Prof. Paola Occhetta and Prof. Marco Rasponi.",
       "tag": "News",
       "link": "https://doi.org/10.1002/admt.71277",
-      "image": "/images/news/CRC-Vascularized-2026/CRC-vascularized-spheroid.jpg",
+      "image": "/images/news/CRC-Vascularized-2026/CRC-graphical-abstract.jpg",
       "gallery": [
+        "/images/news/CRC-Vascularized-2026/CRC-graphical-abstract.jpg",
         "/images/news/CRC-Vascularized-2026/CRC-vascularized-spheroid.jpg",
         "/images/news/CRC-Vascularized-2026/CRC-figure3-platform.jpg"
       ],
       "captions": [
+        "Graphical abstract: the U-shaped platform combines size-controlled trapping of a single spheroid, full-volume tumour–endothelial interaction in fibrin and live longitudinal imaging, revealing bidirectional crosstalk — VEGF-driven vascular remodeling and endothelium-driven tumour plasticity — Cretti et al., Adv. Mater. Technol. 2026, e71277 (CC BY 4.0)",
         "A colorectal cancer spheroid surrounded by GFP-labelled endothelial cells (GFP-HUVEC, green) in the fibrin matrix — nuclei in blue (DAPI), actin in red (phalloidin)",
         "Layout of the four-channel U-shaped platform, spheroid loading steps, and quantification of tumour-associated endothelial remodeling — Figure 3 from Cretti et al., Adv. Mater. Technol. 2026, e71277 (CC BY 4.0)"
       ]
