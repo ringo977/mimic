@@ -23,7 +23,7 @@ Next.js 14 static site (`output: 'export'`). All public content lives in `data/*
 ## Adding content — rules
 
 - **Publications:** add at the BEGINNING of the array (newest first). Author format: `"Surname, Initials."`. Use next available integer `id`.
-- **News:** add at the BEGINNING. Date format: `"YYYY-MM-DD"`. Tags: `News`, `Award`, `Conference`, `Event`, `Outreach`. Gallery + captions arrays must match in length.
+- **News:** add at the BEGINNING. Date format: `"YYYY-MM-DD"`. Tags: `News`, `Publication`, `Award`, `Conference`, `Event`, `Outreach` (use `Publication` for papers coming out; `News` for press/media coverage). Gallery + captions arrays must match in length. Tag colours live in `components/NewsCard.tsx`, the filter list in `app/news/page.tsx`.
 - **Team:** place in order of seniority. Photo: 800x800px, `public/images/team/firstname-lastname.jpg`.
 - Always validate JSON after editing: `node -e "JSON.parse(require('fs').readFileSync('data/FILE.json','utf8')); console.log('OK')"`
 

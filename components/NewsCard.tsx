@@ -25,6 +25,7 @@ interface NewsCardProps {
 
 const tagColors: Record<string, string> = {
   'News': 'bg-blue-100 text-blue-800',
+  'Publication': 'bg-rose-100 text-rose-800',
   'Event': 'bg-green-100 text-green-800',
   'Conference': 'bg-purple-100 text-purple-800',
   'Award': 'bg-yellow-100 text-yellow-800',

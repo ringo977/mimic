@@ -7,7 +7,7 @@ import newsData from '@/data/news.json';
 export default function NewsPage() {
   const [selectedTag, setSelectedTag] = useState<string>('all');
 
-  const tags = ['all', 'News', 'Conference', 'Award', 'Event', 'Outreach'];
+  const tags = ['all', 'News', 'Publication', 'Conference', 'Award', 'Event', 'Outreach'];
 
   const filteredNews = selectedTag === 'all' 
     ? newsData.news 

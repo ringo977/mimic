@@ -206,7 +206,7 @@ Lista filtrabile (per anno/tipo). Ogni voce ha un pulsante **"Cite"** che genera
 Due liste: `current` e `past`. Mostra acronimo, titolo, programma di finanziamento, ruolo, periodo, eventuale link al sito/CORDIS, abstract.
 
 ### News (`/news`) — (28 voci)
-Lista cronologica filtrabile per tag (`News`, `Award`, `Conference`, `Event`, `Outreach`). Ogni voce può avere immagine di copertina e una **gallery** con didascalie. La homepage pesca le 3 più recenti.
+Lista cronologica filtrabile per tag (`News`, `Publication`, `Award`, `Conference`, `Event`, `Outreach`). Ogni voce può avere immagine di copertina e una **gallery** con didascalie. La homepage pesca le 3 più recenti.
 
 ### Network (`/network`) — (4 progetti, 2 società, 1 spinoff, 19 collaboratori)
 Progetti finanziati, società scientifiche, spinoff (BiomimX) e una **mappa Leaflet** con i collaboratori geolocalizzati (lat/lng).
