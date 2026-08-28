@@ -8,8 +8,14 @@
       "tag": "News",
       "link": "https://doi.org/10.1002/admt.71277",
       "image": "/images/news/CRC-Vascularized-2026/CRC-vascularized-spheroid.jpg",
-      "gallery": ["/images/news/CRC-Vascularized-2026/CRC-vascularized-spheroid.jpg"],
-      "captions": ["A colorectal cancer spheroid surrounded by GFP-labelled endothelial cells (GFP-HUVEC, green) in the fibrin matrix — nuclei in blue (DAPI), actin in red (phalloidin)"]
+      "gallery": [
+        "/images/news/CRC-Vascularized-2026/CRC-vascularized-spheroid.jpg",
+        "/images/news/CRC-Vascularized-2026/CRC-figure3-platform.jpg"
+      ],
+      "captions": [
+        "A colorectal cancer spheroid surrounded by GFP-labelled endothelial cells (GFP-HUVEC, green) in the fibrin matrix — nuclei in blue (DAPI), actin in red (phalloidin)",
+        "Layout of the four-channel U-shaped platform, spheroid loading steps, and quantification of tumour-associated endothelial remodeling — Figure 3 from Cretti et al., Adv. Mater. Technol. 2026, e71277 (CC BY 4.0)"
+      ]
     },
     {
       "id": 33,
