@@ -69,16 +69,6 @@
       "orcid": ""
     },
     {
-      "id": 5,
-      "name": "Dr. Paola Lagonegro",
-      "role": "PostDoc Researcher",
-      "email": "paola.lagonegro@polimi.it",
-      "bio": "Research focus on advanced microfluidic platforms and organ-on-chip systems.",
-      "image": "/images/team/paola-lagonegro.jpg",
-      "scopusId": "",
-      "orcid": ""
-    },
-    {
       "id": 6,
       "name": "Dr. Rahimeh Atashgah",
       "role": "MSCA Postdoctoral Fellow",
@@ -97,6 +87,28 @@
       "bio": "Postdoctoral researcher at DEIB, Politecnico di Milano. Works on the PHOENIX project, analysing the epistemological and ethical challenges related to the acceptability of Non-Animal Models (NAMs) in biomedical research.",
       "bioFull": "Sofia is a postdoctoral researcher at the Department of Electronics, Information and Bioengineering (DEIB) at the Polytechnic of Milan. She works on the PHOENIX project, analysing the epistemological and ethical challenges related to the acceptability of Non-Animal Models (NAMs) in biomedical research.\n\nAfter completing a PhD in Philosophy (Bioethics) at the University of Naples \"Federico II\", she worked as a postdoctoral researcher for the National Biodiversity Future Center at the University of Padova, Italy.\n\nBeyond academia, she works as a science and environmental journalist for several Italian outlets and magazines. She writes about the planetary crisis – particularly biodiversity loss and ecosystem degradation – and broader sustainability issues.",
       "image": "/images/team/sofia-belardinelli.jpg",
+      "scopusId": "",
+      "orcid": ""
+    },
+    {
+      "id": 21,
+      "name": "Dr. Marta Sacchi",
+      "role": "PostDoc Researcher",
+      "email": "marta.sacchi@polimi.it",
+      "bio": "Postdoctoral Fellow developing organ-on-chip platforms for complex cellular models. PhD from Université Paris-Saclay (CEA-Leti), with expertise in hydrogel matrices and iPSC-derived brain organoids.",
+      "bioFull": "Marta holds a B.Sc. in Biomedical Engineering from Politecnico di Milano and an M.Sc. in Bioengineering from the University of Twente. She then carried out her Ph.D. research at the French Alternative Energies and Atomic Energy Commission (CEA-Leti) in Grenoble (Ph.D. in Molecular and Cellular Biology, Université Paris-Saclay), where she developed xeno-free hydrogel matrices to support the maturation and morphogenetic development of iPSC-derived brain organoids.\n\nShe later continued her work on organoid models and biomaterial-based platforms in a joint postdoctoral position at Sanofi R&D in Paris and CEA-Leti. She is currently a Postdoctoral Fellow at the MiMic Lab, where she develops organ-on-chip platforms for complex cellular models.",
+      "image": "/images/team/marta-sacchi.jpg",
+      "scopusId": "",
+      "orcid": ""
+    },
+    {
+      "id": 22,
+      "name": "Sveva Fagiolino",
+      "role": "Experienced Researcher",
+      "email": "sveva.fagiolino@polimi.it",
+      "bio": "Experienced Researcher working on advanced in vitro models of glioblastoma, recreating the tumor microenvironment and its vascular component to study tumor behaviour and response to treatment.",
+      "bioFull": "Sveva Fagiolino completed her PhD at Maastricht University, where she worked on the development of human in vitro kidney models for drug-induced nephrotoxicity. Her research combined stem cell-derived models, hydrogels and bioprinting approaches to study how cell function and tissue organization affect the response to drugs.\n\nIn September 2026, she joined the MiMic Laboratory at Politecnico di Milano. Her current research focuses on advanced in vitro models of glioblastoma, with particular interest in recreating the tumor microenvironment and its vascular component to study tumor behaviour and response to treatment.",
+      "image": "/images/team/sveva-fagiolino.jpg",
       "scopusId": "",
       "orcid": ""
     },
@@ -239,6 +251,28 @@
       "bio": "PhD student developing lung-on-chip models for chronic lung diseases, particularly asthma.",
       "bioFull": "Federico Volpato obtained a Bachelor's degree in Biotechnology and a Master's degree in Medical Biotechnology, with a focus on Personalized Medicine, from the University of Modena and Reggio Emilia. During his Master's thesis internship at Chiesi Farmaceutici, he worked on advanced in vitro models, particularly air-liquid interface (ALI) cell cultures, for the study of chronic lung diseases, with a focus on COPD. After graduating, he continued working in the same laboratory before joining the Microfluidics and Biomimetic Microsystems Laboratory (MiMic Lab) in September 2025 as a PhD student, where his research focuses on the development of lung-on-chip models for chronic lung diseases, particularly asthma.",
       "image": "/images/team/federico-volpato.jpg",
+      "scopusId": "",
+      "orcid": ""
+    },
+    {
+      "id": 23,
+      "name": "Alessandro Rana",
+      "role": "PhD Student",
+      "email": "alessandro.rana@polimi.it",
+      "bio": "PhD candidate working on mechanically active cartilage-on-chip platforms with integrated streaming potential sensing for real-time microtissue monitoring and adaptive mechanical stimulation.",
+      "bioFull": "Alessandro Rana is a PhD candidate at the Microfluidic and Biomimetic Microsystems Laboratory (MiMic Lab). He obtained his Bachelor's degree in 2023 and his Master's degree in 2026, both in Biomedical Engineering from Politecnico di Milano. During his master's thesis at the MiMic Lab, he worked on a cartilage-on-chip device designed to recapitulate the mechanical environment of articular cartilage through the controlled application of both compressive and shear stimuli, and continued this work first as a graduate research fellow and now as a PhD student.\n\nHis current research also focuses on the integration of streaming potential sensing into cartilage-on-chip platforms, to monitor the state of the microtissue in real time and let it drive the adaptive tuning of the applied mechanical stimulation.\n\nIn parallel, he works on the characterization of a microfluidic pump integrated into a bone marrow-on-chip device, to study its pumping dynamics and predict the transfer of tumor biomarkers to the downstream sensing unit.",
+      "image": "/images/team/alessandro-rana.jpg",
+      "scopusId": "",
+      "orcid": ""
+    },
+    {
+      "id": 24,
+      "name": "Lucas Melo Bosquetti",
+      "role": "Visiting PhD Student",
+      "email": "lucas.melo@polimi.it",
+      "bio": "Visiting PhD student in Chemistry from the Federal University of ABC (Brazil), developing an organ-on-chip model of the blood-brain barrier and glioblastoma microenvironment to test liposomal copper(II) complexes.",
+      "bioFull": "Lucas is a PhD candidate in Chemistry at the Federal University of ABC, Brazil, currently undertaking a one-year research stay at the MiMic Lab, DEIB – Department of Electronics, Information and Bioengineering, Politecnico di Milano. His doctoral research focuses on the synthesis of new copper(II) complexes encapsulated in liposomal nanocarriers as candidate agents for glioblastoma treatment.\n\nDuring his stay in Milan, he is developing an organ-on-chip platform to model the blood-brain barrier and the glioblastoma microenvironment, aiming to test the transport and efficacy of these copper complexes in a physiologically relevant in vitro system. His work bridges inorganic and bioinorganic chemistry, nanomedicine and microfluidic organ-on-chip technology.",
+      "image": "/images/team/lucas-melo-bosquetti.jpg",
       "scopusId": "",
       "orcid": ""
     }
