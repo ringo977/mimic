@@ -1,5 +1,7 @@
 # 🚀 Setup Instructions for Organ-on-Chip Lab Website
 
+> ⚠️ **DOCUMENTO STORICO (gennaio 2026).** Istruzioni del setup iniziale, **non aggiornate**: per installazione, aggiornamento contenuti e deploy attuali vedi [`MANUALE_SITO.md`](MANUALE_SITO.md) e [`SITE_UPDATE_GUIDE.md`](SITE_UPDATE_GUIDE.md).
+
 ## ✅ Project Created Successfully!
 
 Your Next.js 14 website has been generated in: `/Users/marco/Local Sites/mimic`

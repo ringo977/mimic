@@ -32,7 +32,7 @@ Next.js 14 static site (`output: 'export'`). All public content lives in `data/*
 - Team photos: ~800x800px, <200KB
 - News images: ~1200px wide, <300KB
 - Optimize with: `sips -Z 1200 public/images/news/photo.jpg`
-- **CRITICAL:** total `out/` build must be <100 MB (GitLab Pages limit). Currently ~33 MB. Never commit multi-MB uncompressed photos.
+- **CRITICAL:** total `out/` build must be <100 MB (GitLab Pages limit). Currently ~46 MB. Never commit multi-MB uncompressed photos.
 
 ## Deploy workflow (3 channels)
 
@@ -55,7 +55,7 @@ npm run deploy:polimi
 
 ### Channel details
 
-- **Polimi FTPS (PRIMARY):** `mimic.polimi.it`. Server `131.175.186.58:2121`, user `mimic`, dir `htdocs-SSL/`. Script wipes the remote dir then uploads `out/` from scratch (~5 min). Credentials in `deploy.polimi.env`.
+- **Polimi FTPS (PRIMARY):** `mimic.polimi.it`. Server `131.175.186.58:2121`, user `mimic`, dir `htdocs-SSL/`. Script wipes the remote dir then uploads `out/` from scratch (~1-3 min). Credentials in `deploy.polimi.env` (quote `FTP_PASS='...'` if it has special chars).
 - **GitLab (mirror):** monorepo at `gitlab.polimi.it/DEIB/mimic`. Website lives in `mimic-website/` subfolder. Do NOT `git push` directly — always use `scripts/sync-gitlab.sh`. CI builds with empty basePath and deploys to GitLab Pages at `mimic-XXXXXX.pages.gitlab.polimi.it`. Custom domains disabled on Polimi instance. Credentials in `deploy.gitlab.env`.
 - **GitHub (backup):** remote `origin`, branch `main`. Pages at `/mimic` basePath — secondary.
 

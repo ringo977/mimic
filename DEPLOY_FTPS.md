@@ -40,6 +40,7 @@ sul server FTPS di PoliMi che ospita `mimic.polimi.it`.
 
 - Singolo file su cartella vuota: ~56 KiB/s
 - Mirror di 296 file / 100 MB su cartella vuota: **~5 minuti, ~310 KiB/s**
+  (dato storico; da settembre 2026 `out/` ≈ 46 MB → **~1–3 minuti**)
 - Mirror su cartella già piena del deploy precedente: **si blocca** dopo i
   primi file (vedi sezione 4).
 
@@ -160,6 +161,12 @@ La password va passata come variabile d'ambiente, **non scritta nello script**:
 export FTP_PASS='LA_TUA_PASSWORD'
 ./deploy.sh
 ```
+
+> ⚠️ **Apici singoli obbligatori se la password contiene caratteri speciali**
+> (`!`, `;`, spazi, `$`, ...). Vale anche per `deploy.polimi.env`, che viene
+> caricato con `source` da bash: senza apici una password tipo `abc;xyz`
+> viene interpretata come comando e il deploy fallisce subito con un errore
+> `command not found`. Scrivere sempre `FTP_PASS='...'`.
 
 Aggiungere `deploy.sh` a `.gitignore` se contiene segreti, oppure tenerlo
 versionato leggendo solo da `$FTP_PASS`.

@@ -1,5 +1,7 @@
 # 🎯 Project Summary: Organ-on-Chip Lab Website
 
+> ⚠️ **DOCUMENTO STORICO (gennaio 2026).** Fotografa lo scaffold iniziale del progetto e **non riflette lo stato attuale** (contenuti, deploy FTPS, Lab Manager, analytics...). Per la documentazione aggiornata vedi [`MANUALE_SITO.md`](MANUALE_SITO.md) e [`SITE_UPDATE_GUIDE.md`](SITE_UPDATE_GUIDE.md).
+
 ## ✅ Project Status: COMPLETE
 
 Il sito web completo è stato creato con successo in: `/Users/marco/Local Sites/mimic`

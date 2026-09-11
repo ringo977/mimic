@@ -3,7 +3,7 @@
 > Manuale operativo e tecnico completo del sito `mimic.polimi.it`.
 > Copre: architettura, come funziona ogni sezione, come aggiornarlo, come pubblicarlo, il Lab Manager, e i potenziali miglioramenti / criticità.
 >
-> Ultimo aggiornamento: giugno 2026.
+> Ultimo aggiornamento: settembre 2026.
 > Documenti collegati: [`SITE_UPDATE_GUIDE.md`](SITE_UPDATE_GUIDE.md) (riferimento rapido contenuti) · [`DEPLOY_FTPS.md`](DEPLOY_FTPS.md) (dettaglio deploy FTPS).
 
 ---
@@ -193,19 +193,19 @@ Conteggi aggiornati a giugno 2026 tra parentesi.
 ### Homepage (`/`)
 Hero con statistiche (contatori auto-calcolati dai dati), panoramica della ricerca, ultime 3 news, loghi partner. I contatori in hero sono **arrotondati per difetto al multiplo di 5** (es. 104 pubblicazioni → "100+").
 
-### Team (`/team`) — (2 PI + 20 membri)
+### Team (`/team`) — (2 PI + 23 membri)
 Tre gruppi: `pis`, `members`, `alumni`. Ogni persona è una card con foto, ruolo, bio breve e un "Read more" con bio estesa, email, link Scopus/ORCID. Ordina per anzianità/ruolo.
 
 ### Research (`/research`) — (12 topic + 20 keyword)
 Elenco dei topic di ricerca come card. Ogni topic ha uno **slug** e genera una pagina dedicata `/research/<slug>` (es. `cardiac-tissue`, `gut-microbiome`, `tumour-models`, `multi-organ`...). La pagina di dettaglio mostra le sezioni del topic e le pubblicazioni correlate (filtrate per parole chiave).
 
-### Publications (`/publications`) — (104 pubblicazioni)
+### Publications (`/publications`) — (105 pubblicazioni)
 Lista filtrabile (per anno/tipo). Ogni voce ha un pulsante **"Cite"** che genera al volo la citazione in APA, IEEE, BibTeX e RIS a partire dai campi del JSON. Gli autori del lab vengono evidenziati.
 
 ### Grants (`/grants`) — (5 correnti + 21 passati)
 Due liste: `current` e `past`. Mostra acronimo, titolo, programma di finanziamento, ruolo, periodo, eventuale link al sito/CORDIS, abstract.
 
-### News (`/news`) — (28 voci)
+### News (`/news`) — (34 voci)
 Lista cronologica filtrabile per tag (`News`, `Publication`, `Award`, `Conference`, `Event`, `Outreach`). Ogni voce può avere immagine di copertina e una **gallery** con didascalie. La homepage pesca le 3 più recenti.
 
 ### Network (`/network`) — (4 progetti, 2 società, 1 spinoff, 19 collaboratori)
@@ -222,6 +222,11 @@ Opportunità (PhD, postdoc, tesi) e processo di candidatura.
 
 ### Privacy (`/privacy`) e Cookie Policy (`/cookie-policy`)
 Pagine legali, collegate al banner cookie (`CookieConsent`).
+
+### SEO e statistiche visite (aggiunto luglio 2026)
+- **`sitemap.xml` e `robots.txt`:** generati staticamente al build da `app/sitemap.ts` e `app/robots.ts` (URL base `https://mimic.polimi.it`, `/lab/` escluso dai crawler). La sitemap include tutte le pagine pubbliche e le pagine di dettaglio research.
+- **Google Search Console:** proprietà URL-prefix `https://mimic.polimi.it`, verificata con meta tag in `app/layout.tsx` (campo `verification.google`). Lì si vedono impression e click da Google.
+- **Statistiche visite (first-party):** il componente `components/SiteAnalytics.tsx` registra le pageview nella tabella Supabase `page_views` (schema in `scripts/supabase-site-analytics.sql`). Traccia **solo** su `mimic.polimi.it`, **mai** su `/lab`, e **solo con consenso analytics** dal banner cookie. I dati aggregati (funzione `site_stats`) si consultano nel Lab Manager → **Site Stats** (solo admin).
 
 ### Lab Manager (`/lab`)
 App riservata — vedi [sezione 9](#9-il-lab-manager-lab-e-supabase).
@@ -279,7 +284,7 @@ sips -Z 800  public/images/team/nome.jpg    # ridimensiona a max 800px
 ### ⚠️ Limite critico: 100 MB su GitLab Pages
 L'output del build (`out/`) **deve restare sotto i 100 MB**, altrimenti GitLab Pages rifiuta l'artefatto.
 
-> **STATO ATTUALE: `out/` ≈ 101 MB → siamo al limite / appena oltre.** Vedi [Criticità](#15-criticità-attuali-da-tenere-docchio). Va alleggerito ottimizzando le immagini più pesanti.
+> **STATO ATTUALE (settembre 2026): `out/` ≈ 46 MB → ampio margine.** Il problema dei ~101 MB è stato risolto spostando foto originali e documenti interni in `assets-originals/` (vedi sotto).
 
 Per controllare:
 ```bash
@@ -325,7 +330,7 @@ App interna di gestione laboratorio, completamente separata dal sito pubblico. N
 - **Tipi e dati mock:** `data/lab-data.ts`.
 
 ### Funzionalità (pagine nel menu)
-Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + prenotazioni) · **Reagents** (reagenti, categorie, transazioni) · **Cryo** (storage criogenico: dewar, freezer, vials) · **Wishlist** (richieste d'acquisto) · **Manuals** (manuali/file) · **Activity Log** · **Database** · **Admin Panel**. Le voci compaiono in base ai permessi del ruolo.
+Dashboard (con **calendario settimanale**) · **Instruments** (strumenti + prenotazioni) · **Reagents** (reagenti, categorie, transazioni) · **Cryo** (storage criogenico: dewar, freezer, vials) · **Wishlist** (richieste d'acquisto) · **Manuals** (manuali/file) · **Activity Log** · **Database** · **Site Stats** (statistiche visite del sito pubblico, solo admin) · **Admin Panel**. Le voci compaiono in base ai permessi del ruolo.
 
 ### Prenotazione strumenti (aggiornato giugno 2026)
 - **Granularità mezz'ora:** gli slot sono da 30 min (configurabile a 60). Internamente l'orario è un decimale (`9.5` = 09:30) salvato nelle colonne `bookings.start_hour`/`end_hour` (tipo `numeric`).
@@ -408,7 +413,7 @@ Il sito è pubblicato su **3 canali**. **Polimi FTPS è il canale di produzione 
 - **Script:** `scripts/deploy-polimi-ftp.sh`.
 - **Rete:** richiede **rete PoliMi o VPN GlobalProtect** (copre `131.175.0.0/16`).
 - **Credenziali:** `deploy.polimi.env`.
-- **Strategia "wipe + reload":** svuota `htdocs-SSL/` e ricarica tutto da zero (~5 min, ~310 KiB/s). È molto più veloce e affidabile del mirror incrementale.
+- **Strategia "wipe + reload":** svuota `htdocs-SSL/` e ricarica tutto da zero (~1–3 min con `out/` ≈ 46 MB, ~310 KiB/s). È molto più veloce e affidabile del mirror incrementale.
 - **Impostazioni FTPS critiche (già nello script, NON cambiare):**
   - `set ftp:ssl-protect-data false` → canale dati in chiaro (login resta cifrato). **È questo che rende il trasferimento veloce.** Con `true` stalla a 60–300 B/s.
   - `set ssl:verify-certificate false` → certificato self-signed del server.
@@ -565,7 +570,7 @@ rm -rf .gitlab-clone && bash scripts/sync-gitlab.sh "messaggio"   # reset clone
 
 ## 15. Criticità attuali (da tenere d'occhio)
 
-1. **`out/` ≈ 101 MB — al limite/oltre i 100 MB di GitLab Pages.** Rischio: il deploy GitLab Pages può iniziare a fallire. *Azione:* ottimizzare le immagini più pesanti (`find public/images -size +500k ...`), ridurre la qualità/dimensione, eventualmente spostare i file più grandi fuori dal deploy (come già fatto per alcuni). Obiettivo: tornare ben sotto i 100 MB (era ~33 MB in passato).
+1. **✅ Risolto (settembre 2026) — `out/` era arrivato a ~101 MB.** Le foto originali ad alta risoluzione e i documenti interni che stavano in `public/` sono stati spostati in `assets-originals/` (root, fuori da git e dal deploy): ora `out/` ≈ **46 MB**, ampio margine sotto il limite di 100 MB di GitLab Pages. *Regola per il futuro:* gli originali non vanno mai in `public/` (vedi sez. 7).
 
 2. **Dipendenza da Supabase free tier.** Va in pausa dopo 7 giorni di inattività; il keep-alive ora funziona ma è fragile (basta un secret errato o GitHub che disabilita lo scheduled workflow dopo 60 giorni). *Azione:* controllare periodicamente lo stato del workflow e del progetto.
 
@@ -608,7 +613,8 @@ rm -rf .gitlab-clone && bash scripts/sync-gitlab.sh "messaggio"   # reset clone
 - **Health-check** del lab login (oltre al ping REST) con notifica se va giù.
 
 **SEO / accessibilità**
-- `sitemap.xml` e `robots.txt`, Open Graph image dedicata, dati strutturati (JSON-LD) per pubblicazioni/persone.
+- ✅ *Fatto (luglio 2026):* `sitemap.xml` e `robots.txt` (`app/sitemap.ts`, `app/robots.ts`), verifica Google Search Console, statistiche visite first-party (vedi sez. 5 → "SEO e statistiche visite").
+- Open Graph image dedicata, dati strutturati (JSON-LD) per pubblicazioni/persone.
 - Audit accessibilità (alt text su tutte le immagini, contrasti, focus).
 
 ---

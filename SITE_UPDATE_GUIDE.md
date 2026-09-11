@@ -1,7 +1,7 @@
 # MiMic Lab Website — Operations Guide
 
 > Complete reference for updating content, deploying, and maintaining the site.
-> Last updated: April 2026
+> Last updated: September 2026
 
 ---
 
@@ -180,7 +180,7 @@ git push origin main
 # 4. Sync to GitLab (mirror + GitLab Pages backup)
 bash scripts/sync-gitlab.sh "Same description"
 
-# 5. Deploy to mimic.polimi.it via FTPS (PRIMARY production channel, ~5 min)
+# 5. Deploy to mimic.polimi.it via FTPS (PRIMARY production channel, ~1-3 min)
 #    Requires Polimi network or GlobalProtect VPN active.
 npm run deploy:polimi
 ```
@@ -216,7 +216,7 @@ npm run deploy:polimi
    ```bash
    npm run deploy:polimi
    ```
-   This builds the site with `BASE_PATH=` (root URL), wipes `htdocs-SSL/` on the FTP server, and uploads the fresh `out/` folder. Takes ~5 minutes for a full upload.
+   This builds the site with `BASE_PATH=` (root URL), wipes `htdocs-SSL/` on the FTP server, and uploads the fresh `out/` folder. Takes ~1-3 minutes for a full upload (`out/` ≈ 46 MB).
 
 ---
 
@@ -233,7 +233,7 @@ This is the live site. See [DEPLOY_FTPS.md](DEPLOY_FTPS.md) for the full operati
 - **Remote dir:** `htdocs-SSL/`
 - **Command:** `npm run deploy:polimi`
 - **Script:** [scripts/deploy-polimi-ftp.sh](scripts/deploy-polimi-ftp.sh)
-- **Approach:** wipe-and-reload. Empty `htdocs-SSL/` first, then upload entire `out/` from scratch (~5 min).
+- **Approach:** wipe-and-reload. Empty `htdocs-SSL/` first, then upload entire `out/` from scratch (~1-3 min).
 - **Network requirement:** must be on Polimi network or **GlobalProtect VPN active** (covers `131.175.0.0/16`).
 - **Credentials:** `deploy.polimi.env` (copy from `deploy.polimi.env.example`).
 - **Critical FTPS settings (in the script):**
@@ -578,7 +578,7 @@ sips -Z 800 public/images/team/name.jpg         # resize to max 800px
 
 ### CRITICAL: GitLab Pages 100 MB artifact limit
 
-The total build output (`out/` directory) must stay **under 100 MB**. Currently ~33 MB.
+The total build output (`out/` directory) must stay **under 100 MB**. Currently ~46 MB.
 
 **Rules to stay under the limit:**
 - Never commit original uncompressed photos (multi-MB PNGs from phones/cameras)
@@ -620,12 +620,18 @@ The `/lab` route hosts an internal lab management tool, completely separate from
 - **Frontend:** `components/lab/LabApp.tsx` (client-only, `ssr: false`)
 - **Data types & mock data:** `data/lab-data.ts`
 - **Backend:** Supabase (auth, PostgreSQL, storage)
-- **Features:** instruments, reagents, cryo storage, bookings, wishlist, manuals, activity log, admin panel
+- **Features:** instruments, reagents, cryo storage, bookings, wishlist, manuals, activity log, site stats, admin panel
 - **Auth:** email/password + optional TOTP MFA via Supabase
 
 The lab app does **not** affect public site content. It uses `localStorage` for offline state and syncs with Supabase when configured.
 
 Supabase credentials are set via environment variables (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) — not committed to the repo.
+
+### SEO & site analytics (added July 2026)
+
+- **`sitemap.xml` / `robots.txt`:** generated at build time by `app/sitemap.ts` and `app/robots.ts` (base URL `https://mimic.polimi.it`, `/lab/` disallowed for crawlers).
+- **Google Search Console:** URL-prefix property `https://mimic.polimi.it`, verified via meta tag in `app/layout.tsx` (`verification.google`). Search impressions/clicks live there.
+- **First-party page-view tracking:** `components/SiteAnalytics.tsx` inserts rows into the Supabase `page_views` table (schema + RLS in `scripts/supabase-site-analytics.sql`). It only runs on `mimic.polimi.it`, never on `/lab`, and only with analytics consent from the cookie banner. Aggregated stats (RPC `site_stats`) are shown in the lab app → **Site Stats** page (admin only).
 
 ---
 

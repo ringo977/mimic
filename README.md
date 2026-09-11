@@ -1,221 +1,76 @@
-# Organ-on-Chip Lab Website - Politecnico di Milano
+# MiMic Lab Website — Politecnico di Milano
 
-A modern, professional Next.js 14 website for the Organ-on-Chip research laboratory at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.
+Sito web del **MiMic Lab** (Microfluidics and Biomimetic Microsystems Laboratory), DEIB, Politecnico di Milano. Online su **[mimic.polimi.it](https://mimic.polimi.it)**.
 
-## 🎨 Design System
+Sito statico Next.js 14 (`output: 'export'`): i contenuti pubblici vivono in file JSON (`data/`), il build produce HTML/CSS/JS puri in `out/`. Include il **Lab Manager** (`/lab`), app interna di gestione laboratorio basata su Supabase.
 
-This website strictly follows the **Politecnico di Milano Brand Identity**:
+## 📚 Documentazione
 
-### Colors
-- **Primary**: `#102C53` (PoliMi Blue Heritage)
-- **Accent**: `#4DC9FF` (Bright Blue), `#2CB7FF` (Alpha Blue)
-- **Supporting**: Binary Cyan, Space Blue, Photonic Azure
+| Documento | Contenuto |
+|---|---|
+| [`MANUALE_SITO.md`](MANUALE_SITO.md) | **Manuale completo** (italiano): architettura, sezioni, dati, deploy, Lab Manager, criticità |
+| [`SITE_UPDATE_GUIDE.md`](SITE_UPDATE_GUIDE.md) | Guida operativa rapida (inglese): come aggiornare contenuti e pubblicare |
+| [`DEPLOY_FTPS.md`](DEPLOY_FTPS.md) | Dettaglio del deploy FTPS su mimic.polimi.it (lezioni apprese, CI) |
 
-### Typography
-- **Headings**: Frank Ruhl Libre (serif)
-- **Body**: Manrope (sans-serif)
-
-## 🚀 Tech Stack
-
-- **Framework**: Next.js 14 with App Router
-- **Styling**: Tailwind CSS
-- **Animations**: Framer Motion
-- **Icons**: Lucide React
-- **Language**: TypeScript
-
-## 📁 Project Structure
-
-```
-mimic/
-├── app/                    # Next.js App Router pages
-│   ├── layout.tsx         # Root layout with fonts
-│   ├── page.tsx           # Homepage
-│   ├── team/              # Team page
-│   ├── research/          # Research projects
-│   ├── publications/      # Publications list
-│   ├── collaborations/    # Partners & collaborations
-│   ├── news/              # News & events
-│   ├── join/              # Career opportunities
-│   └── contact/           # Contact information
-├── components/            # React components
-│   ├── Navbar.tsx
-│   ├── Footer.tsx
-│   ├── Hero.tsx
-│   ├── TeamCard.tsx
-│   ├── PublicationCard.tsx
-│   ├── NewsCard.tsx
-│   ├── ResearchCard.tsx
-│   ├── GridBackground.tsx
-│   └── ui/               # Reusable UI components
-├── data/                 # JSON data files
-│   ├── team.json
-│   ├── publications.json
-│   ├── research.json
-│   ├── news.json
-│   └── collaborations.json
-├── public/               # Static assets
-│   └── images/          # Images (to be added)
-└── styles/
-    └── globals.css      # Global styles
-```
-
-## 🛠️ Installation & Setup
-
-### Prerequisites
-- Node.js 18+ and npm
-
-### Installation Steps
-
-1. **Navigate to project directory**:
-   ```bash
-   cd "/Users/marco/Local Sites/mimic"
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Run development server**:
-   ```bash
-   npm run dev
-   ```
-
-4. **Open in browser**:
-   Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 📝 Development Commands
+## 🚀 Quick start
 
 ```bash
-# Development server
-npm run dev
-
-# Production build
-npm run build
-
-# Start production server
-npm start
-
-# Lint code
-npm run lint
+npm install
+npm run dev          # sviluppo locale su http://localhost:3000
 ```
 
-## 🖼️ Adding Images
+## 📝 Aggiornare i contenuti
 
-Create these directories and add your images:
+Tutti i contenuti pubblici sono in `data/*.json`:
 
-```
-public/
-└── images/
-    ├── team/              # Team member photos
-    │   ├── marco-rossi.jpg
-    │   ├── maria-bianchi.jpg
-    │   └── ...
-    ├── research/          # Research project images
-    │   ├── cardiac.jpg
-    │   ├── liver.jpg
-    │   └── ...
-    ├── news/              # News images
-    │   ├── publication.jpg
-    │   └── ...
-    └── partners/          # Partner logos
-        ├── mit.png
-        ├── eth.png
-        └── ...
+| File | Contenuto |
+|---|---|
+| `data/publications.json` | Pubblicazioni (le nuove in cima) |
+| `data/news.json` | News ed eventi (le nuove in cima) |
+| `data/team.json` | Team: PI, membri, alumni |
+| `data/grants.json` | Grant correnti e passati |
+| `data/network.json` | Collaborazioni, società, spin-off, mappa |
+| `data/research.json` | Topic di ricerca (con pagine di dettaglio) |
+
+Le immagini vanno in `public/images/` (team 800×800 <200 KB, news ~1200 px <300 KB). Le foto originali ad alta risoluzione vanno in `assets-originals/` (fuori da git e dal deploy), **mai** in `public/`.
+
+Dopo ogni modifica, valida il JSON:
+
+```bash
+node -e "JSON.parse(require('fs').readFileSync('data/news.json','utf8')); console.log('OK')"
 ```
 
-**Image Requirements**:
-- Team photos: 400x400px (square)
-- Research images: 1200x675px (16:9 ratio)
-- News images: 1200x675px (16:9 ratio)
-- Partner logos: SVG or PNG with transparent background
+## 🌍 Pubblicazione (3 canali)
 
-## 📊 Updating Content
+**Polimi FTPS è il canale di produzione primario.**
 
-### Team Members
-Edit `data/team.json` to add/modify team members.
+```bash
+# 1. Backup sorgente su GitHub
+git add … && git commit -m "…" && git push origin main
 
-### Publications
-Edit `data/publications.json` to add new publications.
+# 2. Mirror su GitLab Polimi (Pages di backup)
+bash scripts/sync-gitlab.sh "messaggio"
 
-### Research Projects
-Edit `data/research.json` to update research areas.
-
-### News & Events
-Edit `data/news.json` to post news items.
-
-### Collaborations
-Edit `data/collaborations.json` to update partners.
-
-## 🎨 Customization
-
-### Colors
-Modify `tailwind.config.ts` to adjust the color palette (follow PoliMi brand guidelines).
-
-### Fonts
-Fonts are loaded in `app/layout.tsx` via Google Fonts.
-
-### Grid Background
-Adjust opacity in `components/GridBackground.tsx` (default: 8%).
-
-## 🚀 Deployment
-
-### Deploy to Vercel (Recommended)
-
-1. Push code to GitHub
-2. Connect repository to Vercel
-3. Deploy automatically
-
-### Deploy to Netlify
-
-1. Build: `npm run build`
-2. Publish directory: `.next`
-3. Deploy
-
-### Static Export (Optional)
-
-For static hosting, add to `next.config.js`:
-```javascript
-output: 'export',
+# 3. Produzione: mimic.polimi.it via FTPS (~1-3 min, richiede rete Polimi o VPN GlobalProtect)
+npm run deploy:polimi
 ```
-Then run: `npm run build`
 
-## 📱 Responsive Design
+| Canale | URL | basePath | Note |
+|---|---|---|---|
+| **Polimi FTPS** | `mimic.polimi.it` | *(vuoto)* | **Produzione.** Credenziali in `deploy.polimi.env` (gitignored) |
+| GitLab Pages | `mimic-XXXXXX.pages.gitlab.polimi.it` | *(vuoto)* | Mirror, build via CI. Sync **solo** con `scripts/sync-gitlab.sh` |
+| GitHub Pages | — | `/mimic` | Backup sorgente (`origin`, branch `main`) |
 
-The website is fully responsive with breakpoints:
-- Mobile: < 768px
-- Tablet: 768px - 1024px
-- Desktop: > 1024px
+## 🛠️ Tech stack
 
-## ♿ Accessibility
+Next.js 14 (App Router, static export) · TypeScript · Tailwind CSS · Framer Motion · Lucide React · Leaflet (mappa network) · Supabase (solo Lab Manager, auth + PostgreSQL + storage)
 
-- WCAG 2.1 AA compliant
-- Semantic HTML
-- Keyboard navigation support
-- Screen reader optimized
-- Alt text for images (to be added)
+## 🔍 SEO e statistiche
 
-## 🔍 SEO
-
-- Dynamic metadata per page
-- Open Graph tags
-- Semantic HTML structure
-- Sitemap (to be generated)
+- `sitemap.xml` e `robots.txt` generati al build (`app/sitemap.ts`, `app/robots.ts`)
+- Proprietà verificata su Google Search Console (meta tag in `app/layout.tsx`)
+- Statistiche visite first-party (Supabase `page_views`, con consenso cookie) — dashboard in Lab Manager → Site Stats
 
 ## 📄 License
 
-© 2024 Organ-on-Chip Lab, Politecnico di Milano. All rights reserved.
-
-## 🤝 Contributing
-
-This is a research lab website. For content updates, contact: info@organchip.polimi.it
-
-## 📞 Support
-
-For technical issues or questions:
-- Email: webmaster@organchip.polimi.it
-- Issues: Create a GitHub issue
-
----
-
-Built with ❤️ for research excellence at Politecnico di Milano
+© 2026 MiMic Lab, Politecnico di Milano. All rights reserved.
