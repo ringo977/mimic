@@ -42,30 +42,20 @@ export default function LabPasswordResetPage() {
    *  Recovery sessions may report AAL level incorrectly, so we check
    *  directly for enrolled TOTP factors instead of relying on AAL data. */
   const checkMfaAndProceed = async () => {
-    const dbg: string[] = [];
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      dbg.push(`session: ${!!session} ${session?.user?.email || 'no-email'}`);
-      if (!session) { dbg.push('→ no session, going to request'); localStorage.setItem('RESET_DBG', dbg.join(' | ')); setPhase('request'); return; }
+      if (!session) { setPhase('request'); return; }
 
-      const { data: factors, error: fErr } = await supabase.auth.mfa.listFactors();
-      dbg.push(`listFactors: ${JSON.stringify(factors)} err: ${fErr?.message || 'none'}`);
+      const { data: factors } = await supabase.auth.mfa.listFactors();
       const totp = factors?.totp?.find(f => f.status === 'verified');
-      dbg.push(`totp: ${totp?.id || 'NONE'}`);
       if (totp) {
         setMfaFactorId(totp.id);
         setPhase('verify-mfa');
-        dbg.push('→ verify-mfa');
-        localStorage.setItem('RESET_DBG', dbg.join(' | '));
         return;
       }
 
-      dbg.push('→ set-password (no totp)');
-      localStorage.setItem('RESET_DBG', dbg.join(' | '));
       setPhase('set-password');
-    } catch (err: any) {
-      dbg.push(`CAUGHT: ${err?.message || err}`);
-      localStorage.setItem('RESET_DBG', dbg.join(' | '));
+    } catch {
       setPhase('set-password');
     }
   };

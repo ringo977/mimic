@@ -56,3 +56,6 @@ next-env.d.ts
 
 # Reference-only material (conference programmes etc., kept locally, never published)
 /reference/
+
+# Security assessment interni (mai committare: elencano vulnerabilità)
+ASSESSMENT_*.md
