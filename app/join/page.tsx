@@ -225,10 +225,10 @@ export default function JoinPage() {
                 For inquiries or to submit your application, please contact us at:
               </p>
               <a 
-                href="mailto:careers@organchip.polimi.it"
+                href="mailto:marco.rasponi@polimi.it"
                 className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-semibold text-lg"
               >
-                careers@organchip.polimi.it
+                marco.rasponi@polimi.it
               </a>
               <div className="mt-8">
                 <Button href="/contact" variant="primary">
