@@ -1,6 +1,51 @@
 {
   "news": [
     {
+      "id": 38,
+      "date": "2026-09-20",
+      "title": "The Human Body in Miniature: MiMic Lab at the International Engineering Festival",
+      "excerpt": "The MiMic Lab took part in the International Engineering Festival hosted at Politecnico di Milano's Leonardo Campus with \"Il corpo umano in miniatura\" (The human body in miniature), a hands-on activity curated by Prof. Marco Rasponi and Prof. Paola Occhetta and dedicated to children aged 6 to 12.\n\nAmong prototypes, microscopes and pipettes, young visitors built their own organ-on-chip and discovered what really happens during an experiment, exploring the European projects PHOENIX, BuonMarrow, EvOoC and AI-RITMIA: miniaturized models of human organs used to test drugs, study tumours and genetic diseases, and drastically reduce animal testing. A small open laboratory to touch the future of bioengineering with your own hands — designed for budding scientists.",
+      "tag": "Outreach",
+      "link": "https://it.linkedin.com/posts/mimiclab_sciencecommunication-organonchip-nams-activity-7501287381841403904-KZXZ",
+      "image": "/images/news/FestivalIngegneria2026/Festival-corpo-umano-miniatura.jpg",
+      "gallery": [
+        "/images/news/FestivalIngegneria2026/Festival-corpo-umano-miniatura.jpg"
+      ],
+      "captions": [
+        "Young scientists at work: MiMic Lab members guide children through their first organ-on-chip experiment at the International Engineering Festival, Politecnico di Milano — September 20, 2026"
+      ]
+    },
+    {
+      "id": 37,
+      "date": "2026-09-18",
+      "title": "PHOENIX Consortium Gathers at Politecnico di Milano for the First Project Monitoring",
+      "excerpt": "The PHOENIX consortium met at Politecnico di Milano for three intense days (September 16–18, 2026) on the occasion of the project's first monitoring, reviewing the results of the first reporting period.\n\nCoordinated by the MiMic Lab, PHOENIX (Precision Human Organs-on-chip for Enhanced Neuro-muscular and Cardiac Studies, Horizon Europe) brings together nine partners from four EU countries to develop the next generation of human-based organs-on-chip. The meeting was an opportunity to align on the progress of the two core platforms — μHeart, modelling functional cardiac tissues, and μNMC, modelling neuro-muscular circuits — and to plan the upcoming milestones with the whole consortium reunited in Milan.",
+      "tag": "Event",
+      "link": "https://www.phoenix-health.eu",
+      "image": "/images/news/PHOENIX2026/PHOENIX-RP1-group-photo.jpg",
+      "gallery": [
+        "/images/news/PHOENIX2026/PHOENIX-RP1-group-photo.jpg"
+      ],
+      "captions": [
+        "The PHOENIX consortium at Politecnico di Milano for the first project monitoring meeting — September 16–18, 2026"
+      ]
+    },
+    {
+      "id": 36,
+      "date": "2026-09-15",
+      "title": "AI-RITMIA Officially Kicks Off at Humanitas Research Hospital",
+      "excerpt": "With the kick-off meeting held at Humanitas Research Hospital on September 15, 2026, the European project AI-RITMIA has officially started. Funded under the Horizon Europe – EIC Pathfinder programme and coordinated by Prof. Paola Occhetta, AI-RITMIA aims to establish a conclusive link between unclassified genetic variants (VUS) and the clinical manifestations of inherited cardiomyopathies — a major cause of heart disease and of mortality in young patients.\n\nFor the first time, the project will interface three currently diverging sectors: patient-specific in vitro modelling, in silico simulation with AI-based data handling, and clinical evaluation. The result will be an AI-guided, patient-specific heart-on-chip diagnostic platform of clinical grade, capable of correlating functional in vitro profiling with the clinical outcomes of VUS-carrying patients and returning a pathogenicity score directly to clinicians, to unlock informed diagnosis and therapeutic decisions.",
+      "tag": "Event",
+      "link": "https://www.deib.polimi.it/ita/notizie/dettagli/1529",
+      "image": "/images/news/AIRITMIA2026/AIRITMIA-kickoff-Humanitas.jpg",
+      "gallery": [
+        "/images/news/AIRITMIA2026/AIRITMIA-kickoff-Humanitas.jpg"
+      ],
+      "captions": [
+        "The AI-RITMIA consortium at the Humanitas Congress Center for the project kick-off meeting — September 15, 2026"
+      ]
+    },
+    {
       "id": 35,
       "date": "2026-08-25",
       "title": "Vascularized Colorectal Cancer-on-Chip Published in Advanced Materials Technologies",
