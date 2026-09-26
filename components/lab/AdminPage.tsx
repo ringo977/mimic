@@ -16,6 +16,7 @@ import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
+import { openManualFile } from './ManualsPage';
 
 type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'absences' | 'backup';
 
@@ -1726,9 +1727,15 @@ function ManualsTab() {
       let finalForm = { ...form };
       if (pendingFile) {
         const { uploadManualFile } = await import('@/lib/supabase-storage');
-        const url = await uploadManualFile(finalForm.id, pendingFile);
-        if (url) { finalForm = { ...finalForm, fileUrl: url }; }
-        else { alert('File upload failed. The manual will be saved without the PDF.'); }
+        // Returns the storage path (private bucket — resolved to a signed
+        // URL on download), or null on failure / non-PDF file.
+        const path = await uploadManualFile(finalForm.id, pendingFile);
+        if (path) {
+          finalForm = { ...finalForm, fileUrl: path, fileName: pendingFile.name };
+        } else {
+          alert('File upload failed (only real PDF files are accepted). The document will be saved without the PDF.');
+          finalForm = { ...finalForm, fileUrl: editing?.fileUrl, fileName: editing?.fileName };
+        }
       }
       delete finalForm.fileData;
       editing ? updateManual(finalForm) : addManual(finalForm);
@@ -1743,8 +1750,10 @@ function ManualsTab() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 50 * 1024 * 1024) { alert('File too large. Max 50 MB.'); return; }
+    // fileUrl is only set after a successful upload (a 'pending' placeholder
+    // here used to be persisted as a broken link when the upload failed).
     setPendingFile(file);
-    setForm(f => ({ ...f, fileName: file.name, fileUrl: 'pending' }));
+    setForm(f => ({ ...f, fileName: file.name }));
   };
 
   const mAcc = useMemo(() => ({ title: (m: Manual) => m.title, category: (m: Manual) => m.category, updated: (m: Manual) => m.lastUpdated || '', by: (m: Manual) => m.uploadedBy || '' }), []);
@@ -1803,7 +1812,7 @@ function ManualsTab() {
               <td className="px-3 py-2">{m.fileUrl ? <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-medium">&#10003; {m.fileName}</span> : <span className="text-gray-300 text-[10px]">—</span>}</td>
               <td className="px-3 py-2 text-gray-500">{m.lastUpdated}</td><td className="px-3 py-2 text-gray-500">{m.uploadedBy}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
-                {m.fileUrl && <a href={m.fileUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><Download size={13} /></a>}
+                {m.fileUrl && <button onClick={() => openManualFile(m.fileUrl!)} className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"><Download size={13} /></button>}
                 <button onClick={() => open(m)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
                 <button onClick={() => confirmDelete('Delete Document?', `"${m.title}" will be permanently removed.`, () => removeManual(m.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
@@ -2109,11 +2118,27 @@ function BackupTab() {
   const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm('This will REPLACE all current data in the database. Are you sure?')) { e.target.value = ''; return; }
-    setStatus({ type: 'loading', message: 'Restoring database...' });
+    setStatus({ type: 'loading', message: 'Validating backup file...' });
     try {
       const text = await file.text();
-      const { importDatabaseJSON } = await import('@/lib/backup');
+      const { validateBackupJSON, importDatabaseJSON } = await import('@/lib/backup');
+
+      // Validate FIRST and show the user exactly what will be restored
+      const check = validateBackupJSON(text);
+      if (!check.valid) {
+        showStatus('error', `Invalid backup file:\n${check.errors.join('\n')}`);
+        e.target.value = '';
+        return;
+      }
+      const lines = Object.entries(check.summary)
+        .filter(([, n]) => n > 0)
+        .map(([t, n]) => `  • ${t}: ${n} rows`)
+        .join('\n');
+      const when = check.meta?.exportedAt ? new Date(check.meta.exportedAt).toLocaleString() : 'unknown date';
+      const msg = `Restore backup from ${when}?\n\n${lines}\n\nExisting rows are updated/added; rows not in the backup are removed (users and settings are never deleted). Export a fresh backup first if unsure.`;
+      if (!confirm(msg)) { setStatus({ type: 'idle', message: '' }); e.target.value = ''; return; }
+
+      setStatus({ type: 'loading', message: 'Restoring database...' });
       const result = await importDatabaseJSON(text);
       if (result.ok) { showStatus('success', 'Database restored successfully. Reload the page to see changes.'); }
       else { showStatus('error', `Restore completed with errors:\n${result.errors.join('\n')}`); }

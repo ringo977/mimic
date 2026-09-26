@@ -8,6 +8,11 @@
 -- (docs/policy-assenze.html): leave requests with tiered approval.
 -- Approval rules are computed in the app; the database guarantees
 -- that only admins can approve/reject (trigger below).
+--
+-- ⚠️ NOTA (set 2026): le policy insert/update e protect_absence_status
+-- definite qui sono SOSTITUITE da supabase-2026-09-tighten.sql (assenze
+-- solo a proprio nome, righe decise congelate). In disaster recovery
+-- eseguire comunque questo script e POI il tighten.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS absences (

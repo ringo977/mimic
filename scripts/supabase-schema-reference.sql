@@ -8,16 +8,22 @@
 --
 -- Full recovery procedure:
 --   1. Run this script                       (tables)
---   2. Run supabase-rls-policies.sql         (RLS base)
---   3. Run supabase-booking-settings.sql     (app_settings + half hours)
---   4. Run supabase-security-hardening.sql   (membership gate & co.)
---   5. Run supabase-reagent-stock-rpc.sql    (atomic stock RPC)
---   6. Run supabase-user-profile-fields.sql  (profile fields + alumni)
---   7. Run supabase-absences.sql             (absences table + policy)
---   8. Create the 'manuals' storage bucket (Storage → New bucket)
---   9. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--   2. Run supabase-booking-settings.sql     (app_settings + half hours)
+--        [supabase-rls-policies.sql is SUPERSEDED — do NOT run it]
+--   3. Run supabase-security-hardening.sql   (membership gate & co.)
+--   4. Run supabase-reagent-stock-rpc.sql    (atomic stock RPC)
+--   5. Run supabase-user-profile-fields.sql  (profile fields + alumni)
+--   6. Run supabase-absences.sql             (absences table + policy)
+--   7. Run supabase-site-analytics.sql       (page_views + site_stats)
+--   8. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
+--        approval triggers, CHECK constraints — ALWAYS LAST)
+--   9. Create the 'manuals' storage bucket (Storage → New bucket),
+--      leaving "Public bucket" OFF (files are served via signed URLs)
 --  10. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
+--  11. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--  12. Dashboard → Authentication: sign-ups OFF, confirm email ON,
+--      secure email change ON, min password length 8 + requirements
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS lab_users (
@@ -185,9 +191,30 @@ CREATE TABLE IF NOT EXISTS manuals (
   file_url     text
 );
 
--- app_settings is created by supabase-booking-settings.sql (step 3).
--- absences is created by supabase-absences.sql (step 7).
+-- app_settings is created by supabase-booking-settings.sql (step 2).
+-- absences is created by supabase-absences.sql (step 6).
 
 -- ============================================================
--- DONE. Continue with the RLS scripts (steps 2-7 in the header).
+-- Helper bootstrap — minimal versions of the RLS helper functions,
+-- so the later scripts can reference them in their policies.
+-- (supabase-security-hardening.sql and supabase-2026-09-tighten.sql
+-- redefine them with the full logic; these exist only to break the
+-- chicken-and-egg between table scripts and policy scripts.)
+-- ============================================================
+CREATE OR REPLACE FUNCTION is_lab_member()
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM lab_users WHERE email = auth.jwt() ->> 'email');
+$$;
+
+CREATE OR REPLACE FUNCTION is_lab_admin()
+RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM lab_users
+    WHERE email = auth.jwt() ->> 'email'
+      AND (is_admin = true OR role IN ('admin', 'pi'))
+  );
+$$;
+
+-- ============================================================
+-- DONE. Continue with the other scripts (steps 2-8 in the header).
 -- ============================================================

@@ -101,7 +101,7 @@ type DragState =
   | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; lowStart: number; lowEnd: number; start: number; end: number; moved: boolean };
 
 function BookingModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
-  const { user, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, canManageAllBookings } = useLabContext();
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
   const step = bookingSettings.slotMinutes / 60;
   const todayStr = new Date().toLocaleDateString('en-CA');
@@ -153,6 +153,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 
   const save = async () => {
     setError('');
+    if (!existing && !permissions.canBook) { setError('Your role does not allow booking instruments.'); return; }
     if (!instrumentId) { setError('Select an instrument.'); return; }
     if (endHour <= startHour) { setError('End time must be after start time.'); return; }
     if (!isManager && isPastDate) { setError('Cannot book a date in the past.'); return; }

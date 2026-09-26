@@ -20,6 +20,13 @@
 -- RECOMMENDED (manual, in the Dashboard): Authentication → Sign In /
 -- Up → disable "Allow new users to sign up", since lab accounts are
 -- provisioned by admins anyway.
+--
+-- ⚠️ NOTA (set 2026): le funzioni is_lab_member/is_lab_admin, il trigger
+-- protect_lab_user_fields e alcune policy (bookings, cryo delete) definiti
+-- qui sono SOSTITUITI da supabase-user-profile-fields.sql e
+-- supabase-2026-09-tighten.sql. In disaster recovery eseguire comunque
+-- questo script (crea il grosso delle policy) e POI i successivi
+-- nell'ordine di supabase-schema-reference.sql.
 -- ============================================================
 
 -- ============================================================

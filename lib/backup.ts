@@ -1,23 +1,43 @@
 import { supabase } from './supabase';
 import JSZip from 'jszip';
 
+// Import order: lab_users LAST — if anything goes wrong midway, the row
+// that makes the caller an admin (and every RLS check with it) is still
+// intact for all preceding tables.
 const TABLES = [
-  'lab_users', 'instruments', 'locations', 'projects', 'certifications',
+  'instruments', 'maintenance_logs', 'locations', 'projects', 'certifications',
   'storage_units', 'reagents', 'bookings', 'cryo_vials',
-  'wishlist_items', 'log_entries', 'manuals',
+  'wishlist_items', 'log_entries', 'manuals', 'absences', 'app_settings',
+  'lab_users',
 ] as const;
+
+// Primary key per table (used for upsert and validation)
+const TABLE_PK: Record<string, string> = { app_settings: 'key' };
+const pkOf = (table: string) => TABLE_PK[table] ?? 'id';
+
+// Tables where rows missing from the backup are deleted on restore.
+// lab_users is excluded on purpose: restore never deletes accounts (a stale
+// backup must not lock people out); clean up extra users manually if needed.
+// app_settings is excluded too (settings added after the backup survive).
+const DELETE_STALE = new Set<string>(TABLES.filter(t => t !== 'lab_users' && t !== 'app_settings'));
 
 // ============================================================
 // JSON Backup — full database dump
 // ============================================================
 export async function exportDatabaseJSON(): Promise<string> {
   const dump: Record<string, unknown[]> = {};
+  const failed: string[] = [];
   for (const table of TABLES) {
     const { data, error } = await supabase.from(table).select('*');
-    dump[table] = error ? [] : (data || []);
+    if (error) { failed.push(`${table} (${error.message})`); continue; }
+    dump[table] = data || [];
+  }
+  // An incomplete backup silently written to disk is worse than no backup.
+  if (failed.length > 0) {
+    throw new Error(`Backup aborted — could not export: ${failed.join(', ')}`);
   }
   return JSON.stringify({
-    _meta: { version: 1, exportedAt: new Date().toISOString(), tables: TABLES.length },
+    _meta: { version: 2, exportedAt: new Date().toISOString(), tables: TABLES.length },
     ...dump,
   }, null, 2);
 }
@@ -53,10 +73,11 @@ export function validateBackupJSON(json: string): {
     }
     summary[table] = rows.length;
     if (rows.length > 0) hasData = true;
-    // Basic row validation: each row should have an id
-    const badRows = rows.filter((r: unknown) => typeof r !== 'object' || r === null || !('id' in (r as Record<string, unknown>)));
+    // Basic row validation: each row should have its primary key
+    const pk = pkOf(table);
+    const badRows = rows.filter((r: unknown) => typeof r !== 'object' || r === null || !(pk in (r as Record<string, unknown>)));
     if (badRows.length > 0) {
-      errors.push(`"${table}" has ${badRows.length} row(s) without an "id" field.`);
+      errors.push(`"${table}" has ${badRows.length} row(s) without a "${pk}" field.`);
     }
   }
 
@@ -68,9 +89,15 @@ export function validateBackupJSON(json: string): {
 }
 
 /**
- * Import a validated backup JSON. Clears tables one-by-one and re-inserts.
- * If a table fails to clear or insert, it is skipped but others continue.
- * Returns detailed results per table.
+ * Import a validated backup JSON.
+ *
+ * Restore strategy (safe by construction):
+ *   1. UPSERT every row from the backup (no destructive clear first — the
+ *      old delete+insert flow could leave lab_users empty, at which point
+ *      is_lab_admin() failed and every later step was rejected by RLS).
+ *   2. Only after a table's upserts succeeded, delete rows that are not in
+ *      the backup ("stale" rows) — never for lab_users or app_settings.
+ *   3. lab_users is processed last.
  */
 export async function importDatabaseJSON(json: string): Promise<{
   ok: boolean;
@@ -88,30 +115,45 @@ export async function importDatabaseJSON(json: string): Promise<{
     return { ok: false, errors: ['Validation failed: ' + validation.errors.join('; ')], imported: {} };
   }
 
-  // Phase 2: Import table by table
+  // Phase 2: Upsert table by table
   for (const table of TABLES) {
     const rows = parsed[table];
     if (!Array.isArray(rows) || rows.length === 0) continue;
+    const pk = pkOf(table);
 
-    // Clear existing rows
-    const { error: delErr } = await supabase.from(table).delete().neq('id', '__never__');
-    if (delErr) {
-      errors.push(`Failed to clear ${table}: ${delErr.message}. Skipping this table.`);
-      continue;
-    }
-
-    // Insert in batches of 500
-    let tableInserted = 0;
+    let tableUpserted = 0;
+    let tableFailed = false;
     for (let i = 0; i < rows.length; i += 500) {
       const batch = rows.slice(i, i + 500);
-      const { error: insErr } = await supabase.from(table).insert(batch);
-      if (insErr) {
-        errors.push(`Failed to insert into ${table} (batch ${Math.floor(i / 500) + 1}): ${insErr.message}`);
+      const { error: upErr } = await supabase.from(table).upsert(batch, { onConflict: pk });
+      if (upErr) {
+        errors.push(`Failed to restore ${table} (batch ${Math.floor(i / 500) + 1}): ${upErr.message}`);
+        tableFailed = true;
       } else {
-        tableInserted += batch.length;
+        tableUpserted += batch.length;
       }
     }
-    imported[table] = tableInserted;
+    imported[table] = tableUpserted;
+
+    // Phase 3: remove rows not present in the backup — but only if every
+    // upsert for this table succeeded (never wipe more than we restored).
+    if (!tableFailed && DELETE_STALE.has(table)) {
+      const keep = new Set(rows.map(r => (r as Record<string, unknown>)[pk]).filter(v => typeof v === 'string') as string[]);
+      const { data: existing, error: selErr } = await supabase.from(table).select(pk);
+      if (selErr || !existing) {
+        errors.push(`Restored ${table}, but could not check for stale rows: ${selErr?.message ?? 'unknown error'}`);
+      } else {
+        const stale = existing.map(r => (r as unknown as Record<string, string>)[pk]).filter(id => typeof id === 'string' && !keep.has(id));
+        for (let i = 0; i < stale.length; i += 200) {
+          const chunk = stale.slice(i, i + 200);
+          const { error: delErr } = await supabase.from(table).delete().in(pk, chunk);
+          if (delErr) {
+            errors.push(`Restored ${table}, but could not remove ${chunk.length} stale row(s): ${delErr.message}`);
+            break;
+          }
+        }
+      }
+    }
   }
 
   return { ok: errors.length === 0, errors, imported };
@@ -197,10 +239,11 @@ export async function importPDFsZip(zipBlob: Blob): Promise<{ ok: boolean; uploa
       errors.push(`Failed to upload ${fileName}: ${error.message}`);
     } else {
       uploaded++;
-      // Update file_url in manuals table if we have a matching manual
+      // Update file_url in manuals table if we have a matching manual.
+      // file_url stores the STORAGE PATH (bucket is private; links are
+      // resolved to short-lived signed URLs by getManualFileUrl).
       if (manualId) {
-        const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
-        await supabase.from('manuals').update({ file_url: urlData.publicUrl, file_name: fileName }).eq('id', manualId);
+        await supabase.from('manuals').update({ file_url: storagePath, file_name: fileName }).eq('id', manualId);
       }
     }
   }

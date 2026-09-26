@@ -3,9 +3,11 @@
 -- ============================================================
 -- Run this in: Supabase Dashboard → SQL Editor
 --
--- PREREQUISITE: run scripts/supabase-rls-policies.sql first.
--- That script creates the is_lab_admin() helper used below and
--- enables RLS on the existing tables.
+-- ⚠️ ATTENZIONE: questo script riporta app_settings_select a
+-- USING (true). Va rieseguito SOLO in disaster recovery e SEMPRE
+-- seguito da supabase-security-hardening.sql (che ristringe le
+-- policy) e dagli script successivi — vedi l'ordine in
+-- supabase-schema-reference.sql.
 -- ============================================================
 
 -- ------------------------------------------------------------

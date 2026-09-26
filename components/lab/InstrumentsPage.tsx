@@ -10,7 +10,8 @@ import { fetchBookingsForSlot } from '@/lib/supabase-data';
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, bookings, addBooking, removeBooking, instruments: mockInstruments, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, bookingSettings, canManageAllBookings } = useLabContext();
+  const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -69,7 +70,7 @@ export default function InstrumentsPage() {
   };
 
   const handleBook = async () => {
-    if (!selectedInstrument || !isCertified) return;
+    if (!selectedInstrument || !isCertified || !canBook) return;
     setBookError('');
     if (bookEndHour <= bookStartHour) { setBookError('End time must be after start time.'); return; }
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
@@ -190,7 +191,7 @@ export default function InstrumentsPage() {
           <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument?.location} &middot; {instrument?.description}</p>
           {instrument?.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{instrument.manufacturer}{instrument.model ? ` ${instrument.model}` : ''}{instrument.serialNumber ? ` · S/N ${instrument.serialNumber}` : ''}</p>}
         </div>
-        {isCertified && !isPastDate && (
+        {canBook && isCertified && !isPastDate && (
           <button
             onClick={() => {
               const defaultStart = slots.find(s => !slotIsPast(s) && s >= bookingSettings.workStartHour - EPS)
@@ -204,7 +205,12 @@ export default function InstrumentsPage() {
         )}
       </div>
 
-      {!isCertified && (
+      {!canBook && (
+        <div className="bg-amber-50 text-amber-700 px-4 py-3 rounded-xl text-sm font-manrope flex items-center gap-2">
+          <Lock size={16} /> Your role does not allow booking instruments — the calendar is read-only.
+        </div>
+      )}
+      {canBook && !isCertified && (
         <div className="bg-red-50 text-red-700 px-4 py-3 rounded-xl text-sm font-manrope flex items-center gap-2">
           <Lock size={16} /> You need certification to book this instrument. Contact the Lab Manager.
         </div>
@@ -307,7 +313,7 @@ export default function InstrumentsPage() {
                     </div>
                   ) : (
                     <div className={`h-full rounded-lg border border-dashed flex items-center justify-center ${working ? 'border-gray-200' : 'border-amber-200'}`}>
-                      {isCertified && !past && (
+                      {canBook && isCertified && !past && (
                         <button
                           onClick={() => openModalAt(slot)}
                           className={`text-[10px] font-manrope transition-colors ${working ? 'text-gray-400 hover:text-[#102C53]' : 'text-amber-500 hover:text-amber-700'}`}

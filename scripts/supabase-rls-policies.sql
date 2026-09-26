@@ -1,4 +1,12 @@
 -- ============================================================
+-- ⚠️ SUPERSEDED — NON RIESEGUIRE ⚠️
+-- Sostituito da supabase-security-hardening.sql
+-- (+ supabase-user-profile-fields.sql + supabase-2026-09-tighten.sql).
+-- Rieseguirlo RIPRISTINEREBBE policy permissive USING (true) per
+-- qualsiasi account autenticato e una is_lab_admin() senza search_path
+-- e senza controllo status='active' (gli alumni riavrebbero accesso).
+-- Conservato solo come riferimento storico.
+-- ============================================================
 -- MiMic Lab Manager — Supabase Row-Level Security (RLS) Policies
 -- ============================================================
 -- Run this SQL in: Supabase Dashboard → SQL Editor

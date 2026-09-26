@@ -11,6 +11,21 @@ const categoryLabels = {
   sds: { label: 'Safety Data Sheets', icon: AlertTriangle, color: 'bg-amber-100 text-amber-700' },
 };
 
+// The manuals bucket is private: file_url holds a storage path that must be
+// exchanged for a short-lived signed URL. The blank tab is opened BEFORE the
+// await so popup blockers (Safari) don't eat it.
+export async function openManualFile(fileUrl: string) {
+  const w = window.open('about:blank', '_blank');
+  const { getManualFileUrl } = await import('@/lib/supabase-storage');
+  const url = await getManualFileUrl(fileUrl);
+  if (url && w) {
+    w.location.href = url;
+  } else {
+    w?.close();
+    alert('Could not open the file. Check your connection and try again.');
+  }
+}
+
 export default function ManualsPage() {
   const { manuals: allManuals } = useLabContext();
   const [search, setSearch] = useState('');
@@ -115,15 +130,13 @@ export default function ManualsPage() {
                   </div>
                 </div>
                 {doc.fileUrl ? (
-                  <a
-                    href={doc.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => openManualFile(doc.fileUrl!)}
                     className="p-2 rounded-lg hover:bg-green-50 text-green-600 hover:text-green-700 transition-colors shrink-0 flex items-center gap-1"
                     title="Download PDF"
                   >
                     <Download size={16} />
-                  </a>
+                  </button>
                 ) : (
                   <div className="w-10 shrink-0" />
                 )}

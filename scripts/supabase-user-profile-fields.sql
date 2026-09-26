@@ -15,6 +15,11 @@
 -- Also extends the anti-escalation trigger: the new management fields
 -- (plus certifications, which gate instrument bookings) can only be
 -- changed by admins — not even on one's own row.
+--
+-- ⚠️ NOTA (set 2026): is_lab_member/is_lab_admin e protect_lab_user_fields
+-- definiti qui sono SOSTITUITI da supabase-2026-09-tighten.sql (identità
+-- basata su auth.uid() + più campi protetti). In disaster recovery
+-- eseguire comunque questo script e POI il tighten.
 -- ============================================================
 
 -- Present in supabase-schema-reference.sql but missing on databases

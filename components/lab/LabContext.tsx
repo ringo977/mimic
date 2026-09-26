@@ -4,10 +4,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
   StorageUnit, Project, Certification, Location, BookingSettings, AbsenceSettings,
-  rolePermissions, externalRolePermissions, mockReagents, mockInstruments, mockUsers, mockManuals,
-  mockStorageUnits, mockProjects, mockCertifications, mockLocations,
-  generateId, migrateReagentCategories, migrateStorageUnits, mergeMockDefaults,
-  getInitialBookings, getInitialCryoVials, getInitialWishlist, getInitialLog,
+  rolePermissions, externalRolePermissions,
+  generateId,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta,
 } from '@/data/lab-data';
@@ -131,14 +129,6 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   useEffect(() => {
     async function loadData() {
-      // Fallback data from localStorage (for migration / offline)
-      let localData: Record<string, unknown> = {};
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) localData = JSON.parse(saved);
-      } catch { /* noop */ }
-      const del = new Set<string>((localData._deletedIds as string[]) || []);
-
       // Fetch everything from Supabase in parallel
       const [
         sbUsers, sbInstruments, sbLocations, sbProjects, sbCertifications,
@@ -159,29 +149,34 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         fetchManuals(),
       ]);
 
-      // Use Supabase data when the fetch succeeded (even if the table is
-      // empty). Fall back to localStorage/mock ONLY when the fetch failed
-      // (null) — e.g. DB unreachable — and warn the user we're offline.
-      setUsers(sbUsers ?? (localData.users as LabUser[]) ?? [...mockUsers]);
-      setInstruments(sbInstruments ?? (localData.instruments ? mergeMockDefaults(localData.instruments as Instrument[], mockInstruments, del) : [...mockInstruments]));
-      setLocations(sbLocations ?? (localData.locations ? mergeMockDefaults(localData.locations as Location[], mockLocations, del) : [...mockLocations]));
-      setProjects(sbProjects ?? (localData.projects ? mergeMockDefaults(localData.projects as Project[], mockProjects, del) : [...mockProjects]));
-      setCertifications(sbCertifications ?? (localData.certifications ? mergeMockDefaults(localData.certifications as Certification[], mockCertifications, del) : [...mockCertifications]));
-      setStorageUnits(sbStorageUnits ?? (localData.storageUnits ? mergeMockDefaults(migrateStorageUnits((localData.storageUnits || localData.dewars) as StorageUnit[]), mockStorageUnits, del) : [...mockStorageUnits]));
-      setReagents(sbReagents ?? (localData.reagents ? migrateReagentCategories(mergeMockDefaults(localData.reagents as Reagent[], mockReagents, del)) : [...mockReagents]));
-      setBookings(sbBookings ?? (localData.bookings as Booking[]) ?? getInitialBookings());
-      setCryoVials(sbCryoVials ?? (localData.cryoVials as CryoVial[]) ?? getInitialCryoVials());
-      setWishlist(sbWishlist ?? (localData.wishlist as WishlistItem[]) ?? getInitialWishlist());
-      setLog(sbLog ?? (localData.log as LogEntry[]) ?? getInitialLog());
-      setManuals(sbManuals ?? (localData.manuals ? mergeMockDefaults(localData.manuals as Manual[], mockManuals, del) : [...mockManuals]));
+      // Supabase is the single source of truth. A failed fetch (null) shows
+      // an empty list plus a very visible error banner — never mock/demo
+      // data, which used to be silently displayed as if it were real.
+      setUsers(sbUsers ?? []);
+      setInstruments(sbInstruments ?? []);
+      setLocations(sbLocations ?? []);
+      setProjects(sbProjects ?? []);
+      setCertifications(sbCertifications ?? []);
+      setStorageUnits(sbStorageUnits ?? []);
+      setReagents(sbReagents ?? []);
+      setBookings(sbBookings ?? []);
+      setCryoVials(sbCryoVials ?? []);
+      setWishlist(sbWishlist ?? []);
+      setLog(sbLog ?? []);
+      setManuals(sbManuals ?? []);
 
-      // If any core fetch failed, the data on screen is a local fallback —
-      // make that visible instead of silently showing stale/demo data.
-      if ([sbUsers, sbInstruments, sbReagents, sbBookings, sbCryoVials, sbWishlist, sbManuals].some(x => x === null)) {
-        setSyncError('Could not load data from the server — showing local fallback data. Changes may not be saved. Check your connection and reload.');
+      if ([sbUsers, sbInstruments, sbLocations, sbProjects, sbCertifications,
+        sbStorageUnits, sbReagents, sbBookings, sbCryoVials, sbWishlist,
+        sbLog, sbManuals].some(x => x === null)) {
+        setSyncError('Could not load data from the server — some sections are empty. Do NOT make changes; check your connection and reload.');
       }
 
       // Booking settings: Supabase → localStorage → defaults
+      let localData: Record<string, unknown> = {};
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) localData = JSON.parse(saved);
+      } catch { /* noop */ }
       const sbSettings = await fetchAppSetting<Partial<BookingSettings>>(BOOKING_SETTINGS_KEY);
       const localSettings = localData.bookingSettings as Partial<BookingSettings> | undefined;
       setBookingSettings(sanitizeBookingSettings(sbSettings ?? localSettings ?? defaultBookingSettings));
@@ -380,7 +375,12 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // ---- Manuals ----
   const addManual = useCallback((m: Manual) => { setManuals(prev => [...prev, m]); track(upsertManual(m), `Document "${m.title}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added manual ${m.title}`, category: 'manual', details: m.category }); }, [user, addLogEntry, track]);
   const updateManual = useCallback((m: Manual) => { setManuals(prev => prev.map(x => x.id === m.id ? m : x)); track(upsertManual(m), `Document "${m.title}"`); }, [track]);
-  const removeManual = useCallback((id: string) => { setManuals(prev => { const m = prev.find(x => x.id === id); if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category }); return prev.filter(x => x.id !== id); }); track(deleteManual(id), 'Document removal'); }, [user, addLogEntry, track]);
+  const removeManual = useCallback((id: string) => {
+    setManuals(prev => { const m = prev.find(x => x.id === id); if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category }); return prev.filter(x => x.id !== id); });
+    track(deleteManual(id), 'Document removal');
+    // Also delete the PDF from storage (files used to be orphaned forever)
+    import('@/lib/supabase-storage').then(({ deleteManualFile }) => deleteManualFile(id)).catch(() => { /* best effort */ });
+  }, [user, addLogEntry, track]);
 
   // ---- Storage Units ----
   const addStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => [...prev, s]); track(upsertStorageUnit(s), `Storage unit "${s.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added storage unit ${s.name}`, category: 'cryo', details: `${s.type}, ${s.temperature}` }); }, [user, addLogEntry, track]);
