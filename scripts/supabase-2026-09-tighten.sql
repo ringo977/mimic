@@ -173,7 +173,23 @@ BEGIN
     OR NEW.email                   IS DISTINCT FROM OLD.email
     OR NEW.affiliation             IS DISTINCT FROM OLD.affiliation
     OR NEW.projects                IS DISTINCT FROM OLD.projects
-    OR NEW.auth_user_id            IS DISTINCT FROM OLD.auth_user_id
+    -- auth_user_id: the FIRST link of an unlinked row to the auth account
+    -- whose email equals the row's email is legitimate (done by
+    -- trg_link_lab_user_auth on any update, or by claim_lab_user() at
+    -- login). NOTE: is_lab_admin() reads auth.uid() from the caller's JWT
+    -- even inside SECURITY DEFINER functions, so without this exemption
+    -- non-admins could never get linked. Email itself stays protected
+    -- (checked above), so a user can't swap email and link elsewhere.
+    OR (NEW.auth_user_id IS DISTINCT FROM OLD.auth_user_id
+        AND NOT (
+          OLD.auth_user_id IS NULL
+          AND NEW.auth_user_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM auth.users au
+            WHERE au.id = NEW.auth_user_id
+              AND lower(au.email) = lower(NEW.email)
+          )
+        ))
     OR NEW.status                  IS DISTINCT FROM OLD.status
     OR NEW.person_code             IS DISTINCT FROM OLD.person_code
     OR NEW.supervisor_id           IS DISTINCT FROM OLD.supervisor_id
@@ -401,6 +417,28 @@ EXCEPTION
   WHEN duplicate_object THEN RAISE NOTICE 'absences_dates_check already exists — skipped.';
   WHEN check_violation THEN RAISE NOTICE 'absences_dates_check NOT added: rows with end_date < start_date exist.';
 END $$;
+
+-- ============================================================
+-- 12. Self-link at login — claim_lab_user()
+-- ============================================================
+-- The backfill above and trg_link_lab_user_auth only link a lab_users row
+-- when an auth account with the same email ALREADY exists. For rows created
+-- before their auth account, nothing fires at login. The app calls this RPC
+-- right after sign-in when it had to fall back to the email lookup.
+-- Safe because it only links the row whose email equals the caller's
+-- verified JWT email. protect_lab_user_fields (section 3) explicitly allows
+-- this first-link case — it must, since is_lab_admin() sees the caller's
+-- auth.uid() even inside SECURITY DEFINER code.
+CREATE OR REPLACE FUNCTION claim_lab_user()
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  UPDATE lab_users
+  SET auth_user_id = auth.uid()
+  WHERE auth_user_id IS NULL
+    AND status = 'active'
+    AND lower(email) = lower(auth.jwt() ->> 'email');
+$$;
+REVOKE EXECUTE ON FUNCTION claim_lab_user() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION claim_lab_user() TO authenticated;
 
 -- ============================================================
 -- DONE! Verify with:

@@ -716,7 +716,18 @@ export default function LabApp() {
   // Lookup by auth_user_id first (matches what RLS uses via auth.uid());
   // email is only the fallback for rows not linked yet.
   const resolveLabUser = useCallback(async (authId: string, email: string): Promise<LabUser | null> => {
-    const u = (await findLabUserByAuthId(authId)) ?? (await findLabUserByEmail(email));
+    let u = await findLabUserByAuthId(authId);
+    if (!u) {
+      u = await findLabUserByEmail(email);
+      if (u && u.status === 'active') {
+        // Row exists but is not linked to this auth account yet (account
+        // created after the lab_users row). claim_lab_user() sets
+        // auth_user_id = auth.uid() only where the JWT email matches;
+        // protect_lab_user_fields allows this first-link case.
+        const { error } = await supabase.rpc('claim_lab_user');
+        if (error) console.warn('claim_lab_user failed:', error.message);
+      }
+    }
     if (u && u.status === 'alumni') return null;
     return u;
   }, []);
