@@ -43,11 +43,10 @@
       "program": "EIC Pathfinder Open",
       "period": "2026–2029",
       "role": "Coordinator",
-      "logo": null,
+      "logo": "/images/partners/AI-RITMIA-Logo.png",
       "description": "AI-RITMIA will develop an unprecedented AI-guided patient-specific heart-on-chip diagnostic tool, interfacing in vitro modeling, in silico simulation, and AI-based data handling to enable unbiased correlations of clinical outcomes for patients carrying unclassified genetic variants.",
       "website": null,
-      "cordisUrl": "https://cordis.europa.eu/project/id/101257934",
-      "comingSoon": true
+      "cordisUrl": "https://cordis.europa.eu/project/id/101257934"
     }
   ],
   "societies": [
