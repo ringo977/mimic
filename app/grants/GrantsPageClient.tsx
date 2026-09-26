@@ -21,6 +21,11 @@ interface Project {
   localGrant?: string;
 }
 
+// grants.json stores websites as bare hosts ("www.example.eu"); accept full
+// URLs too so a "https://…" value never becomes "https://https://…".
+const websiteHref = (site: string) => (/^https?:\/\//i.test(site) ? site : `https://${site}`);
+const websiteLabel = (site: string) => site.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+
 export default function GrantsPageClient() {
   const [expandedProjects, setExpandedProjects] = useState<number[]>([]);
 
@@ -89,9 +94,9 @@ export default function GrantsPageClient() {
                   {(project.website || project.cordisUrl) && (
                     <div className="flex flex-wrap gap-4 mb-4">
                       {project.website && (
-                        <a href={`https://${project.website}`} target="_blank" rel="noopener noreferrer"
+                        <a href={websiteHref(project.website)} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm">
-                          <ExternalLink size={16} /> {project.website}
+                          <ExternalLink size={16} /> {websiteLabel(project.website)}
                         </a>
                       )}
                       {project.cordisUrl && (
@@ -187,17 +192,22 @@ export default function GrantsPageClient() {
                     </span>
                   </div>
 
-                  {/* Website */}
-                  {project.website && (
-                    <a
-                      href={`https://${project.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm mb-4"
-                    >
-                      <ExternalLink size={16} />
-                      {project.website}
-                    </a>
+                  {/* Website / CORDIS link */}
+                  {(project.website || project.cordisUrl) && (
+                    <div className="flex flex-wrap gap-4 mb-4">
+                      {project.website && (
+                        <a href={websiteHref(project.website)} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm">
+                          <ExternalLink size={16} /> {websiteLabel(project.website)}
+                        </a>
+                      )}
+                      {project.cordisUrl && (
+                        <a href={project.cordisUrl} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm">
+                          <ExternalLink size={16} /> CORDIS Fact Sheet
+                        </a>
+                      )}
+                    </div>
                   )}
 
                   {/* Abstract (if available) */}
