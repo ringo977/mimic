@@ -84,6 +84,19 @@ export async function fetchLabUsers(): Promise<LabUser[] | null> {
   return (data || []).map(toLabUser);
 }
 
+// Preferred lookup: by linked auth account. Robust against email changes
+// (JWT email vs lab_users.email mismatches broke own-name RLS checks).
+export async function findLabUserByAuthId(authUserId: string): Promise<LabUser | null> {
+  const { data, error } = await supabase
+    .from('lab_users')
+    .select('*')
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return toLabUser(data);
+}
+
 export async function findLabUserByEmail(email: string): Promise<LabUser | null> {
   const { data, error } = await supabase
     .from('lab_users')

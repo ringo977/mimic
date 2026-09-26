@@ -115,11 +115,38 @@ export async function importDatabaseJSON(json: string): Promise<{
     return { ok: false, errors: ['Validation failed: ' + validation.errors.join('; ')], imported: {} };
   }
 
+  // Identify the caller: needed to protect their own lab_users row below.
+  const { data: authData } = await supabase.auth.getUser();
+  const myAuthId = authData?.user?.id ?? null;
+  const myEmail = authData?.user?.email?.toLowerCase() ?? null;
+
   // Phase 2: Upsert table by table
   for (const table of TABLES) {
-    const rows = parsed[table];
-    if (!Array.isArray(rows) || rows.length === 0) continue;
+    const raw = parsed[table];
+    if (!Array.isArray(raw) || raw.length === 0) continue;
+    let rows: unknown[] = raw;
     const pk = pkOf(table);
+
+    if (table === 'lab_users') {
+      rows = rows
+        // Never restore the caller's own row: an old backup could demote
+        // or deactivate the very admin performing the restore.
+        .filter(r => {
+          const row = r as Record<string, unknown>;
+          const rowEmail = typeof row.email === 'string' ? row.email.toLowerCase() : null;
+          return !((myAuthId && row.auth_user_id === myAuthId) || (myEmail && rowEmail === myEmail));
+        })
+        // Strip auth_user_id: on a fresh Supabase project (disaster recovery)
+        // the backed-up UUIDs don't exist in auth.users, and a non-null
+        // auth_user_id disables the email fallback in the RLS helpers —
+        // locking everyone out. The trg_link_lab_user_auth trigger re-links
+        // rows to the right auth account on insert.
+        .map(r => {
+          const { auth_user_id: _dropped, ...rest } = r as Record<string, unknown>;
+          return rest;
+        });
+      if (rows.length === 0) continue;
+    }
 
     let tableUpserted = 0;
     let tableFailed = false;

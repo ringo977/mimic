@@ -292,7 +292,9 @@ export default function CryoPage() {
                 )}
               </div>
 
-              {permissions.canManageCryo && (
+              {/* RLS only allows delete by owner or admin: hide the button
+                  from everyone else (it used to fail silently). */}
+              {permissions.canManageCryo && (selectedVialData.userId === user.id || user.isAdmin || user.role === 'admin' || user.role === 'pi') && (
                 <button
                   onClick={() => confirmDelete('Withdraw Vial?', `${selectedVialData.cellLine} P${selectedVialData.passage} will be removed from storage.`, () => { removeCryoVial(selectedVialData.id); setSelectedVial(null); })}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors mt-4"
@@ -385,8 +387,12 @@ export default function CryoPage() {
 type VialSortKey = 'cellLine' | 'passage' | 'storage' | 'position' | 'userName' | 'date';
 
 function VialInventory() {
-  const { cryoVials, removeCryoVial, storageUnits, permissions } = useLabContext();
+  const { user, cryoVials, removeCryoVial, storageUnits, permissions } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
+  // Mirror of the cryo_vials_delete RLS policy (owner or admin): don't show
+  // withdraw buttons that the server would reject.
+  const isAdminUser = user.isAdmin || user.role === 'admin' || user.role === 'pi';
+  const canWithdraw = (v: { userId: string }) => isAdminUser || v.userId === user.id;
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<VialSortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
@@ -451,7 +457,8 @@ function VialInventory() {
         </div>
         {search && <p className="text-[11px] text-gray-400 font-manrope">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>}
       </div>
-      {orphanVials.length > 0 && permissions.canManageCryo && (
+      {/* Cleanup deletes other users' vials too: admin only (RLS). */}
+      {orphanVials.length > 0 && isAdminUser && (
         <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between gap-3">
           <p className="text-xs text-amber-800 font-manrope">
             {orphanVials.length} orphaned vial{orphanVials.length > 1 ? 's' : ''} reference a storage unit that no longer exists.
@@ -493,7 +500,9 @@ function VialInventory() {
                 <td className="px-3 py-2 text-gray-500 max-w-[150px] truncate">{v.notes || '—'}</td>
                 {permissions.canManageCryo && (
                   <td className="px-3 py-2 text-right">
-                    <button onClick={() => confirmDelete('Withdraw Vial?', `${v.cellLine} P${v.passage} will be removed from storage.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                    {canWithdraw(v) && (
+                      <button onClick={() => confirmDelete('Withdraw Vial?', `${v.cellLine} P${v.passage} will be removed from storage.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                    )}
                   </td>
                 )}
               </tr>

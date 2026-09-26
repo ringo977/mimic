@@ -22,8 +22,15 @@ async function upsertRow<T>(table: string, row: T): Promise<T | null> {
 }
 
 async function deleteRow(table: string, id: string): Promise<boolean> {
-  const { error } = await supabase.from(table).delete().eq('id', id);
+  // .select('id') makes the delete verifiable: RLS denials don't error,
+  // they just delete 0 rows — without this check the UI removes the item
+  // locally and it silently reappears on reload.
+  const { data, error } = await supabase.from(table).delete().eq('id', id).select('id');
   if (error) { console.error(`Failed to delete from ${table}:`, error.message); return false; }
+  if (!data || data.length === 0) {
+    console.error(`Delete from ${table} removed no rows (id ${id}) — likely denied by RLS.`);
+    return false;
+  }
   return true;
 }
 

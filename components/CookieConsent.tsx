@@ -185,19 +185,24 @@ export default function CookieConsent() {
 
           {/* Functional and Analytics cookies */}
           <div className="bg-gray-50 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setExpandedAnalytics(!expandedAnalytics)}
-              className="w-full flex items-center justify-between px-5 py-4"
-            >
-              <div className="flex items-center gap-3">
-                {expandedAnalytics ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
-                <span className="font-manrope font-semibold text-sm text-gray-800">Functional and Analytics cookies</span>
-              </div>
+            {/* Two sibling buttons (expand + toggle): nested <button>s are
+                invalid HTML and break keyboard/AT interaction. */}
+            <div className="w-full flex items-center justify-between px-5 py-4">
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setAnalyticsEnabled(!analyticsEnabled); }}
+                onClick={() => setExpandedAnalytics(!expandedAnalytics)}
+                aria-expanded={expandedAnalytics}
+                className="flex items-center gap-3 flex-1 text-left"
+              >
+                {expandedAnalytics ? <ChevronUp size={18} className="text-gray-400" /> : <ChevronDown size={18} className="text-gray-400" />}
+                <span className="font-manrope font-semibold text-sm text-gray-800">Functional and Analytics cookies</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnalyticsEnabled(!analyticsEnabled)}
                 className={`relative w-11 h-6 rounded-full transition-colors ${analyticsEnabled ? 'bg-polimi-blue-heritage' : 'bg-gray-300'}`}
                 aria-label="Toggle functional and analytics cookies"
+                aria-pressed={analyticsEnabled}
               >
                 <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform flex items-center justify-center ${analyticsEnabled ? 'translate-x-[22px]' : 'translate-x-0.5'}`}>
                   {analyticsEnabled && (
@@ -207,7 +212,7 @@ export default function CookieConsent() {
                   )}
                 </div>
               </button>
-            </button>
+            </div>
             {expandedAnalytics && (
               <div className="px-5 pb-4 text-xs text-gray-500 font-manrope leading-relaxed">
                 These cookies allow us to count visits and traffic sources so we can measure and improve site performance.

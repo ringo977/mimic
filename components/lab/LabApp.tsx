@@ -6,7 +6,7 @@ import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashbo
 import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
-import { findLabUserByEmail } from '@/lib/supabase-users';
+import { findLabUserByAuthId, findLabUserByEmail } from '@/lib/supabase-users';
 
 function getInitials(name: string, abbreviation?: string): string {
   if (abbreviation) return abbreviation;
@@ -713,8 +713,10 @@ export default function LabApp() {
 
   // Alumni are also blocked server-side (is_lab_member requires active
   // status), so this client check is just for the clearer error message.
-  const resolveLabUser = useCallback(async (email: string): Promise<LabUser | null> => {
-    const u = await findLabUserByEmail(email);
+  // Lookup by auth_user_id first (matches what RLS uses via auth.uid());
+  // email is only the fallback for rows not linked yet.
+  const resolveLabUser = useCallback(async (authId: string, email: string): Promise<LabUser | null> => {
+    const u = (await findLabUserByAuthId(authId)) ?? (await findLabUserByEmail(email));
     if (u && u.status === 'alumni') return null;
     return u;
   }, []);
@@ -738,7 +740,7 @@ export default function LabApp() {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email && mounted) {
-        const labUser = await resolveLabUser(session.user.email);
+        const labUser = await resolveLabUser(session.user.id, session.user.email);
         if (labUser && mounted) {
           localStorage.setItem('mimic-lab-user', JSON.stringify(labUser));
           setUser(labUser);
@@ -761,7 +763,7 @@ export default function LabApp() {
         if (current === 'enroll_mfa' || current === 'verify_mfa' || current === 'ready') return;
 
         if (session?.user?.email && mounted) {
-          const labUser = await resolveLabUser(session.user.email);
+          const labUser = await resolveLabUser(session.user.id, session.user.email);
           if (labUser && mounted) {
             localStorage.setItem('mimic-lab-user', JSON.stringify(labUser));
             setUser(labUser);

@@ -32,6 +32,12 @@
 -- ============================================================
 ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS auth_user_id uuid;
 
+-- Idempotency: on a RE-RUN the protect_lab_user_fields trigger (installed by
+-- a previous run, section 3) would abort the backfill UPDATE below — in the
+-- SQL editor auth.uid() is NULL, so is_lab_admin() is false. Drop it first;
+-- section 3 recreates it.
+DROP TRIGGER IF EXISTS trg_protect_lab_user_fields ON lab_users;
+
 -- Backfill from auth.users by email (runs as postgres in the SQL editor)
 UPDATE lab_users lu
 SET auth_user_id = au.id
@@ -56,9 +62,12 @@ BEGIN
 END;
 $$;
 
+-- Fire on EVERY insert/update (not just email changes): a lab_users row
+-- created before its auth account would otherwise stay email-based until an
+-- admin re-saved the email. The function is a no-op once linked.
 DROP TRIGGER IF EXISTS trg_link_lab_user_auth ON lab_users;
 CREATE TRIGGER trg_link_lab_user_auth
-  BEFORE INSERT OR UPDATE OF email ON lab_users
+  BEFORE INSERT OR UPDATE ON lab_users
   FOR EACH ROW EXECUTE FUNCTION link_lab_user_auth();
 
 -- ============================================================
