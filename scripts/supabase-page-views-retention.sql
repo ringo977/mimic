@@ -60,7 +60,9 @@ END;
 $$;
 
 -- Anonymous visitors must not be able to trigger purges.
-REVOKE EXECUTE ON FUNCTION purge_old_page_views() FROM anon, authenticated;
+-- NOTE: functions are executable by PUBLIC by default, so revoking from
+-- anon/authenticated alone is NOT enough — revoke from PUBLIC too.
+REVOKE EXECUTE ON FUNCTION purge_old_page_views() FROM PUBLIC, anon, authenticated;
 
 -- ------------------------------------------------------------
 -- 4. Schedule: first Sunday-ish — daily at 04:10 UTC via pg_cron.
