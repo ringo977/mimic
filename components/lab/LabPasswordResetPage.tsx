@@ -14,6 +14,7 @@ import { KeyRound, Lock, ArrowLeft, ShieldCheck } from 'lucide-react';
 import AuthShell from './AuthShell';
 import { supabase } from '@/lib/supabase';
 import { siteBasePath } from '@/lib/site-base-path';
+import { validatePassword, PASSWORD_HINT } from '@/lib/lab-auth';
 
 type Phase = 'loading' | 'request' | 'verify-mfa' | 'set-password' | 'email-sent' | 'password-updated';
 
@@ -173,8 +174,9 @@ export default function LabPasswordResetPage() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    const pwdError = validatePassword(password);
+    if (pwdError) {
+      setError(pwdError);
       return;
     }
     if (password !== password2) {
@@ -319,6 +321,7 @@ export default function LabPasswordResetPage() {
           <p className="text-center text-sm text-gray-600 mb-6 font-manrope">
             Choose a new password for your account.
           </p>
+          <p className="text-center text-[11px] text-gray-400 font-manrope -mt-4 mb-6">{PASSWORD_HINT}</p>
 
           {error && (
             <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-xl font-manrope mb-5">
@@ -333,10 +336,10 @@ export default function LabPasswordResetPage() {
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="Min 8 chars, upper/lowercase and a number"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
                 required
-                minLength={6}
+                minLength={8}
                 disabled={loading}
                 autoComplete="new-password"
               />
@@ -350,7 +353,7 @@ export default function LabPasswordResetPage() {
                 placeholder="Repeat password"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
                 required
-                minLength={6}
+                minLength={8}
                 disabled={loading}
                 autoComplete="new-password"
               />

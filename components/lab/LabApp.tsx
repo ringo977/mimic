@@ -6,7 +6,9 @@ import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashbo
 import { LabUser, rolePermissions } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
-import { findLabUserByAuthId, findLabUserByEmail } from '@/lib/supabase-users';
+import type { Session } from '@supabase/supabase-js';
+import { findLabUserByAuthId, findLabUserByEmail, lookupLabUser } from '@/lib/supabase-users';
+import { validatePassword, PASSWORD_HINT } from '@/lib/lab-auth';
 
 function getInitials(name: string, abbreviation?: string): string {
   if (abbreviation) return abbreviation;
@@ -41,8 +43,9 @@ function LoginScreen({ authError }: { authError?: string }) {
     setLoading(true);
     setError('');
 
-    // Clear any stale session first
-    await supabase.auth.signOut();
+    // Clear any stale session on THIS device only (a global sign-out would
+    // also revoke the user's sessions on their other devices).
+    await supabase.auth.signOut({ scope: 'local' });
 
     // NOTE: membership in lab_users is validated AFTER authentication, in the
     // onAuthStateChange handler (resolveLabUser). With RLS enabled, lab_users is
@@ -140,8 +143,20 @@ function EnrollMFAScreen({ onEnrolled, onSkip, canSkip = true }: { onEnrolled: (
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const enrollStarted = React.useRef(false);
   useEffect(() => {
+    // Guard against React StrictMode double-invocation in development.
+    if (enrollStarted.current) return;
+    enrollStarted.current = true;
     (async () => {
+      // Every previous visit to this screen that ended with "Skip" (or a
+      // closed tab) left an unverified TOTP factor behind; Supabase keeps
+      // them forever and they accumulate. Remove them before enrolling.
+      const { data: existing } = await supabase.auth.mfa.listFactors();
+      const stale = existing?.all?.filter(f => f.factor_type === 'totp' && f.status === 'unverified') ?? [];
+      for (const f of stale) {
+        await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+      }
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
       if (error) {
         setError(error.message);
@@ -417,8 +432,9 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-      setError('Password must be at least 8 characters with uppercase, lowercase and a number.');
+    const pwdError = validatePassword(password);
+    if (pwdError) {
+      setError(pwdError);
       return;
     }
     if (password !== password2) {
@@ -463,7 +479,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
               placeholder="Confirm new password" autoComplete="new-password" required disabled={loading}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] outline-none transition-all font-manrope text-sm"
             />
-            <p className="text-[11px] text-gray-400 font-manrope">Min 8 characters, with uppercase, lowercase and a number.</p>
+            <p className="text-[11px] text-gray-400 font-manrope">{PASSWORD_HINT}</p>
             <button type="submit" disabled={loading} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
               <Lock size={15} /> {loading ? 'Saving…' : 'Update password'}
             </button>
@@ -750,73 +766,126 @@ export default function LabApp() {
     } catch (err) {
       console.error('MFA status check failed:', err);
       setAuthError('Could not verify two-factor status. Please sign in again.');
-      localStorage.removeItem('mimic-lab-user');
       setUser(null);
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       return 'login';
     }
   }, []);
 
+  // Keep the latest user in a ref so the periodic refresh can compare
+  // without re-subscribing.
+  const userRef = React.useRef<LabUser | null>(null);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // Resolve a Supabase session into a lab user + MFA step.
+  // Shared by the initial load and the auth listener.
+  const applySession = useCallback(async (session: Session | null) => {
+    if (!session?.user?.email) {
+      setUser(null);
+      updateStep('login');
+      return;
+    }
+    const labUser = await resolveLabUser(session.user.id, session.user.email);
+    if (!labUser) {
+      setAuthError(`Access denied for ${session.user.email}. Contact the lab admin.`);
+      setUser(null);
+      await supabase.auth.signOut({ scope: 'local' });
+      updateStep('login');
+      return;
+    }
+    setUser(labUser);
+    setAuthError('');
+    updateStep(await evaluateMFA());
+  }, [resolveLabUser, evaluateMFA, updateStep]);
+
   useEffect(() => {
     let mounted = true;
+    // Serialise session processing: init() and the listener can both fire
+    // around sign-in; the second one waits for the first instead of racing
+    // (the old code resolved the user and the MFA state twice in parallel).
+    let busy = false;
+    let queued: Session | null | undefined;
+    const process = async (session: Session | null) => {
+      if (busy) { queued = session; return; }
+      busy = true;
+      try {
+        if (mounted) await applySession(session);
+      } finally {
+        busy = false;
+        if (queued !== undefined) { const next = queued; queued = undefined; void process(next); }
+      }
+    };
 
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email && mounted) {
-        const labUser = await resolveLabUser(session.user.id, session.user.email);
-        if (labUser && mounted) {
-          localStorage.setItem('mimic-lab-user', JSON.stringify(labUser));
-          setUser(labUser);
-          setAuthError('');
-          const mfa = await evaluateMFA();
-          if (mounted) updateStep(mfa);
-        } else if (mounted) {
-          setAuthError(`Access denied for ${session.user.email}. Contact the lab admin.`);
-          await supabase.auth.signOut();
-          updateStep('login');
-        }
-      } else if (mounted) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      // INITIAL_SESSION is handled by init() below.
+      if (event === 'INITIAL_SESSION') return;
+      // A sign-out (this tab, another tab, or a failed token refresh) always
+      // sends the user back to the login screen — even from 'ready'.
+      if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
         updateStep('login');
+        return;
       }
-    }
+      // Already inside the app or in an MFA step: token refreshes and
+      // USER_UPDATED do not change who is logged in — nothing to do.
+      const current = stepRef.current;
+      if (current === 'enroll_mfa' || current === 'verify_mfa' || current === 'ready') return;
+      // Never call Supabase (await) inside this callback: supabase-js holds
+      // an internal lock while it runs and can deadlock. Defer to a task.
+      setTimeout(() => { void process(session); }, 0);
+    });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const current = stepRef.current;
-        if (current === 'enroll_mfa' || current === 'verify_mfa' || current === 'ready') return;
-
-        if (session?.user?.email && mounted) {
-          const labUser = await resolveLabUser(session.user.id, session.user.email);
-          if (labUser && mounted) {
-            localStorage.setItem('mimic-lab-user', JSON.stringify(labUser));
-            setUser(labUser);
-            setAuthError('');
-            const mfa = await evaluateMFA();
-            if (mounted) updateStep(mfa);
-          } else if (mounted) {
-            setAuthError(`Access denied for ${session.user.email}. Contact the lab admin.`);
-            await supabase.auth.signOut();
-            updateStep('login');
-          }
-        } else if (mounted) {
-          localStorage.removeItem('mimic-lab-user');
-          setUser(null);
-          updateStep('login');
-        }
-      }
-    );
-
-    init();
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      await process(session);
+    })();
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [resolveLabUser, evaluateMFA, updateStep]);
+  }, [applySession, updateStep]);
+
+  // Refresh the lab user record while inside the app: on returning to the
+  // tab and every 5 minutes. Role / certification / admin changes made by an
+  // admin used to apply only after a full reload; an archived (alumni) user
+  // is now signed out instead of keeping a working session.
+  useEffect(() => {
+    if (step !== 'ready') return;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled || !session?.user?.email) return;
+      const { user: fresh, error } = await lookupLabUser(session.user.id, session.user.email);
+      if (cancelled) return;
+      // Transient failure (offline after sleep, 5xx): keep the current
+      // session and retry at the next tick — only a *successful* query that
+      // finds no active row means the account was really removed/archived.
+      if (error) { console.warn('lab user refresh skipped:', error); return; }
+      if (!fresh || fresh.status === 'alumni') {
+        setAuthError('Your lab account is no longer active. Contact the lab admin.');
+        setUser(null);
+        await supabase.auth.signOut({ scope: 'local' });
+        updateStep('login');
+        return;
+      }
+      if (JSON.stringify(fresh) !== JSON.stringify(userRef.current)) setUser(fresh);
+    };
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const timer = setInterval(() => void refresh(), 5 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+    };
+  }, [step, updateStep]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    localStorage.removeItem('mimic-lab-user');
+    // This device only: signing out of a shared lab PC must not log the
+    // user out of their phone/laptop too.
+    await supabase.auth.signOut({ scope: 'local' });
     setUser(null);
     updateStep('login');
   };

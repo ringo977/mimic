@@ -108,6 +108,24 @@ export async function findLabUserByEmail(email: string): Promise<LabUser | null>
   return toLabUser(data);
 }
 
+/**
+ * Lookup by auth_user_id, then by email (rows not linked yet), but — unlike
+ * findLabUserBy* — distinguishes "no row" from a failed query. Used by the
+ * in-app refresh, which must NOT sign the user out on a transient network
+ * error (typical right after a laptop wakes from sleep).
+ */
+export async function lookupLabUser(
+  authUserId: string,
+  email: string,
+): Promise<{ user: LabUser | null; error: string | null }> {
+  const byId = await supabase.from('lab_users').select('*').eq('auth_user_id', authUserId).maybeSingle();
+  if (byId.error) return { user: null, error: byId.error.message };
+  if (byId.data) return { user: toLabUser(byId.data), error: null };
+  const byEmail = await supabase.from('lab_users').select('*').ilike('email', email).maybeSingle();
+  if (byEmail.error) return { user: null, error: byEmail.error.message };
+  return { user: byEmail.data ? toLabUser(byEmail.data) : null, error: null };
+}
+
 export async function insertLabUser(u: LabUser): Promise<{ user: LabUser | null; error?: string }> {
   const { data, error } = await supabase
     .from('lab_users')
