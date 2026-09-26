@@ -19,6 +19,13 @@
 --   7. Only the owner (or an admin) can delete a cryo vial.
 --   8. requires_certification on instruments: admin-only via trigger.
 --   9. CHECK constraints: end_hour > start_hour, current_stock >= 0.
+--  12. claim_lab_user(): self-link at first login.
+--  13. Admin privileges require an MFA session (JWT aal = 'aal2'):
+--      is_lab_admin() is false for password-only sessions, so every
+--      admin-gated policy/trigger is MFA-gated at once.
+--  14. Manuals: uploads limited to roles with canUploadManuals, rows and
+--      bucket objects owned by the uploader (only owner/admin can replace
+--      a PDF), uploaded_by set server-side for non-admins.
 --
 -- NOTE on foreign keys: we deliberately do NOT add FKs from bookings /
 -- absences / log_entries to lab_users. History rows must survive a user
@@ -441,7 +448,149 @@ REVOKE EXECUTE ON FUNCTION claim_lab_user() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION claim_lab_user() TO authenticated;
 
 -- ============================================================
+-- 13. Admin privileges require MFA (AAL2)
+-- ============================================================
+-- The app makes TOTP mandatory for admin / pi / lab_manager / is_admin,
+-- but until now the database accepted a password-only (aal1) session as
+-- admin. Supabase puts the assurance level in the JWT ('aal' claim), so
+-- is_lab_admin() now also requires aal2. Everything that calls
+-- is_lab_admin() — user management, settings, config tables, deletes,
+-- approval triggers, bucket delete — becomes MFA-gated with this one
+-- change. Members' own-name operations are unaffected.
+--
+-- Side effect: an admin logged in BEFORE MFA was enforced (still aal1)
+-- gets "row-level security" errors on admin actions until they sign in
+-- again. Reads keep working (they use is_lab_member()).
+CREATE OR REPLACE FUNCTION is_aal2()
+RETURNS boolean
+LANGUAGE sql
+SET search_path = public
+STABLE
+AS $$
+  SELECT coalesce(auth.jwt() ->> 'aal', 'aal1') = 'aal2';
+$$;
+
+CREATE OR REPLACE FUNCTION is_lab_admin()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT is_aal2() AND EXISTS (
+    SELECT 1 FROM lab_users
+    WHERE status = 'active'
+      AND (auth_user_id = auth.uid()
+           OR (auth_user_id IS NULL AND email = auth.jwt() ->> 'email'))
+      AND (is_admin = true OR role IN ('admin', 'pi'))
+  );
+$$;
+
+-- lab_users_update: own row by id (not by email), others admin-only.
+DROP POLICY IF EXISTS "lab_users_update" ON lab_users;
+CREATE POLICY "lab_users_update" ON lab_users
+  FOR UPDATE TO authenticated
+  USING (id = current_lab_user_id() OR is_lab_admin())
+  WITH CHECK (id = current_lab_user_id() OR is_lab_admin());
+
+-- ============================================================
+-- 14. Manuals — role-gated uploads, owner-bound rows and files
+-- ============================================================
+-- Before: any member could insert/update any manuals row and overwrite
+-- any PDF in the bucket (path ${id}.pdf is predictable), and uploaded_by
+-- was free text. Now:
+--   * inserts need canUploadManuals (mirrors data/lab-data.ts);
+--   * each row records owner_id (the uploader's lab_users.id); only the
+--     owner or an admin can update it, and uploaded_by is set from the
+--     caller's name for non-admins;
+--   * bucket objects: insert needs canUploadManuals, update only by the
+--     object's owner (storage.objects.owner_id = auth.uid()) or an admin.
+-- Existing rows have owner_id NULL: editable by admins only.
+ALTER TABLE manuals ADD COLUMN IF NOT EXISTS owner_id text;
+
+CREATE OR REPLACE FUNCTION lab_can_upload_manuals()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT is_lab_admin() OR EXISTS (
+    SELECT 1 FROM lab_users
+    WHERE status = 'active'
+      AND (auth_user_id = auth.uid()
+           OR (auth_user_id IS NULL AND email = auth.jwt() ->> 'email'))
+      AND (
+        (affiliation = 'MiMic Lab'
+          AND role IN ('admin','pi','researcher','lab_manager','project_manager','postdoc'))
+        OR (affiliation IS DISTINCT FROM 'MiMic Lab'
+          AND role IN ('admin','pi','lab_manager'))
+      )
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION protect_manual_fields()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  caller_id   text := current_lab_user_id();
+  caller_name text;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- Admins may keep an explicit owner_id/uploaded_by (backup restore,
+    -- CSV import); everyone else is stamped with their own identity.
+    IF NOT is_lab_admin() OR NEW.owner_id IS NULL THEN
+      NEW.owner_id := caller_id;
+    END IF;
+    IF NOT is_lab_admin() THEN
+      SELECT name INTO caller_name FROM lab_users WHERE id = caller_id;
+      NEW.uploaded_by := coalesce(caller_name, NEW.uploaded_by);
+    END IF;
+  ELSIF NOT is_lab_admin() THEN
+    NEW.owner_id    := OLD.owner_id;
+    NEW.uploaded_by := OLD.uploaded_by;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_manual_fields ON manuals;
+CREATE TRIGGER trg_protect_manual_fields
+  BEFORE INSERT OR UPDATE ON manuals
+  FOR EACH ROW EXECUTE FUNCTION protect_manual_fields();
+
+DROP POLICY IF EXISTS "manuals_insert" ON manuals;
+CREATE POLICY "manuals_insert" ON manuals
+  FOR INSERT TO authenticated
+  WITH CHECK (lab_can_upload_manuals());
+
+DROP POLICY IF EXISTS "manuals_update" ON manuals;
+CREATE POLICY "manuals_update" ON manuals
+  FOR UPDATE TO authenticated
+  USING (is_lab_admin() OR (lab_can_upload_manuals() AND owner_id = current_lab_user_id()))
+  WITH CHECK (is_lab_admin() OR (lab_can_upload_manuals() AND owner_id = current_lab_user_id()));
+
+-- Storage bucket 'manuals' (select/delete policies unchanged: member read,
+-- admin delete — the latter is now MFA-gated through is_lab_admin()).
+DROP POLICY IF EXISTS "manuals_bucket_insert" ON storage.objects;
+CREATE POLICY "manuals_bucket_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'manuals' AND lab_can_upload_manuals());
+
+DROP POLICY IF EXISTS "manuals_bucket_update" ON storage.objects;
+CREATE POLICY "manuals_bucket_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'manuals'
+         AND (is_lab_admin() OR (lab_can_upload_manuals() AND owner_id = auth.uid()::text)))
+  WITH CHECK (bucket_id = 'manuals'
+         AND (is_lab_admin() OR (lab_can_upload_manuals() AND owner_id = auth.uid()::text)));
+
+-- ============================================================
 -- DONE! Verify with:
+--   SELECT is_aal2();   -- false in the SQL editor (no JWT): expected
 --   SELECT count(*) AS linked FROM lab_users WHERE auth_user_id IS NOT NULL;
 --   SELECT tablename, policyname FROM pg_policies ORDER BY tablename;
 --   SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname;

@@ -732,17 +732,29 @@ export default function LabApp() {
     return u;
   }, []);
 
+  // Fail closed: if the MFA status cannot be determined (network/API
+  // error) we do NOT let the user in — the server now requires aal2 for
+  // admin privileges, and silently entering at aal1 would only produce
+  // confusing RLS errors later. The user is signed out with a message.
   const evaluateMFA = useCallback(async (): Promise<AuthStep> => {
     try {
-      const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') {
+      const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (error || !data) throw error ?? new Error('No assurance level returned');
+      if (data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') {
         return 'verify_mfa';
       }
       const factors = await supabase.auth.mfa.listFactors();
-      const hasTotp = factors.data?.totp && factors.data.totp.length > 0;
-      if (!hasTotp) return 'enroll_mfa';
-    } catch { /* ignore */ }
-    return 'ready';
+      if (factors.error) throw factors.error;
+      const hasTotp = (factors.data?.totp?.length ?? 0) > 0;
+      return hasTotp ? 'ready' : 'enroll_mfa';
+    } catch (err) {
+      console.error('MFA status check failed:', err);
+      setAuthError('Could not verify two-factor status. Please sign in again.');
+      localStorage.removeItem('mimic-lab-user');
+      setUser(null);
+      await supabase.auth.signOut();
+      return 'login';
+    }
   }, []);
 
   useEffect(() => {

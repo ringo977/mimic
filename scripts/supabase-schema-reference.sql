@@ -190,7 +190,8 @@ CREATE TABLE IF NOT EXISTS manuals (
   last_updated text,
   uploaded_by  text,
   file_name    text,
-  file_url     text
+  file_url     text,
+  owner_id     text            -- uploader's lab_users.id (tighten.sql §14)
 );
 
 -- app_settings is created by supabase-booking-settings.sql (step 2).
