@@ -5,6 +5,7 @@ import { Mail, X, FileText, ExternalLink, Linkedin } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import publicationsData from '@/data/publications.json';
 import { siteBasePath } from '@/lib/site-base-path';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 interface PI {
   name: string;
@@ -36,6 +37,7 @@ interface Publication {
 
 export default function PICard({ pi }: PICardProps) {
   const [showModal, setShowModal] = useState(false);
+  const dialogRef = useDialogA11y(showModal, () => setShowModal(false));
   const prefix = siteBasePath;
 
   // Extract last name and first initial (e.g., "Prof. Marco Rasponi" -> "Rasponi, M.")
@@ -117,9 +119,10 @@ export default function PICard({ pi }: PICardProps) {
             <div className="space-y-2 pt-2">
               <button
                 onClick={() => setShowModal(true)}
-                className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline"
+                aria-haspopup="dialog"
+                className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-polimi-bright-blue rounded"
               >
-                Read more
+                Read more<span className="sr-only">: {pi.name}</span>
               </button>
               
               <div className="flex items-center justify-center gap-4 pt-2">
@@ -154,9 +157,14 @@ export default function PICard({ pi }: PICardProps) {
           onClick={() => setShowModal(false)}
         >
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={pi.name}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto p-8 relative"
+            className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto p-8 relative outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}

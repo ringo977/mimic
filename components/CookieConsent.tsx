@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import Link from 'next/link';
 import { X, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -83,11 +84,13 @@ export default function CookieConsent() {
     }
   }, []);
 
+  const dialogRef = useDialogA11y(isOpen, handleClose);
+
   if (!showBanner && !isOpen) return null;
 
   if (showBanner && !isOpen) {
     return (
-      <div className="fixed bottom-0 left-0 right-0 z-[9999] bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] p-4 md:p-6">
+      <div role="region" aria-label="Cookie consent" className="fixed bottom-0 left-0 right-0 z-[9999] bg-white border-t border-gray-200 shadow-[0_-4px_24px_rgba(0,0,0,0.12)] p-4 md:p-6">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center gap-4">
           <div className="flex-1 font-manrope text-sm text-gray-700">
             <p>
@@ -129,10 +132,10 @@ export default function CookieConsent() {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="cookie-settings-title" tabIndex={-1} className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
-          <h2 className="font-frank font-bold text-xl text-polimi-blue-heritage">
+          <h2 id="cookie-settings-title" className="font-frank font-bold text-xl text-polimi-blue-heritage">
             Cookie usage 🍪
           </h2>
           <button

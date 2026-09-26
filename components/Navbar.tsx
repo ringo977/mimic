@@ -107,8 +107,9 @@ export default function Navbar() {
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="lg:hidden text-polimi-blue-heritage hover:text-polimi-bright-blue transition-colors p-2"
-              aria-label="Toggle menu"
+              aria-label={isOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isOpen}
+              aria-controls="mobile-menu"
             >
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -116,7 +117,7 @@ export default function Navbar() {
 
           {/* Mobile Navigation */}
           {isOpen && (
-            <div className="lg:hidden pb-6 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div id="mobile-menu" className="lg:hidden pb-6 animate-in fade-in slide-in-from-top-2 duration-200" onKeyDown={(e) => { if (e.key === 'Escape') setIsOpen(false); }}>
               <div className="flex flex-col space-y-2">
                 {navLinks.map((link) => (
                   <Link

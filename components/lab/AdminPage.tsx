@@ -18,6 +18,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
 import { downloadCSV } from '@/lib/csv';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'absences' | 'backup';
 
@@ -115,12 +116,13 @@ function parseCSV(text: string): string[][] {
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const ref = useDialogA11y(true, onClose);
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+      <div ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto outline-none">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900 font-manrope">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
         </div>
         {children}
       </div>

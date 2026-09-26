@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 interface ConfirmState {
   open: boolean;
@@ -27,21 +28,22 @@ export function useConfirm(): [React.FC, (title: string, message: string, onConf
   }, []);
 
   const close = useCallback(() => setState(s => ({ ...s, open: false })), []);
+  const panelRef = useDialogA11y(state.open, close);
 
   // Memoised on the dialog state so the component identity only changes when
   // the dialog itself changes (a new function on every render remounted it).
   const Dialog: React.FC = useCallback(() => {
     if (!state.open) return null;
     return (
-      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" onClick={close} role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4" onClick={close}>
+        <div ref={panelRef} role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 outline-none" onClick={e => e.stopPropagation()}>
           <div className="flex items-start gap-3 mb-4">
             <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center shrink-0">
               <AlertTriangle size={20} className="text-red-500" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 id="confirm-title" className="text-sm font-bold text-gray-900 font-manrope">{state.title}</h3>
-              <p className="text-xs text-gray-500 font-manrope mt-1">{state.message}</p>
+              <p id="confirm-message" className="text-xs text-gray-500 font-manrope mt-1">{state.message}</p>
             </div>
             <button onClick={close} aria-label="Close" className="p-1 rounded-lg hover:bg-gray-100 text-gray-400 shrink-0"><X size={16} /></button>
           </div>
@@ -58,7 +60,7 @@ export function useConfirm(): [React.FC, (title: string, message: string, onConf
         </div>
       </div>
     );
-  }, [state, close]);
+  }, [state, close, panelRef]);
 
   return [Dialog, confirm];
 }

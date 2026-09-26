@@ -3,6 +3,7 @@
 import React from 'react';
 import { X, Mail, Hash, CalendarDays, UserCheck, Award, FolderKanban, CheckCircle2, Circle, GraduationCap } from 'lucide-react';
 import { LabUser, Project, Certification, rolePermissions, generateAbbreviation, formatDate, SUPERVISED_ROLES } from '@/data/lab-data';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 // Person card shown when clicking a name. Used by the admin Users tab
 // (showSensitive: person code) and by the members' directory (without it).
@@ -29,9 +30,10 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
     { label: 'Biological training', done: !!u.trainingBioDone, date: u.trainingBioDate },
   ];
 
+  const panelRef = useDialogA11y(true, onClose);
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-label={u.name} tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto outline-none" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <span className={`inline-flex items-center justify-center w-12 h-12 rounded-2xl text-white text-sm font-bold font-manrope ${isAlumni ? 'bg-gray-400' : 'bg-[#102C53]'}`}>

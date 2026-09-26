@@ -111,13 +111,20 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${frankRuhl.variable}`}>
       <body className="antialiased">
+        {/* Keyboard users: jump past the navigation. Visible only on focus. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[10000] focus:bg-white focus:text-polimi-blue-heritage focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-polimi-bright-blue font-manrope text-sm font-semibold"
+        >
+          Skip to main content
+        </a>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
         />
         <GridBackground />
         <Navbar />
-        <main className="min-h-screen pt-32 lg:pt-20">
+        <main id="main-content" tabIndex={-1} className="min-h-screen pt-32 lg:pt-20 outline-none">
           {children}
         </main>
         <Footer />

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, X, ChevronLeft, ChevronRight, Image as ImageIcon, ExternalLink } from 'lucide-react';
 import Card from './ui/Card';
 import { siteBasePath } from '@/lib/site-base-path';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 interface NewsItem {
   id: number;
@@ -34,6 +35,8 @@ const tagColors: Record<string, string> = {
 
 export default function NewsCard({ news }: NewsCardProps) {
   const [showModal, setShowModal] = useState(false);
+  const dialogRef = useDialogA11y(showModal, () => setShowModal(false));
+  const titleId = `news-title-${news.id}`;
   const [currentImage, setCurrentImage] = useState(0);
   const prefix = siteBasePath;
 
@@ -63,6 +66,9 @@ export default function NewsCard({ news }: NewsCardProps) {
         transition={{ duration: 0.5 }}
         onClick={() => setShowModal(true)}
       >
+        {/* The whole card opens the modal on click (mouse convenience); the
+            accessible, keyboard-reachable trigger is the "Read more" button
+            below — a div is never given role="button" with a button inside. */}
         <Card className="h-full overflow-hidden group cursor-pointer">
           {news.image && (
             <div className="relative w-[calc(100%+3rem)] h-48 bg-polimi-gray rounded-t-xl mb-4 overflow-hidden -mx-6 -mt-6">
@@ -107,6 +113,14 @@ export default function NewsCard({ news }: NewsCardProps) {
           <p className="text-gray-700 line-clamp-3">
             {news.excerpt}
           </p>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
+            aria-haspopup="dialog"
+            className="mt-3 text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-polimi-bright-blue rounded"
+          >
+            Read more<span className="sr-only">: {news.title}</span>
+          </button>
         </Card>
       </motion.div>
 
@@ -120,7 +134,12 @@ export default function NewsCard({ news }: NewsCardProps) {
             onClick={() => setShowModal(false)}
           >
             <motion.div
-              className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+              ref={dialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              tabIndex={-1}
+              className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl outline-none"
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -144,7 +163,7 @@ export default function NewsCard({ news }: NewsCardProps) {
                       })}
                     </div>
                   </div>
-                  <h2 className="font-frank font-bold text-2xl text-polimi-blue-heritage">
+                  <h2 id={titleId} className="font-frank font-bold text-2xl text-polimi-blue-heritage">
                     {news.title}
                   </h2>
                 </div>
@@ -173,12 +192,14 @@ export default function NewsCard({ news }: NewsCardProps) {
                     
                     <button
                       onClick={prevImage}
+                      aria-label="Previous photo"
                       className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 hover:bg-white rounded-full shadow-lg transition-colors"
                     >
                       <ChevronLeft size={20} />
                     </button>
                     <button
                       onClick={nextImage}
+                      aria-label="Next photo"
                       className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 hover:bg-white rounded-full shadow-lg transition-colors"
                     >
                       <ChevronRight size={20} />
@@ -201,6 +222,8 @@ export default function NewsCard({ news }: NewsCardProps) {
                       <button
                         key={idx}
                         onClick={() => setCurrentImage(idx)}
+                        aria-label={`Show photo ${idx + 1} of ${news.gallery!.length}`}
+                        aria-current={idx === currentImage ? 'true' : undefined}
                         className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
                           idx === currentImage
                             ? 'border-polimi-bright-blue shadow-md'

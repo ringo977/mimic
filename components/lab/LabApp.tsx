@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 import { findLabUserByAuthId, findLabUserByEmail, lookupLabUser } from '@/lib/supabase-users';
 import { validatePassword, PASSWORD_HINT } from '@/lib/lab-auth';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 function getInitials(name: string, abbreviation?: string): string {
   if (abbreviation) return abbreviation;
@@ -452,12 +453,13 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
     setLoading(false);
   };
 
+  const panelRef = useDialogA11y(true, onClose);
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="change-password-title" tabIndex={-1} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 outline-none" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-bold text-gray-900 font-manrope flex items-center gap-2"><Lock size={16} className="text-[#102C53]" /> Change password</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-700"><X size={18} /></button>
+          <h2 id="change-password-title" className="text-base font-bold text-gray-900 font-manrope flex items-center gap-2"><Lock size={16} className="text-[#102C53]" /> Change password</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
 
         {done ? (

@@ -6,6 +6,7 @@ import { useState, useMemo } from 'react';
 import Card from './ui/Card';
 import publicationsData from '@/data/publications.json';
 import { siteBasePath } from '@/lib/site-base-path';
+import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
 interface TeamMember {
   id: number;
@@ -37,6 +38,7 @@ interface Publication {
 
 export default function TeamCard({ member }: TeamCardProps) {
   const [showModal, setShowModal] = useState(false);
+  const dialogRef = useDialogA11y(showModal, () => setShowModal(false));
   const prefix = siteBasePath;
 
   // Extract last name and first initial (e.g., "Dr. Cecilia Palma" -> "Palma, C.")
@@ -115,9 +117,10 @@ export default function TeamCard({ member }: TeamCardProps) {
           <div className="mt-auto pt-3 space-y-2">
             <button
               onClick={() => setShowModal(true)}
-              className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline"
+              aria-haspopup="dialog"
+              className="text-polimi-bright-blue hover:text-polimi-alpha-blue text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-polimi-bright-blue rounded"
             >
-              Read more
+              Read more<span className="sr-only">: {member.name}</span>
             </button>
             
             <div className="pt-2 border-t border-gray-200">
@@ -141,9 +144,14 @@ export default function TeamCard({ member }: TeamCardProps) {
           onClick={() => setShowModal(false)}
         >
           <motion.div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={member.name}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto p-8 relative"
+            className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto p-8 relative outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close button */}
