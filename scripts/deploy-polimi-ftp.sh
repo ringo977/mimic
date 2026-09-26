@@ -144,11 +144,11 @@ cd ${FTP_REMOTE_DIR}
 echo "→ Wiping remote ${FTP_REMOTE_DIR}/ …"
 glob -a rm -rf *
 # glob -a does NOT match dotfiles on the Polimi server (LIST omits them):
-# remove known leftovers explicitly. .htaccess is re-uploaded right after.
+# remove known orphan leftovers explicitly. Do NOT rm .htaccess here: it is
+# part of out/ and the mirror below overwrites it anyway — deleting it first
+# would leave the site without it if the upload is interrupted midway.
 set cmd:fail-exit false
 rm -f .DS_Store
-rm -f .htaccess
-glob -a rm -rf .??*
 set cmd:fail-exit true
 echo "→ Uploading out/ → ${FTP_REMOTE_DIR}/ (parallel=2)…"
 mirror -R --parallel=2 --no-perms out .
