@@ -28,6 +28,8 @@ export default function Navbar() {
           <img
             src={`${siteBasePath}/images/logos/Logotipo_POLIMI_Blu.png`}
             alt="Politecnico di Milano"
+            width={1073}
+            height={61}
             className="w-auto h-auto"
             style={{ maxWidth: '50%', maxHeight: '32px' }}
           />
@@ -59,6 +61,8 @@ export default function Navbar() {
                 <img
                   src={`${siteBasePath}/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png`}
                   alt="MiMic Laboratory - Politecnico di Milano"
+                  width={1200}
+                  height={158}
                   className="h-14 w-auto"
                 />
               </Link>
@@ -72,6 +76,8 @@ export default function Navbar() {
                 <img
                   src={`${siteBasePath}/images/logos/LogoMiMicLab_solo_blu_trasp.png`}
                   alt="MiMic Lab"
+                  width={1317}
+                  height={212}
                   className="h-10 w-auto"
                 />
               </Link>

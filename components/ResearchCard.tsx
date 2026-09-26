@@ -23,7 +23,9 @@ export default function ResearchCard({ title, description, image, video, tags, l
         <div className="w-full h-48 bg-polimi-gray rounded-lg mb-4 overflow-hidden relative">
           {video ? (
             <video
-              autoPlay loop muted playsInline
+              autoPlay loop muted playsInline preload="metadata"
+              // Convention: every research video ships with <name>-poster.jpg
+              poster={`${prefix}${video.replace(/\.mp4$/i, '-poster.jpg')}`}
               className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
             >
               <source src={`${prefix}${video}`} type="video/mp4" />

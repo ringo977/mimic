@@ -90,6 +90,8 @@ export default function TechnologyFacilitiesPage() {
                 loop
                 muted
                 playsInline
+                preload="metadata"
+                poster={`${siteBasePath}/videos/ubeat-platform-poster.jpg`}
                 className="w-full h-full object-cover"
               >
                 <source src={`${siteBasePath}/videos/ubeat-platform.mp4`} type="video/mp4" />

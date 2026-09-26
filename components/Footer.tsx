@@ -34,6 +34,10 @@ export default function Footer() {
               <img
                 src={`${siteBasePath}/images/logos/LogoMiMicLab_trasp_footer_vertical.png`}
                 alt="MiMic Laboratory - Politecnico di Milano"
+                width={1246}
+                height={1010}
+                loading="lazy"
+                decoding="async"
                 className="max-w-full h-auto"
                 style={{ maxHeight: '240px' }}
               />

@@ -7,13 +7,20 @@ import fs from 'fs';
 import path from 'path';
 import { siteBasePath } from '@/lib/site-base-path';
 
-type SectionMedia = { type: 'video' | 'image'; src: string } | null;
+type SectionMedia = { type: 'video' | 'image'; src: string; poster?: string } | null;
+
+// Poster frame convention: <video>.mp4 → <video>-poster.jpg next to it
+// (generated once with: ffmpeg -ss 1 -i x.mp4 -frames:v 1 -q:v 4 x-poster.jpg).
+function posterFor(video: string): string | undefined {
+  const poster = video.replace(/\.mp4$/i, '-poster.jpg');
+  return fs.existsSync(path.join(process.cwd(), 'public', poster)) ? poster : undefined;
+}
 
 // Build-time check of which media file a section has (video wins).
 // Sections without any file render as full-width text (no placeholder).
 function resolveSectionMedia(section: { image?: string; title: string }): SectionMedia {
   const video = (section as Record<string, string | undefined>).video || '';
-  if (video && fs.existsSync(path.join(process.cwd(), 'public', video))) return { type: 'video', src: video };
+  if (video && fs.existsSync(path.join(process.cwd(), 'public', video))) return { type: 'video', src: video, poster: posterFor(video) };
   if (section.image && fs.existsSync(path.join(process.cwd(), 'public', section.image))) return { type: 'image', src: section.image };
   return null;
 }
@@ -127,13 +134,13 @@ export default function ResearchTopicPage({ params }: { params: { slug: string }
                     <div className={idx % 2 === 1 ? 'lg:order-1' : ''}>
                       {media.type === 'video' ? (
                         <div className="aspect-square rounded-2xl overflow-hidden shadow-lg bg-black">
-                          <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                          <video autoPlay loop muted playsInline preload="metadata" poster={media.poster ? `${prefix}${media.poster}` : undefined} className="w-full h-full object-cover">
                             <source src={`${prefix}${media.src}`} type="video/mp4" />
                           </video>
                         </div>
                       ) : (
                         <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-lg">
-                          <img src={`${prefix}${media.src}`} alt={section.title} className="w-full h-full object-cover" />
+                          <img src={`${prefix}${media.src}`} alt={section.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         </div>
                       )}
                     </div>

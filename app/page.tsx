@@ -50,6 +50,10 @@ export default function HomePage() {
               <img
                 src={`${siteBasePath}/images/home/team-photo.png`}
                 alt="MiMic Lab Team at EUROoCS 2024 Annual Meeting"
+                width={1024}
+                height={682}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-4">

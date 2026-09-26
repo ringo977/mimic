@@ -165,6 +165,8 @@ export default function NewsCard({ news }: NewsCardProps) {
                       <img
                         src={`${prefix}${news.gallery![currentImage]}`}
                         alt={news.captions?.[currentImage] || news.title}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-contain bg-gray-50"
                       />
                     </div>
@@ -208,6 +210,8 @@ export default function NewsCard({ news }: NewsCardProps) {
                         <img
                           src={`${prefix}${img}`}
                           alt={`Thumbnail ${idx + 1}`}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover"
                         />
                       </button>
@@ -220,6 +224,8 @@ export default function NewsCard({ news }: NewsCardProps) {
                     <img
                       src={`${prefix}${news.image}`}
                       alt={news.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full object-cover"
                     />
                   </div>

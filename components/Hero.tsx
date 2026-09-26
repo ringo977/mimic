@@ -27,11 +27,15 @@ export default function Hero() {
   const totalPartners = roundTo5(networkData.collaborators.length);
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* The hero background is the LCP element: preload it so the browser
+          fetches it before parsing the CSS (React hoists <link> to <head>).
+          WebP (188 KB) replaces the old 1 MB JPEG. */}
+      <link rel="preload" as="image" href={`${siteBasePath}/images/home/wafer-electrodes.webp`} fetchPriority="high" />
       {/* Background Image */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: `url(${siteBasePath}/images/home/wafer-electrodes.jpg)`,
+          backgroundImage: `url(${siteBasePath}/images/home/wafer-electrodes.webp)`,
         }}
       />
 

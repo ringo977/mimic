@@ -66,6 +66,8 @@ export default function NetworkPage() {
                       <img
                         src={`${basePath}${project.logo}`}
                         alt={project.name}
+                        loading="lazy"
+                        decoding="async"
                         className="max-w-full max-h-32 object-contain"
                       />
                     ) : (
@@ -162,6 +164,8 @@ export default function NetworkPage() {
                     <img
                       src={`${basePath}${soc.logo}`}
                       alt={soc.name}
+                      loading="lazy"
+                      decoding="async"
                       className="max-w-full max-h-full object-contain"
                     />
                   </div>
@@ -196,6 +200,8 @@ export default function NetworkPage() {
                   <img
                     src={`${basePath}${networkData.spinoff.logo}`}
                     alt={networkData.spinoff.name}
+                    loading="lazy"
+                    decoding="async"
                     className="max-w-full max-h-full object-contain"
                   />
                 </div>
