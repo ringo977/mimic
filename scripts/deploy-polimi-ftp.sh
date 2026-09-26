@@ -142,10 +142,12 @@ rm -rf ${NEW_DIR}
 set cmd:fail-exit true
 cd ${FTP_REMOTE_DIR}
 echo "→ Wiping remote ${FTP_REMOTE_DIR}/ …"
-# No -a on the glob: dotfiles are NOT wiped wholesale, so .htaccess survives
-# even if the upload below is interrupted (mirror overwrites it anyway).
-# Known orphan dotfiles are removed explicitly instead.
-glob rm -rf *
+# -a = all entry types. Without it lftp's glob expands ONLY plain files, so
+# directories (_next/, images/, …) were never wiped and stale files
+# accumulated on the server (found 26/09/2026). `*` never matches dotfiles
+# in lftp, so .htaccess survives even if the upload below is interrupted
+# (mirror overwrites it anyway). Known orphan dotfiles are removed explicitly.
+glob -a rm -rf *
 set cmd:fail-exit false
 rm -f .DS_Store
 set cmd:fail-exit true
