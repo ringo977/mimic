@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import Card from '@/components/ui/Card';
+import ClickToLoadMap from '@/components/ClickToLoadMap';
 import { MapPin, Mail, GraduationCap, Briefcase, FileText, Users, ExternalLink } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -302,14 +303,10 @@ export default function ContactPage() {
           </div>
           
           <div className="w-full h-96 bg-polimi-gray rounded-xl overflow-hidden max-w-5xl mx-auto">
-            <iframe
+            {/* Google Maps loads only after an explicit click (GDPR: no
+                third-party cookies without consent) */}
+            <ClickToLoadMap
               src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2798.2476913984845!2d9.229909215794556!3d45.47855597910111!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x4786c6dec456e6c1%3A0x61c9a5a817c3c6b0!2sPolitecnico%20di%20Milano!5e0!3m2!1sen!2sit!4v1234567890"
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
               title="Politecnico di Milano Location"
             />
           </div>

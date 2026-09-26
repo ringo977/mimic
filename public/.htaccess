@@ -1,0 +1,29 @@
+# MiMic Lab — Apache config for mimic.polimi.it (September 2026)
+#
+# STATUS (verified live 26/09/2026): the Polimi hosting is configured with
+# AllowOverride None, so this file is currently IGNORED by Apache (even an
+# invalid .htaccess causes no error). It is kept in the repo so that it takes
+# effect automatically if ICT ever enables overrides. Until then, the apex→www
+# redirect and the security headers below must be requested to ICT
+# (hosting@polimi.it) directly.
+#
+# Everything is wrapped in <IfModule> so a missing module degrades
+# gracefully instead of causing a 500.
+
+# --- Canonical host: 301 apex -> www ---------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST} ^mimic\.polimi\.it$ [NC]
+  RewriteRule ^(.*)$ https://www.mimic.polimi.it/$1 [R=301,L]
+</IfModule>
+
+# --- Security headers -------------------------------------------------------
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# --- Custom 404 (Next.js static export) -------------------------------------
+ErrorDocument 404 /404.html

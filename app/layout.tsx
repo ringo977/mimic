@@ -24,6 +24,17 @@ const frankRuhl = Frank_Ruhl_Libre({
 });
 
 export const metadata: Metadata = {
+  // Canonical host: www.mimic.polimi.it. Every page gets a canonical tag
+  // pointing there ('./': resolved per-route against metadataBase), so the
+  // apex copy and the GitHub/GitLab Pages mirrors are de-duplicated by
+  // search engines. The GitHub mirror (BASE_PATH=/mimic) is also noindex.
+  metadataBase: new URL("https://www.mimic.polimi.it"),
+  alternates: { canonical: "./" },
+  // Mirrors (GitHub Pages basePath /mimic, GitLab Pages via FORCE_NOINDEX=1)
+  // must not be indexed; only www.mimic.polimi.it is.
+  ...(siteBasePath || process.env.NEXT_PUBLIC_FORCE_NOINDEX
+    ? { robots: { index: false, follow: false } }
+    : {}),
   title: "MiMic Lab | Politecnico di Milano",
   description: "Advanced microfluidic systems and MiMic research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
   keywords: ["MiMic", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],

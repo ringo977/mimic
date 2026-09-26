@@ -16,7 +16,9 @@ const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmcnV5eXJwcml5bWhtZWxnaWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTg5NTQsImV4cCI6MjA4NzQzNDk1NH0.LMp7GBjYR6hRiujRQmfYyQVlltnVORKDknwUM3QjaCQ';
 
-const PROD_HOST = 'mimic.polimi.it';
+// Both hosts count as production (www is canonical; the apex serves the
+// same content until the ICT 301 is in place — visits there were lost).
+const PROD_HOSTS = ['www.mimic.polimi.it', 'mimic.polimi.it'];
 const CONSENT_KEY = 'mimic-cookie-consent';
 const VISIT_KEY = 'mimic-visit-id';
 
@@ -55,7 +57,7 @@ function detectDevice(): 'mobile' | 'tablet' | 'desktop' {
 const trackedPaths = new Set<string>();
 
 function trackView(path: string) {
-  if (window.location.hostname !== PROD_HOST) return;
+  if (!PROD_HOSTS.includes(window.location.hostname)) return;
   if (path.startsWith('/lab')) return;
   if (!hasAnalyticsConsent()) return;
   // Guard against duplicate events for the same path in quick succession

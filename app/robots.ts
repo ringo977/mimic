@@ -1,6 +1,6 @@
 import { MetadataRoute } from 'next';
 
-const BASE_URL = 'https://mimic.polimi.it';
+const BASE_URL = 'https://www.mimic.polimi.it';
 
 export const dynamic = 'force-static';
 

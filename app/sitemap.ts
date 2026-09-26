@@ -2,7 +2,8 @@ import { MetadataRoute } from 'next';
 import researchData from '@/data/research.json';
 
 // Canonical production URL (Polimi FTPS channel).
-const BASE_URL = 'https://mimic.polimi.it';
+// www is the canonical host; the apex will 301 here (ICT request).
+const BASE_URL = 'https://www.mimic.polimi.it';
 
 export const dynamic = 'force-static';
 

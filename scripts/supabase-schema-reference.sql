@@ -15,6 +15,8 @@
 --   5. Run supabase-user-profile-fields.sql  (profile fields + alumni)
 --   6. Run supabase-absences.sql             (absences table + policy)
 --   7. Run supabase-site-analytics.sql       (page_views + site_stats)
+--        then supabase-page-views-retention.sql (retention 13 months,
+--        ts server-side, select admin-only)
 --   8. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
 --   9. Create the 'manuals' storage bucket (Storage → New bucket),

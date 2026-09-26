@@ -5,34 +5,40 @@ on:
     - cron: '0 8 * * *'
   workflow_dispatch:
 
+# This job only makes an outbound HTTP call: no repo token needed at all.
+permissions: {}
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase with real DB query
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
             echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is empty."
             exit 1
           fi
 
           # Retry a few times: a just-resumed project can take a minute to answer.
           for attempt in 1 2 3 4 5; do
-            http_code=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" \
               --max-time 30 \
-              -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-              -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-              "${{ secrets.SUPABASE_URL }}/rest/v1/reagents?select=id&limit=1" || echo "000")
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              "$SUPABASE_URL/rest/v1/reagents?select=id&limit=1" || echo "000")
 
             echo "Attempt $attempt → HTTP $http_code"
             if [ "$http_code" = "200" ]; then
-              echo "Response: $(cat /tmp/resp.txt)"
               echo "✓ Supabase is awake."
               exit 0
             fi
             sleep 15
           done
 
+          # Do not print the response body: public logs must not leak data
+          # or error details from the database.
           echo "::error::Supabase did not return 200 after 5 attempts (last code: $http_code)."
-          cat /tmp/resp.txt || true
           exit 1

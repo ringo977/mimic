@@ -29,6 +29,7 @@ yarn-error.log*
 
 # Polimi FTP deploy credentials (never commit)
 deploy.polimi.env
+deploy.polimi.cert.pem
 
 # GitLab deploy credentials and cached clone (never commit)
 deploy.gitlab.env

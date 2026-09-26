@@ -19,6 +19,10 @@ const nextConfig = {
   assetPrefix: basePath ? `${basePath}/` : '',
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath,
+    // FORCE_NOINDEX=1 marks a build as a non-canonical mirror (e.g. GitLab
+    // Pages, which builds with empty basePath): app/layout.tsx adds
+    // <meta name="robots" content="noindex, nofollow"> to every page.
+    NEXT_PUBLIC_FORCE_NOINDEX: process.env.FORCE_NOINDEX || '',
   },
 }
 

@@ -32,7 +32,9 @@ function storePreferences(prefs: CookiePreferences) {
 export default function CookieConsent() {
   const [isOpen, setIsOpen] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
-  const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
+  // Pre-unchecked by design: EDPB guidelines require opt-in consent, so the
+  // analytics toggle must default to OFF until the visitor enables it.
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
   const [expandedNecessary, setExpandedNecessary] = useState(false);
   const [expandedAnalytics, setExpandedAnalytics] = useState(false);
 

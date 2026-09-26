@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <div className="prose prose-lg max-w-none font-manrope text-gray-700 space-y-8">
 
             <p className="text-sm text-gray-500">
-              Last updated: January 2026
+              Last updated: September 2026
             </p>
 
             <div>
@@ -64,7 +64,7 @@ export default function PrivacyPage() {
                 Place of data processing
               </h2>
               <p>
-                The processing operations connected to the web services of this site take place at the University premises and are carried out by authorised personnel. Personal data provided by users are used solely for the purpose of executing the requested service and are disclosed to third parties only where necessary or required by law.
+                The website is hosted on Politecnico di Milano servers and the processing operations connected to its web services are carried out by authorised personnel. Aggregate, anonymous visit statistics (see below) are stored with <strong>Supabase</strong>, a cloud database provider acting as a service provider, on servers located in the European Union. Personal data provided by users are used solely for the purpose of executing the requested service and are disclosed to third parties only where necessary or required by law.
               </p>
             </div>
 
@@ -99,6 +99,21 @@ export default function PrivacyPage() {
               </p>
               <p>
                 These data are used solely for the purpose of obtaining anonymous statistical information on the use of the site and to check its proper functioning.
+              </p>
+
+              <h3 className="font-frank font-semibold text-xl text-polimi-blue-heritage mb-3 mt-6">
+                Visit statistics (with consent)
+              </h3>
+              <p>
+                If you consent via the cookie banner, the site records anonymous page-view
+                statistics: page path, referring site, device class, and a random session
+                identifier. No IP address, user agent, or other identifying information is
+                stored, and the data cannot be linked to your identity. These records are
+                kept for a maximum of 13 months and then deleted automatically. See the{' '}
+                <Link href="/cookie-policy" className="text-polimi-bright-blue hover:underline">
+                  Cookie Policy
+                </Link>{' '}
+                for details.
               </p>
 
               <h3 className="font-frank font-semibold text-xl text-polimi-blue-heritage mb-3 mt-6">

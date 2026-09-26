@@ -23,7 +23,7 @@ export default function CookiePolicyPage() {
           <div className="prose prose-lg max-w-none font-manrope text-gray-700 space-y-8">
 
             <p className="text-sm text-gray-500">
-              Last updated: January 2026
+              Last updated: September 2026
             </p>
 
             <div>
@@ -40,58 +40,76 @@ export default function CookiePolicyPage() {
                 Cookies used on this site
               </h2>
               <p>
-                This MiMic Lab website is a static site hosted on GitHub Pages. The following types of cookies may be used:
+                This MiMic Lab website is a static site hosted on Politecnico di Milano servers
+                (<strong>www.mimic.polimi.it</strong>). The site itself does not set traditional
+                cookies; it uses browser storage (localStorage and sessionStorage — treated like
+                cookies under the ePrivacy rules) as described below.
               </p>
 
               <h3 className="font-frank font-semibold text-xl text-polimi-blue-heritage mb-3 mt-6">
-                Strictly necessary cookies
+                Strictly necessary storage
               </h3>
               <p>
-                These cookies are essential for the website to function properly. They enable core functionalities such as page navigation and access to secure areas. The website cannot function without these cookies and they cannot be disabled.
+                A single localStorage entry (<code>mimic-cookie-consent</code>) remembers your
+                consent choices so we do not ask again on every visit. It contains no personal
+                data and cannot be disabled, as it is required to honour your preferences.
               </p>
 
               <h3 className="font-frank font-semibold text-xl text-polimi-blue-heritage mb-3 mt-6">
-                Session cookies
+                Analytics (first-party, opt-in)
               </h3>
               <p>
-                These cookies are used for navigation and are not permanently stored on the user&apos;s device. They are deleted when the browser is closed.
+                Only if you enable &ldquo;Functional and Analytics&rdquo; in the cookie banner, the site
+                counts page views using a <strong>first-party</strong> system: for each visited page it
+                records the page path, the referring site (only on the first page of a visit), the
+                device class (desktop / mobile / tablet), a random session identifier stored in
+                sessionStorage (deleted when the tab is closed), and the timestamp.
               </p>
+              <ul className="list-disc pl-6 space-y-2">
+                <li><strong>No IP address, no user agent, no cross-site identifier</strong> is stored.</li>
+                <li>Data cannot be linked to your identity and is used only in aggregate form.</li>
+                <li>Data is stored on <strong>Supabase</strong> (EU-hosted database acting as our service provider) and retained for a maximum of <strong>13 months</strong>, after which it is automatically deleted.</li>
+                <li>No data is shared with advertising or profiling networks.</li>
+              </ul>
 
               <h3 className="font-frank font-semibold text-xl text-polimi-blue-heritage mb-3 mt-6">
-                Third-party cookies
+                Third-party services
               </h3>
               <p>
-                The site may integrate content and services from third parties (e.g., interactive maps via OpenStreetMap/Leaflet, embedded videos). These services may install their own cookies. MiMic Lab does not control third-party cookies; for more information, please refer to their respective policies:
+                Some pages integrate external services, which may process your IP address and set
+                their own cookies <em>only when actually loaded</em>:
               </p>
               <ul className="list-disc pl-6 space-y-2">
                 <li>
-                  <a
-                    href="https://wiki.osmfoundation.org/wiki/Privacy_Policy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-polimi-bright-blue hover:underline"
-                  >
-                    OpenStreetMap — Privacy Policy
-                  </a>
+                  <strong>Google Maps</strong> (Contact page) — loaded <strong>only after you click
+                  &ldquo;Load map&rdquo;</strong>; nothing is requested from Google before that.{' '}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">Google Privacy Policy</a>
                 </li>
                 <li>
-                  <a
-                    href="https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-polimi-bright-blue hover:underline"
-                  >
-                    GitHub Pages — Privacy Statement
-                  </a>
+                  <strong>CARTO / OpenStreetMap</strong> (Network page) — map tiles for the
+                  collaborations map are fetched from CARTO servers (based on OpenStreetMap data).{' '}
+                  <a href="https://carto.com/privacy" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">CARTO Privacy Notice</a>
+                </li>
+                <li>
+                  <strong>Microsoft Forms</strong> — the application form for master students is an
+                  external link to Microsoft&apos;s service.{' '}
+                  <a href="https://privacy.microsoft.com/privacystatement" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">Microsoft Privacy Statement</a>
                 </li>
               </ul>
 
               <div className="mt-6 bg-green-50 border border-green-200 rounded-xl p-5">
                 <p className="text-green-800 font-semibold mb-2">Note</p>
                 <p className="text-green-700 text-sm">
-                  This site <strong>does not use profiling cookies</strong> and <strong>does not collect data for advertising purposes</strong>. No analytics or tracking services are used.
+                  This site <strong>does not use profiling cookies</strong> and <strong>does not collect
+                  data for advertising purposes</strong>. The only analytics is the anonymous,
+                  first-party page counter described above, active only with your consent.
                 </p>
               </div>
+
+              <p className="mt-4 text-sm">
+                You can change your choice at any time via the <strong>&ldquo;Cookie settings&rdquo;</strong>{' '}
+                link in the footer of every page.
+              </p>
             </div>
 
             <div id="manage-cookies">
