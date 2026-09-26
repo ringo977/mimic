@@ -6,7 +6,7 @@ import { ArrowRight } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Research | MiMic Lab',
-  description: 'Explore our research projects in microfluidics, MiMic systems, and biomedical engineering.',
+  description: 'Explore our research topics in microfluidics, organ-on-chip and microphysiological systems, and biomedical engineering.',
 };
 
 export default function ResearchPage() {
@@ -19,7 +19,7 @@ export default function ResearchPage() {
             Our Research
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            Pioneering innovations in microfluidic technologies and MiMic systems 
+            Pioneering innovations in microfluidic technologies and organ-on-chip systems 
             to advance biomedical research and drug discovery.
           </p>
         </div>

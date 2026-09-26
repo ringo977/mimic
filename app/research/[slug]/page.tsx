@@ -7,6 +7,17 @@ import fs from 'fs';
 import path from 'path';
 import { siteBasePath } from '@/lib/site-base-path';
 
+type SectionMedia = { type: 'video' | 'image'; src: string } | null;
+
+// Build-time check of which media file a section has (video wins).
+// Sections without any file render as full-width text (no placeholder).
+function resolveSectionMedia(section: { image?: string; title: string }): SectionMedia {
+  const video = (section as Record<string, string | undefined>).video || '';
+  if (video && fs.existsSync(path.join(process.cwd(), 'public', video))) return { type: 'video', src: video };
+  if (section.image && fs.existsSync(path.join(process.cwd(), 'public', section.image))) return { type: 'image', src: section.image };
+  return null;
+}
+
 // Generate static paths for all research topics
 export function generateStaticParams() {
   return researchData.projects.map((p) => ({ slug: p.slug }));
@@ -88,7 +99,7 @@ export default function ResearchTopicPage({ params }: { params: { slug: string }
             {project.sections.map((section, idx) => (
               <div
                 key={idx}
-                className={`grid grid-cols-1 lg:grid-cols-2 gap-10 items-center ${
+                className={`grid grid-cols-1 ${resolveSectionMedia(section) ? 'lg:grid-cols-2' : 'max-w-3xl'} gap-10 items-center ${
                   idx % 2 === 1 ? 'lg:direction-rtl' : ''
                 }`}
               >
@@ -107,55 +118,27 @@ export default function ResearchTopicPage({ params }: { params: { slug: string }
                   </p>
                 </div>
 
-                {/* Image or Video */}
-                <div className={idx % 2 === 1 ? 'lg:order-1' : ''}>
-                  {(() => {
-                    const prefix = siteBasePath;
-                    const sectionAny = section as Record<string, string>;
-                    const videoPath = sectionAny.video || '';
-                    const videoFile = videoPath ? path.join(process.cwd(), 'public', videoPath) : '';
-                    const hasVideo = videoFile && fs.existsSync(videoFile);
-                    const imgFile = section.image ? path.join(process.cwd(), 'public', section.image) : '';
-                    const hasImage = imgFile && fs.existsSync(imgFile);
-
-                    if (hasVideo) {
-                      return (
+                {/* Image or Video (omitted entirely when the section has no media) */}
+                {(() => {
+                  const media = resolveSectionMedia(section);
+                  if (!media) return null;
+                  const prefix = siteBasePath;
+                  return (
+                    <div className={idx % 2 === 1 ? 'lg:order-1' : ''}>
+                      {media.type === 'video' ? (
                         <div className="aspect-square rounded-2xl overflow-hidden shadow-lg bg-black">
-                          <video
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover"
-                          >
-                            <source src={`${prefix}${videoPath}`} type="video/mp4" />
+                          <video autoPlay loop muted playsInline className="w-full h-full object-cover">
+                            <source src={`${prefix}${media.src}`} type="video/mp4" />
                           </video>
                         </div>
-                      );
-                    }
-                    if (hasImage) {
-                      return (
+                      ) : (
                         <div className="aspect-[4/3] rounded-2xl overflow-hidden shadow-lg">
-                          <img
-                            src={`${prefix}${section.image}`}
-                            alt={section.title}
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={`${prefix}${media.src}`} alt={section.title} className="w-full h-full object-cover" />
                         </div>
-                      );
-                    }
-                    return (
-                      <div className="aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-polimi-blue-heritage/5 to-polimi-bright-blue/10 border-2 border-dashed border-polimi-bright-blue/20 flex items-center justify-center">
-                        <div className="text-center p-6">
-                          <div className="text-4xl mb-2">🔬</div>
-                          <p className="text-polimi-blue-heritage/40 font-manrope text-xs">
-                            {section.title} — image coming soon
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>

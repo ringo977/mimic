@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import FooterLinks from './FooterLinks';
 import { siteBasePath } from '@/lib/site-base-path';
+import { CONTACT_EMAIL, LINKEDIN_URL } from '@/lib/site-contacts';
 
 const quickLinks = [
   { href: '/', label: 'Home' },
@@ -76,16 +77,16 @@ export default function Footer() {
               <p>20133 Milano, Italy</p>
               <p>
                 <a 
-                  href="mailto:mimic@polimi.it"
+                  href={`mailto:${CONTACT_EMAIL}`}
                   className="hover:text-polimi-bright-blue transition-colors"
                 >
-                  mimic@polimi.it
+                  {CONTACT_EMAIL}
                 </a>
               </p>
             </address>
             <div className="mt-4">
               <a
-                href="https://www.linkedin.com/company/mimiclab"
+                href={LINKEDIN_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-sm text-white/90 hover:text-polimi-bright-blue transition-colors font-manrope"

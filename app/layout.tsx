@@ -8,6 +8,7 @@ import ScrollToTop from "@/components/ScrollToTop";
 import CookieConsent from "@/components/CookieConsent";
 import SiteAnalytics from "@/components/SiteAnalytics";
 import { siteBasePath } from "@/lib/site-base-path";
+import { CONTACT_EMAIL, LINKEDIN_URL, SITE_URL } from "@/lib/site-contacts";
 
 const manrope = Manrope({ 
   subsets: ['latin'],
@@ -36,8 +37,8 @@ export const metadata: Metadata = {
     ? { robots: { index: false, follow: false } }
     : {}),
   title: "MiMic Lab | Politecnico di Milano",
-  description: "Advanced microfluidic systems and MiMic research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
-  keywords: ["MiMic", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],
+  description: "Organ-on-chip and microphysiological systems research at the Department of Electronics, Information and Bioengineering (DEIB), Politecnico di Milano.",
+  keywords: ["MiMic", "organ-on-chip", "microphysiological systems", "microfluidics", "bioengineering", "Politecnico di Milano", "DEIB", "research"],
   authors: [{ name: "MiMic Lab, PoliMi" }],
   icons: {
     icon: `${siteBasePath}/icon.svg`,
@@ -47,11 +48,59 @@ export const metadata: Metadata = {
     google: "kIiXrjP9psjFQ0PZ77po6fsbmmEVqPb14sq-XCRTOvk",
   },
   openGraph: {
+    siteName: "MiMic Lab",
     title: "MiMic Lab | Politecnico di Milano",
-    description: "Advanced microfluidic systems and MiMic research",
+    description: "Organ-on-chip and microphysiological systems research at DEIB, Politecnico di Milano.",
     type: "website",
     locale: "en_US",
+    url: "./",
+    // Default social preview (1200x630, generated from the lab logo).
+    // Resolved against metadataBase → always the canonical www host.
+    images: [{ url: "/images/og-default.png", width: 1200, height: 630, alt: "MiMic Lab — Organ-on-Chip Laboratory, Politecnico di Milano" }],
   },
+  twitter: { card: "summary_large_image" },
+};
+
+// Structured data (schema.org) for the organisation and the site.
+// Rendered once in the root layout; /team adds Person entries for the PIs.
+const organizationJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "ResearchOrganization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "MiMic Lab",
+      alternateName: "MiMic Lab — Organ-on-Chip Laboratory, Politecnico di Milano",
+      url: `${SITE_URL}/`,
+      logo: `${SITE_URL}/images/og-default.png`,
+      email: CONTACT_EMAIL,
+      sameAs: [LINKEDIN_URL],
+      parentOrganization: {
+        "@type": "CollegeOrUniversity",
+        name: "Politecnico di Milano",
+        url: "https://www.polimi.it/",
+      },
+      department: {
+        "@type": "Organization",
+        name: "Department of Electronics, Information and Bioengineering (DEIB)",
+        url: "https://www.deib.polimi.it/",
+      },
+      address: {
+        "@type": "PostalAddress",
+        streetAddress: "Via Camillo Golgi 39, Building 21",
+        postalCode: "20133",
+        addressLocality: "Milano",
+        addressCountry: "IT",
+      },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: "MiMic Lab",
+      url: `${SITE_URL}/`,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -62,6 +111,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${frankRuhl.variable}`}>
       <body className="antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        />
         <GridBackground />
         <Navbar />
         <main className="min-h-screen pt-32 lg:pt-20">

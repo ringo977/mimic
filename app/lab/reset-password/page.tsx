@@ -7,7 +7,6 @@ const LabPasswordResetPage = dynamic(() => import('@/components/lab/LabPasswordR
 export default function LabResetPasswordPage() {
   return (
     <>
-      <meta name="robots" content="noindex, nofollow" />
       <LabPasswordResetPage />
     </>
   );

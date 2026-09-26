@@ -1,4 +1,12 @@
+import type { Metadata } from 'next';
 import Script from 'next/script';
+
+// Internal tool: never indexed (this replaces the old robots.txt Disallow,
+// see app/robots.ts).
+export const metadata: Metadata = {
+  title: 'Lab Manager | MiMic Lab',
+  robots: { index: false, follow: false },
+};
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 

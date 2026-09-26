@@ -7,9 +7,10 @@ const BASE_URL = 'https://www.mimic.polimi.it';
 
 export const dynamic = 'force-static';
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
+// No lastModified: it used to be the build time for every URL, which is
+// meaningless to crawlers (Google ignores lastmod when it is unreliable).
 
+export default function sitemap(): MetadataRoute.Sitemap {
   const staticRoutes: { path: string; priority: number; changeFrequency: MetadataRoute.Sitemap[number]['changeFrequency'] }[] = [
     { path: '', priority: 1, changeFrequency: 'weekly' },
     { path: 'news', priority: 0.9, changeFrequency: 'weekly' },
@@ -19,7 +20,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { path: 'grants', priority: 0.7, changeFrequency: 'monthly' },
     { path: 'network', priority: 0.7, changeFrequency: 'monthly' },
     { path: 'technology-facilities', priority: 0.7, changeFrequency: 'monthly' },
-    { path: 'join', priority: 0.6, changeFrequency: 'monthly' },
     { path: 'contact', priority: 0.5, changeFrequency: 'yearly' },
     { path: 'privacy', priority: 0.2, changeFrequency: 'yearly' },
     { path: 'cookie-policy', priority: 0.2, changeFrequency: 'yearly' },
@@ -27,7 +27,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const researchRoutes = researchData.projects.map((project) => ({
     url: `${BASE_URL}/research/${project.slug}/`,
-    lastModified: now,
     changeFrequency: 'monthly' as const,
     priority: 0.7,
   }));
@@ -35,7 +34,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     ...staticRoutes.map(({ path, priority, changeFrequency }) => ({
       url: path ? `${BASE_URL}/${path}/` : `${BASE_URL}/`,
-      lastModified: now,
       changeFrequency,
       priority,
     })),

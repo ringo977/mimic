@@ -2,10 +2,11 @@ import { Metadata } from 'next';
 import Card from '@/components/ui/Card';
 import ClickToLoadMap from '@/components/ClickToLoadMap';
 import { MapPin, Mail, GraduationCap, Briefcase, FileText, Users, ExternalLink } from 'lucide-react';
+import { APPLICATIONS_EMAIL, CONTACT_EMAIL } from '@/lib/site-contacts';
 
 export const metadata: Metadata = {
-  title: 'Contact | MiMic Lab',
-  description: 'Join the MiMic Lab at Politecnico di Milano. Postdoc, PhD, master thesis, and visiting researcher opportunities.',
+  title: 'Contact & Join Us | MiMic Lab',
+  description: 'Contact the MiMic Lab at Politecnico di Milano and find out how to join us: postdoc, PhD, master thesis and visiting researcher opportunities.',
 };
 
 export default function ContactPage() {
@@ -15,10 +16,10 @@ export default function ContactPage() {
       <section className="bg-gradient-to-r from-polimi-blue-heritage to-polimi-space-blue text-white py-20">
         <div className="container-polimi">
           <h1 className="font-frank font-bold text-5xl md:text-6xl mb-6">
-            Join Our Team
+            Contact &amp; Join Us
           </h1>
           <p className="text-xl text-polimi-gray max-w-3xl">
-            We are always looking for talented and motivated researchers to join our interdisciplinary team at Politecnico di Milano.
+            Get in touch with the lab, or join us: we are always looking for talented and motivated researchers for our interdisciplinary team at Politecnico di Milano.
           </p>
         </div>
       </section>
@@ -115,8 +116,8 @@ export default function ContactPage() {
               <p className="text-gray-700 text-sm mb-4">
                 We welcome master students to conduct their thesis research in our lab.
                 For general inquiries, contact us at{' '}
-                <a href="mailto:mimic@polimi.it" className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
-                  mimic@polimi.it
+                <a href={`mailto:${CONTACT_EMAIL}`} className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
+                  {CONTACT_EMAIL}
                 </a>.
                 If you are a Politecnico di Milano student, we invite you to fill out our{' '}
                 <a
@@ -208,10 +209,10 @@ export default function ContactPage() {
               <div className="mt-5 pt-4 border-t border-gray-200 text-center">
                 <p className="text-gray-600 text-sm mb-2">Send your application to:</p>
                 <a
-                  href="mailto:mimic@polimi.it"
+                  href={`mailto:${APPLICATIONS_EMAIL}`}
                   className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-semibold"
                 >
-                  mimic@polimi.it
+                  {APPLICATIONS_EMAIL}
                 </a>
               </div>
             </Card>
@@ -293,8 +294,8 @@ export default function ContactPage() {
                     Email
                   </h3>
                   <p className="text-gray-700 text-sm">
-                    <a href="mailto:mimic@polimi.it" className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
-                      mimic@polimi.it
+                    <a href={`mailto:${CONTACT_EMAIL}`} className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
+                      {CONTACT_EMAIL}
                     </a>
                   </p>
                 </div>

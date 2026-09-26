@@ -233,7 +233,7 @@ export default function NewsCard({ news }: NewsCardProps) {
                 </p>
                 {(news as any).link && (
                   <a
-                    href={(news as any).link}
+                    href={(news as any).link.startsWith('/') ? `${prefix}${(news as any).link}` : (news as any).link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 mt-4 text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium text-sm transition-colors"
