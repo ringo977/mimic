@@ -7,6 +7,9 @@
 #   3. Delete htdocs-SSL.old.
 # If the server refuses mkdir/rename at the home level, we fall back to the
 # legacy behaviour: wipe htdocs-SSL/ and re-upload in place (site briefly 404s).
+# NOTE (verified 26/09/2026): the Polimi server home is NOT writable (mkdir →
+# 550), so the swap always fails there and the wipe+reload fallback is used.
+# The swap path is kept in case the hosting policy changes.
 #
 # Why not incremental mirror: lftp `mirror` against a non-empty remote folder
 # gets stuck in slow TLS comparisons (60-300 B/s, hours per deploy).
