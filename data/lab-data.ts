@@ -118,6 +118,14 @@ export function isWorkingDay(dateStr: string): boolean {
   return day !== 0 && day !== 6;
 }
 
+/** Today as YYYY-MM-DD in the browser's LOCAL time zone.
+ *  Never use `new Date().toISOString().split('T')[0]` for calendar dates:
+ *  that is UTC, so between 00:00 and 02:00 Italian time it is still
+ *  "yesterday" and every "today"/"future" filter is off by one day. */
+export function todayStr(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
+
 export function addDaysStr(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d + days, 12);
@@ -845,8 +853,8 @@ export const mockManuals: Manual[] = [
 
 // --- Mock initial data ---
 
-function getTodayStr() { return new Date().toISOString().split('T')[0]; }
-function getTomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; }
+function getTodayStr() { return todayStr(); }
+function getTomorrowStr() { return addDaysStr(todayStr(), 1); }
 
 export function getInitialBookings(): Booking[] {
   const today = getTodayStr(), tomorrow = getTomorrowStr();
@@ -893,6 +901,30 @@ export function getInitialLog(): LogEntry[] {
 }
 
 // --- Utilities ---
+
+/**
+ * Validate a vial position against its storage unit's grid and against the
+ * vials already stored. Returns an error message, or null when valid.
+ * Rack/box are 1-based, row/col are 0-based (as stored in cryo_vials).
+ */
+export function validateVialPosition(
+  v: { storageUnitId: string; rack: number; box: number; row: number; col: number },
+  units: StorageUnit[],
+  existing: CryoVial[],
+  ignoreId?: string,
+): string | null {
+  const su = units.find(s => s.id === v.storageUnitId);
+  if (!su) return 'Storage unit not found.';
+  if (!su.numRacks || !su.boxesPerRack || !su.gridRows || !su.gridCols) return `${su.name} has no rack/box grid configured.`;
+  const int = (n: number) => Number.isInteger(n);
+  if (!int(v.rack) || v.rack < 1 || v.rack > su.numRacks) return `Rack must be between 1 and ${su.numRacks}.`;
+  if (!int(v.box) || v.box < 1 || v.box > su.boxesPerRack) return `Box must be between 1 and ${su.boxesPerRack}.`;
+  if (!int(v.row) || v.row < 0 || v.row >= su.gridRows) return `Row must be between 0 and ${su.gridRows - 1} (${getRowLabels(su.gridRows)[0]}–${getRowLabels(su.gridRows)[su.gridRows - 1]}).`;
+  if (!int(v.col) || v.col < 0 || v.col >= su.gridCols) return `Col must be between 0 and ${su.gridCols - 1}.`;
+  const taken = existing.find(x => x.id !== ignoreId && x.storageUnitId === v.storageUnitId && x.rack === v.rack && x.box === v.box && x.row === v.row && x.col === v.col);
+  if (taken) return `Position R${v.rack}B${v.box} ${getRowLabels(su.gridRows)[v.row]}${v.col + 1} is already taken by ${taken.cellLine} P${taken.passage}.`;
+  return null;
+}
 
 export function generateId(): string { return Date.now().toString(36) + Math.random().toString(36).substr(2, 9); }
 export function formatDate(dateStr: string): string { return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }

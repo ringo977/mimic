@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useCallback, useState, useMemo, useRef } from 'react';
 import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download,
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
@@ -9,7 +9,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
-import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
+import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
@@ -17,6 +17,7 @@ import { LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
+import { downloadCSV } from '@/lib/csv';
 
 type Tab = 'users' | 'projects' | 'certifications' | 'locations' | 'instruments' | 'storageUnits' | 'reagents' | 'cryo' | 'manuals' | 'calendar' | 'schedule' | 'absences' | 'backup';
 
@@ -92,13 +93,6 @@ export default function AdminPage() {
 // ============================================================
 // Shared
 // ============================================================
-function downloadCSV(headers: string[], rows: (string | number)[][], filename: string) {
-  const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`; a.click();
-  URL.revokeObjectURL(url);
-}
 
 /** Minimal RFC-4180-ish CSV parser: handles quoted fields, escaped quotes, commas and newlines. */
 function parseCSV(text: string): string[][] {
@@ -244,8 +238,7 @@ function useSort<T>(data: T[], defaultKey: string, accessors: Record<string, (it
       const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb));
       return sortAsc ? cmp : -cmp;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, sortKey, sortAsc]);
+  }, [data, sortKey, sortAsc, accessors]);
   return { sorted, sortKey, sortAsc, toggle };
 }
 
@@ -294,7 +287,6 @@ function UsersTab() {
   const supervisorOf = (u: LabUser) => users.find(x => x.id === u.supervisorId);
   const alumniCount = users.filter(u => u.status === 'alumni').length;
   const activeCount = users.length - alumniCount;
-  const todayStr = () => new Date().toISOString().split('T')[0];
 
   const archiveUser = (u: LabUser) => {
     const futureBookings = bookings.filter(b => b.userId === u.id && b.date >= todayStr());
@@ -305,7 +297,7 @@ function UsersTab() {
       futureBookings.forEach(b => removeBooking(b.id));
       updateUser({ ...u, status: 'alumni', endDate: u.endDate || todayStr(), isAdmin: false });
       setViewing(null);
-    });
+    }, 'Archive');
   };
 
   const reactivateUser = (u: LabUser) => {
@@ -519,7 +511,7 @@ function UsersTab() {
                 <div key={t.done} className="flex items-center justify-between gap-2">
                   <label className="flex items-center gap-2 cursor-pointer flex-1">
                     <input type="checkbox" checked={!!form[t.done]}
-                      onChange={e => setForm(f => ({ ...f, [t.done]: e.target.checked, [t.date]: e.target.checked ? (f[t.date] || new Date().toISOString().split('T')[0]) : undefined }))}
+                      onChange={e => setForm(f => ({ ...f, [t.done]: e.target.checked, [t.date]: e.target.checked ? (f[t.date] || todayStr()) : undefined }))}
                       className="w-4 h-4 rounded border-gray-300 text-green-600" />
                     <span className="text-xs font-manrope text-gray-700">{t.label}</span>
                   </label>
@@ -917,7 +909,7 @@ function LocationsTab() {
 // Instruments Tab
 // ============================================================
 function InstrumentsTab() {
-  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry, bookings, removeBooking, certifications, updateCertification } = useLabContext();
+  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry, bookings, removeBooking, certifications, updateCertification, reportError } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Instrument | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -925,7 +917,7 @@ function InstrumentsTab() {
   const [mLogs, setMLogs] = useState<MaintenanceLog[]>([]);
   const [mForm, setMForm] = useState<MaintenanceLog | null>(null);
   const empty = (): Instrument => ({ id: generateId(), name: '', category: 'Cell Culture', location: '', locationId: undefined, requiresCertification: false, description: '', icon: '🔬' });
-  const emptyLog = (instId: string): MaintenanceLog => ({ id: generateId(), instrumentId: instId, date: new Date().toISOString().split('T')[0], type: 'scheduled', description: '', performedBy: user.name });
+  const emptyLog = (instId: string): MaintenanceLog => ({ id: generateId(), instrumentId: instId, date: todayStr(), type: 'scheduled', description: '', performedBy: user.name });
   const [form, setForm] = useState<Instrument>(empty());
   const open = (i?: Instrument) => { setForm(i ? { ...i } : empty()); setEditing(i || null); setShowForm(true); };
   const setLocationId = (locId: string) => {
@@ -974,7 +966,8 @@ function InstrumentsTab() {
 
   const saveMLog = async () => {
     if (!mForm || !mForm.description) return;
-    await upsertMaintenanceLog(mForm);
+    const saved = await upsertMaintenanceLog(mForm);
+    if (!saved) { reportError('Maintenance record was NOT saved to the server. Check your connection and retry.'); return; }
     addLogEntry({ userId: user.id, userName: user.name, action: `Maintenance: ${mForm.type}`, category: 'booking', details: `${instruments.find(i => i.id === mForm.instrumentId)?.name} — ${mForm.description}` });
     const logs = await fetchMaintenanceLogs(mForm.instrumentId);
     setMLogs(logs);
@@ -982,12 +975,13 @@ function InstrumentsTab() {
   };
 
   const delMLog = async (id: string, instId: string) => {
-    await deleteMaintenanceLog(id);
+    const ok = await deleteMaintenanceLog(id);
+    if (!ok) { reportError('Maintenance record was NOT deleted on the server. Check your connection and retry.'); return; }
     const logs = await fetchMaintenanceLogs(instId);
     setMLogs(logs);
   };
 
-  const isOverdue = (i: Instrument) => i.nextMaintenanceDate && i.nextMaintenanceDate < new Date().toISOString().split('T')[0];
+  const isOverdue = (i: Instrument) => i.nextMaintenanceDate && i.nextMaintenanceDate < todayStr();
   const isSoon = (i: Instrument) => {
     if (!i.nextMaintenanceDate) return false;
     const d = new Date(i.nextMaintenanceDate);
@@ -1044,11 +1038,13 @@ function InstrumentsTab() {
                   const parts = [`"${i.name}" will be permanently removed, along with its maintenance history.`];
                   if (bookingsHere.length > 0) parts.push(`${bookingsHere.length} booking${bookingsHere.length > 1 ? 's' : ''} (past and future) will be deleted.`);
                   if (certsHere.length > 0) parts.push(`${certsHere.length} certification${certsHere.length > 1 ? 's' : ''} will be unlinked (kept as general).`);
-                  confirmDelete('Delete Instrument?', parts.join(' '), () => {
+                  confirmDelete('Delete Instrument?', parts.join(' '), async () => {
+                    // Instrument row first; only if the server confirms, clean up the rest.
+                    const ok = await removeInstrument(i.id);
+                    if (!ok) return;
                     bookingsHere.forEach(b => removeBooking(b.id));
                     certsHere.forEach(c => updateCertification({ ...c, instrumentId: undefined }));
                     deleteMaintenanceLogsForInstrument(i.id);
-                    removeInstrument(i.id);
                   });
                 }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
@@ -1424,12 +1420,27 @@ function ReagentsTab() {
   const [form, setForm] = useState<Reagent>(empty());
 
   const open = (r?: Reagent) => { setForm(r ? { ...r } : empty()); setEditing(r || null); setShowForm(true); };
-  const save = () => { if (!form.name) return; editing ? updateReagent(form) : addNewReagent(form); setShowForm(false); };
+  const save = () => {
+    if (!form.name) return;
+    // Sanitise numbers: no negatives, max ≥ 1 and ≥ stock (maxStock 0 used to
+    // divide by zero in the stock bar; stock > max broke the percentage).
+    const currentStock = Math.max(0, Number(form.currentStock) || 0);
+    const maxStock = Math.max(1, Number(form.maxStock) || 0, currentStock);
+    const clean: Reagent = { ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0) };
+    if (editing) {
+      // Stock untouched in the form → keep whatever the server has now
+      // (someone may have withdrawn in the meantime via the atomic RPC).
+      updateReagent(clean, { keepServerStock: clean.currentStock === editing.currentStock });
+    } else {
+      addNewReagent(clean);
+    }
+    setShowForm(false);
+  };
 
-  const getUnitName = (id?: string) => { if (!id) return '—'; const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
+  const getUnitName = useCallback((id?: string) => { if (!id) return '—'; const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
 
   // Sorting
-  const rAcc = useMemo(() => ({ name: (r: Reagent) => r.name, category: (r: Reagent) => r.category, stock: (r: Reagent) => r.currentStock, supplier: (r: Reagent) => r.supplier, storage: (r: Reagent) => getUnitName(r.storageUnitId), expiry: (r: Reagent) => r.expiryDate || 'zzz' }), [storageUnits]);
+  const rAcc = useMemo(() => ({ name: (r: Reagent) => r.name, category: (r: Reagent) => r.category, stock: (r: Reagent) => r.currentStock, supplier: (r: Reagent) => r.supplier, storage: (r: Reagent) => getUnitName(r.storageUnitId), expiry: (r: Reagent) => r.expiryDate || 'zzz' }), [getUnitName]);
   const { sorted: sortedReagents, sortKey: rSortKey, sortAsc: rSortAsc, toggle: rToggle } = useSort(filtered, 'name', rAcc);
 
   // Counts per macro-category
@@ -1594,20 +1605,25 @@ function CryoTab() {
   const [showForm, setShowForm] = useState(false);
   // Only grid-capable units for cryo
   const gridUnits = storageUnits.filter(s => s.numRacks && s.boxesPerRack && s.gridRows && s.gridCols);
-  const empty = () => ({ cellLine: '', passage: 0, date: new Date().toISOString().split('T')[0], userId: user.id, userName: user.name, storageUnitId: gridUnits[0]?.id || '', rack: 1, box: 1, row: 0, col: 0, notes: '' });
+  const empty = () => ({ cellLine: '', passage: 0, date: todayStr(), userId: user.id, userName: user.name, storageUnitId: gridUnits[0]?.id || '', rack: 1, box: 1, row: 0, col: 0, notes: '' });
   const [form, setForm] = useState(empty());
+
+  const [formError, setFormError] = useState('');
 
   const save = () => {
     if (!form.cellLine || !form.storageUnitId) return;
+    const err = validateVialPosition(form, storageUnits, cryoVials);
+    if (err) { setFormError(err); return; }
+    setFormError('');
     addCryoVial(form);
     setShowForm(false);
     setForm(empty());
   };
 
-  const getUnitName = (id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
-  const getPositionStr = (v: typeof cryoVials[0]) => { const su = storageUnits.find(s => s.id === v.storageUnitId); const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5); return `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`; };
+  const getUnitName = useCallback((id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
+  const getPositionStr = useCallback((v: typeof cryoVials[0]) => { const su = storageUnits.find(s => s.id === v.storageUnitId); const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5); return `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`; }, [storageUnits]);
 
-  const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [storageUnits]);
+  const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [getUnitName, getPositionStr]);
   const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
 
   const importSpec: ImportSpec<Omit<CryoVial, 'id'>> = {
@@ -1615,7 +1631,7 @@ function CryoTab() {
     headers: ['Cell Line', 'Passage', 'Storage Unit', 'Rack', 'Box', 'Row', 'Col', 'Stored By', 'Date', 'Notes'],
     aliases: { 'Cell Line': ['cellline', 'cell'], 'Stored By': ['user', 'stored by'] },
     template: [
-      ['HUVEC', 5, gridUnits[0]?.name || 'LN₂ Dewar A', 1, 1, 0, 0, '', new Date().toISOString().split('T')[0], 'Early passage'],
+      ['HUVEC', 5, gridUnits[0]?.name || 'LN₂ Dewar A', 1, 1, 0, 0, '', todayStr(), 'Early passage'],
     ],
     templateName: 'cryo_vials_template',
     notes: <>
@@ -1631,11 +1647,13 @@ function CryoTab() {
       const numD = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
       const item: Omit<CryoVial, 'id'> = {
         cellLine: rec['Cell Line'], passage: numD(rec['Passage'], 0),
-        date: rec['Date'] || new Date().toISOString().split('T')[0],
+        date: rec['Date'] || todayStr(),
         userId: user.id, userName: rec['Stored By'] || user.name, storageUnitId: su.id,
         rack: numD(rec['Rack'], 1), box: numD(rec['Box'], 1), row: numD(rec['Row'], 0), col: numD(rec['Col'], 0),
         notes: rec['Notes'],
       };
+      const posErr = validateVialPosition(item, storageUnits, cryoVials);
+      if (posErr) return { skip: `Row ${rowNum} (${rec['Cell Line']}): ${posErr}` };
       return { item };
     },
   };
@@ -1698,6 +1716,7 @@ function CryoTab() {
             <Field label="Col"><input type="number" min={0} value={form.col} onChange={e => setForm({ ...form, col: Number(e.target.value) })} className={inputCls} /></Field>
           </div>
           <Field label="Notes"><input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={inputCls} /></Field>
+          {formError && <p className="text-xs text-red-600 font-manrope bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
           <button onClick={save} disabled={!form.cellLine} className="w-full py-3 bg-cyan-500 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-cyan-600 disabled:opacity-40 flex items-center justify-center gap-2"><Save size={16} /> Store Vial</button>
         </div>
       </Modal>}
@@ -1716,7 +1735,7 @@ function ManualsTab() {
   const [showForm, setShowForm] = useState(false);
   const categories: Manual['category'][] = ['protocol', 'manual', 'sds'];
   const catLabels: Record<string, string> = { protocol: 'Protocol', manual: 'Manual', sds: 'Safety Data Sheet' };
-  const empty = (): Manual => ({ id: generateId(), title: '', category: 'protocol', description: '', lastUpdated: new Date().toISOString().split('T')[0], uploadedBy: '' });
+  const empty = (): Manual => ({ id: generateId(), title: '', category: 'protocol', description: '', lastUpdated: todayStr(), uploadedBy: '' });
   const [form, setForm] = useState<Manual>(empty());
   const fileRef = useRef<HTMLInputElement>(null);
   const open = (m?: Manual) => { setForm(m ? { ...m } : empty()); setEditing(m || null); setPendingFile(null); setShowForm(true); };
@@ -1764,8 +1783,8 @@ function ManualsTab() {
     headers: ['Title', 'Category', 'Description', 'Instrument', 'Updated', 'Uploaded By'],
     aliases: { 'Updated': ['last updated', 'date'], 'Uploaded By': ['author', 'by'] },
     template: [
-      ['Confocal SOP', 'protocol', 'Step-by-step imaging protocol', 'Confocal Microscope', new Date().toISOString().split('T')[0], 'Lab'],
-      ['Acetone SDS', 'sds', 'Safety data sheet', '', new Date().toISOString().split('T')[0], 'Lab'],
+      ['Confocal SOP', 'protocol', 'Step-by-step imaging protocol', 'Confocal Microscope', todayStr(), 'Lab'],
+      ['Acetone SDS', 'sds', 'Safety data sheet', '', todayStr(), 'Lab'],
     ],
     templateName: 'documents_template',
     notes: <p><strong>Category</strong>: protocol, manual, or sds (defaults to protocol). PDF files can&rsquo;t be imported via CSV — attach them afterwards by editing the record.</p>,
@@ -1777,7 +1796,7 @@ function ManualsTab() {
       const item: Manual = {
         id: generateId(), title: rec['Title'], category, description: rec['Description'],
         instrument: rec['Instrument'] || undefined,
-        lastUpdated: rec['Updated'] || new Date().toISOString().split('T')[0],
+        lastUpdated: rec['Updated'] || todayStr(),
         uploadedBy: rec['Uploaded By'] || 'Import',
       };
       return { item };
@@ -1854,8 +1873,8 @@ function ManualsTab() {
 // ============================================================
 function CalendarTab() {
   const { bookings, instruments, bookingSettings } = useLabContext();
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const changeDate = (days: number) => { const d = new Date(selectedDate + 'T12:00:00'); d.setDate(d.getDate() + days); setSelectedDate(d.toISOString().split('T')[0]); };
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const changeDate = (days: number) => setSelectedDate(addDaysStr(selectedDate, days));
   const dateLabel = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const dayBookings = bookings.filter(b => b.date === selectedDate).sort((a, b) => a.startHour - b.startHour);
   const byInstrument = useMemo(() => { const map = new Map<string, typeof dayBookings>(); dayBookings.forEach(b => { const l = map.get(b.instrumentId) || []; l.push(b); map.set(b.instrumentId, l); }); return map; }, [dayBookings]);
@@ -1873,7 +1892,7 @@ function CalendarTab() {
         <button onClick={() => changeDate(1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={18} /></button>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {weekDays.map(d => { const ds = d.toISOString().split('T')[0]; const count = bookings.filter(b => b.date === ds).length; const isToday = ds === new Date().toISOString().split('T')[0]; const isSel = ds === selectedDate; return (
+        {weekDays.map(d => { const ds = d.toLocaleDateString('en-CA'); const count = bookings.filter(b => b.date === ds).length; const isToday = ds === todayStr(); const isSel = ds === selectedDate; return (
           <button key={ds} onClick={() => setSelectedDate(ds)} className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-manrope transition-all shrink-0 ${isSel ? 'bg-[#102C53] text-white' : isToday ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'}`}>
             <span className="font-medium">{d.toLocaleDateString('en', { weekday: 'short' })}</span><span className="text-lg font-bold mt-0.5">{d.getDate()}</span>{count > 0 && <div className={`w-1.5 h-1.5 rounded-full mt-1 ${isSel ? 'bg-white' : 'bg-blue-400'}`} />}
           </button>); })}
@@ -1988,9 +2007,9 @@ function ScheduleTab() {
         </div>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-manrope flex items-start gap-2">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 font-manrope flex items-start gap-2">
         <AlertCircle size={14} className="shrink-0 mt-0.5" />
-        <span>To share these hours across all users (and to store half-hour bookings), the Supabase migration <code className="bg-amber-100 px-1 rounded">scripts/supabase-booking-settings.sql</code> must be run once. Until then, changes apply only on this device.</span>
+        <span>These hours are shared with all lab members (stored in the <code className="bg-blue-100 px-1 rounded">app_settings</code> table) and apply to the booking calendar as soon as you save.</span>
       </div>
     </div>
   );

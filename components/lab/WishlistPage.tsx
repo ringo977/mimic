@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Plus, X, Check, XCircle, Download, AlertCircle, Package, Truck, Archive } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDateTime, storageUnitTypes, generateId, Reagent } from '@/data/lab-data';
+import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent } from '@/data/lab-data';
+import { downloadCSV } from '@/lib/csv';
 
 const urgencyColors = {
   low: 'bg-gray-100 text-gray-600',
@@ -84,13 +85,15 @@ export default function WishlistPage() {
     setStockUnitId(storageUnits[0]?.id || '');
     // Pre-fill editable fields from wishlist item
     setSName(item.name);
-    setSCategory(item.type === 'antibody' ? 'Antibodies' : item.type === 'consumable' ? 'Consumables' : 'Reagents');
+    // Must be an existing sub-category (see reagentMacroCategories), otherwise
+    // the new reagent is invisible in the admin tabs.
+    setSCategory(item.type === 'antibody' ? 'Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Reagents');
     setSSupplier(item.supplier);
     setSCatalog(item.catalogNumber);
     setSUnit('units');
     setSMaxStockStr(String(item.quantity * 2));
     setSAlertStr('1');
-    setSExpiry(new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setSExpiry(addDaysStr(todayStr(), 365));
     // Check if there's already a matching reagent
     const match = reagents.find(r =>
       r.catalogNumber.toLowerCase() === item.catalogNumber.toLowerCase() &&
@@ -108,6 +111,7 @@ export default function WishlistPage() {
   const handleStock = () => {
     if (!stockItem || stockQty <= 0) return;
 
+    let stockedReagentId = stockReagentId;
     if (stockMode === 'existing' && stockReagentId) {
       // Add stock to existing reagent
       addReagentStock(stockReagentId, stockQty);
@@ -122,7 +126,7 @@ export default function WishlistPage() {
         currentStock: stockQty,
         maxStock: sMaxStock > 0 ? sMaxStock : stockQty * 2,
         unit: sUnit || 'units',
-        expiryDate: sExpiry || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        expiryDate: sExpiry || addDaysStr(todayStr(), 365),
         location: su?.name || '',
         storageUnitId: stockUnitId || undefined,
         supplier: sSupplier,
@@ -130,24 +134,18 @@ export default function WishlistPage() {
         alertThreshold: sAlert > 0 ? sAlert : 1,
       };
       addNewReagent(newReagent);
+      stockedReagentId = newReagent.id;
     }
 
-    // Update wishlist item with stocking info
-    updateWishlistStatus(stockItem, 'delivered', user.name);
+    // Update wishlist item with stocking info (links it to the reagent)
+    updateWishlistStatus(stockItem, 'delivered', user.name, { stockedToReagentId: stockedReagentId || undefined, stockedToStorageUnitId: stockUnitId || undefined });
     setStockItem(null);
   };
 
   const exportCSV = () => {
     const headers = ['Name', 'Type', 'Catalog #', 'Supplier', 'Est. Cost (€)', 'Qty', 'Urgency', 'Requested By', 'Status', 'Notes'];
     const rows = wishlist.map(w => [w.name, w.type, w.catalogNumber, w.supplier, w.estimatedCost, w.quantity, w.urgency, w.requestedByName, w.status, w.notes]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wishlist_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCSV(headers, rows, 'wishlist');
   };
 
   const totalPending = wishlist.filter(w => w.status === 'pending').reduce((sum, w) => sum + w.estimatedCost * w.quantity, 0);

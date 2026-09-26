@@ -29,8 +29,16 @@ export default function ReagentsPage() {
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
 
+  // Withdrawals are capped at what is actually in stock (the server clamps
+  // at 0 anyway; this keeps the log truthful and the button honest).
+  const maxAmount = modalReagent
+    ? (modal?.type === 'withdraw' ? modalReagent.currentStock : Math.max(0, modalReagent.maxStock - modalReagent.currentStock))
+    : 0;
+  const amountTooHigh = !!modalReagent && amount > maxAmount;
+
   const handleSubmit = () => {
     if (!modal || !modalReagent) return;
+    if (amount <= 0 || amountTooHigh) return;
     if (modal.type === 'withdraw') {
       withdrawReagent(modal.reagentId, amount, purpose, project);
     } else {
@@ -41,7 +49,7 @@ export default function ReagentsPage() {
     setPurpose('');
   };
 
-  const stockPercent = (r: typeof reagents[0]) => Math.round((r.currentStock / r.maxStock) * 100);
+  const stockPercent = (r: typeof reagents[0]) => r.maxStock > 0 ? Math.min(100, Math.round((r.currentStock / r.maxStock) * 100)) : 0;
   const stockColor = (r: typeof reagents[0]) => {
     const pct = stockPercent(r);
     if (pct <= 20) return 'bg-red-500';
@@ -174,11 +182,14 @@ export default function ReagentsPage() {
                 <input
                   type="number"
                   min={1}
-                  max={modal.type === 'withdraw' ? modalReagent.currentStock : modalReagent.maxStock - modalReagent.currentStock}
+                  max={maxAmount}
                   value={amountStr}
                   onChange={e => setAmountStr(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                  className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${amountTooHigh ? 'border-red-300' : 'border-gray-200'}`}
                 />
+                <p className={`text-[11px] mt-1 font-manrope ${amountTooHigh ? 'text-red-600' : 'text-gray-400'}`}>
+                  {modal.type === 'withdraw' ? `Max ${maxAmount} ${modalReagent.unit} available` : `Room for ${maxAmount} ${modalReagent.unit} (max stock ${modalReagent.maxStock})`}
+                </p>
               </div>
 
               {modal.type === 'withdraw' && (
@@ -208,7 +219,7 @@ export default function ReagentsPage() {
 
               <button
                 onClick={handleSubmit}
-                disabled={amount <= 0}
+                disabled={amount <= 0 || amountTooHigh}
                 className={`w-full py-3 rounded-xl font-semibold text-sm font-manrope text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                   modal.type === 'withdraw' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'
                 }`}

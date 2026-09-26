@@ -208,10 +208,12 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
   }));
 }
 
-export async function upsertReagent(r: Reagent) {
+export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) {
+  // skipStock: leave current_stock to the server (see LabContext.updateReagent).
   return upsertRow('reagents', {
     id: r.id, name: r.name, category: r.category,
-    current_stock: r.currentStock, max_stock: r.maxStock, unit: r.unit,
+    ...(opts?.skipStock ? {} : { current_stock: r.currentStock }),
+    max_stock: r.maxStock, unit: r.unit,
     expiry_date: r.expiryDate, location: r.location,
     storage_unit_id: r.storageUnitId ?? null,
     supplier: r.supplier, catalog_number: r.catalogNumber,

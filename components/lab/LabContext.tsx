@@ -56,7 +56,7 @@ interface LabContextType {
   removeCryoVial: (id: string) => void;
   wishlist: WishlistItem[];
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => void;
-  updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string) => void;
+  updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId'>>) => void;
   log: LogEntry[];
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
   users: LabUser[];
@@ -64,12 +64,14 @@ interface LabContextType {
   updateUser: (u: LabUser) => void | Promise<void>;
   removeUser: (id: string) => void | Promise<void>;
   addNewReagent: (r: Reagent) => void;
-  updateReagent: (r: Reagent) => void;
+  updateReagent: (r: Reagent, opts?: { keepServerStock?: boolean }) => void;
   removeReagent: (id: string) => void;
   instruments: Instrument[];
   addInstrument: (i: Instrument) => void;
   updateInstrument: (i: Instrument) => void;
-  removeInstrument: (id: string) => void;
+  removeInstrument: (id: string) => Promise<boolean>;
+  /** Show the red sync banner from a page (e.g. a failed maintenance-log save). */
+  reportError: (message: string) => void;
   manuals: Manual[];
   addManual: (m: Manual) => void;
   updateManual: (m: Manual) => void;
@@ -287,9 +289,14 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [track]);
 
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
-    changeReagentStock(reagentId, -amount, 'Reagent withdrawal');
     const rg = reagents.find(r => r.id === reagentId);
-    addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${amount} ${rg?.unit || ''} - ${purpose} (${project})` });
+    // Stock cannot go below zero (server RPC clamps): log what was actually
+    // withdrawn, not what was requested.
+    const actual = rg ? Math.min(amount, Math.max(0, rg.currentStock)) : amount;
+    if (actual <= 0) return;
+    changeReagentStock(reagentId, -actual, 'Reagent withdrawal');
+    const clamped = actual !== amount ? ` (requested ${amount}, only ${actual} in stock)` : '';
+    addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${actual} ${rg?.unit || ''}${clamped} - ${purpose} (${project})` });
   }, [user, reagents, addLogEntry, changeReagentStock]);
 
   const addReagentStock = useCallback((reagentId: string, amount: number) => {
@@ -323,11 +330,12 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     addLogEntry({ userId: user.id, userName: user.name, action: `Requested ${item.name}`, category: 'wishlist', details: `${item.supplier} ${item.catalogNumber}` });
   }, [user, addLogEntry, track]);
 
-  const updateWishlistStatus = useCallback((id: string, status: WishlistItem['status'], approvedBy?: string) => {
+  const updateWishlistStatus = useCallback((id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId'>>) => {
     setWishlist(prev => {
       const updated = prev.map(w => w.id === id ? {
         ...w, status, approvedBy: approvedBy || w.approvedBy,
         deliveredAt: status === 'delivered' ? new Date().toISOString() : w.deliveredAt,
+        ...(extra || {}),
       } : w);
       const w = updated.find(x => x.id === id);
       if (w) track(upsertWishlistItem(w), 'Wishlist update');
@@ -340,21 +348,22 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // ---- Users (Supabase) ----
   const addUser = useCallback(async (u: LabUser) => {
     const { user: result, error } = await insertLabUser(u);
-    if (!result) setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
-    setUsers(prev => [...prev, result || u]);
+    // No optimistic insert: a failed save must not leave a ghost user in the list.
+    if (!result) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return; }
+    setUsers(prev => [...prev, result]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Added user ${u.name}`, category: 'auth', details: `${u.role}, ${u.email}` });
   }, [user, addLogEntry]);
 
   const updateUser = useCallback(async (u: LabUser) => {
     const { ok, error } = await updateLabUser(u);
-    if (!ok) setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
+    if (!ok) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return; }
     setUsers(prev => prev.map(x => x.id === u.id ? u : x));
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated user ${u.name}`, category: 'auth', details: u.role });
   }, [user, addLogEntry]);
 
   const removeUser = useCallback(async (id: string) => {
     const { ok, error } = await deleteLabUser(id);
-    if (!ok) setSyncError(`User removal was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`);
+    if (!ok) { setSyncError(`User removal was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return; }
     setUsers(prev => {
       const u2 = prev.find(x => x.id === id);
       if (u2) addLogEntry({ userId: user.id, userName: user.name, action: `Removed user ${u2.name}`, category: 'auth', details: u2.email });
@@ -364,13 +373,27 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   // ---- Reagents CRUD ----
   const addNewReagent = useCallback((r: Reagent) => { setReagents(prev => [...prev, r]); track(upsertReagent(r), `Reagent "${r.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added reagent ${r.name}`, category: 'reagent', details: `${r.supplier} ${r.catalogNumber}` }); }, [user, addLogEntry, track]);
-  const updateReagent = useCallback((r: Reagent) => { setReagents(prev => prev.map(x => x.id === r.id ? r : x)); track(upsertReagent(r), `Reagent "${r.name}"`); }, [track]);
+  // keepServerStock: the admin edit form did not touch the stock, so do not
+  // overwrite current_stock with the (possibly stale) value the form loaded —
+  // concurrent withdrawals through the RPC would be silently undone.
+  const updateReagent = useCallback((r: Reagent, opts?: { keepServerStock?: boolean }) => {
+    const keep = !!opts?.keepServerStock;
+    setReagents(prev => prev.map(x => x.id === r.id ? (keep ? { ...r, currentStock: x.currentStock } : r) : x));
+    track(upsertReagent(r, { skipStock: keep }), `Reagent "${r.name}"`);
+  }, [track]);
   const removeReagent = useCallback((id: string) => { setReagents(prev => { const r = prev.find(x => x.id === id); if (r) addLogEntry({ userId: user.id, userName: user.name, action: `Removed reagent ${r.name}`, category: 'reagent', details: r.catalogNumber }); return prev.filter(x => x.id !== id); }); track(deleteReagent(id), 'Reagent removal'); }, [user, addLogEntry, track]);
 
   // ---- Instruments ----
   const addInstrument = useCallback((i: Instrument) => { setInstruments(prev => [...prev, i]); track(upsertInstrument(i), `Instrument "${i.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added instrument ${i.name}`, category: 'booking', details: `${i.category}, ${i.location}` }); }, [user, addLogEntry, track]);
   const updateInstrument = useCallback((i: Instrument) => { setInstruments(prev => prev.map(x => x.id === i.id ? i : x)); track(upsertInstrument(i), `Instrument "${i.name}"`); }, [track]);
-  const removeInstrument = useCallback((id: string) => { setInstruments(prev => { const i = prev.find(x => x.id === id); if (i) addLogEntry({ userId: user.id, userName: user.name, action: `Removed instrument ${i.name}`, category: 'booking', details: i.category }); return prev.filter(x => x.id !== id); }); track(deleteInstrument(id), 'Instrument removal'); }, [user, addLogEntry, track]);
+  // Server first: the caller only cleans up bookings/certifications/maintenance
+  // logs after the instrument row is really gone.
+  const removeInstrument = useCallback(async (id: string): Promise<boolean> => {
+    const ok = await deleteInstrument(id);
+    if (!ok) { setSyncError('Instrument removal was NOT saved to the server. Reload and retry.'); return false; }
+    setInstruments(prev => { const i = prev.find(x => x.id === id); if (i) addLogEntry({ userId: user.id, userName: user.name, action: `Removed instrument ${i.name}`, category: 'booking', details: i.category }); return prev.filter(x => x.id !== id); });
+    return true;
+  }, [user, addLogEntry]);
 
   // ---- Manuals ----
   const addManual = useCallback((m: Manual) => { setManuals(prev => [...prev, m]); track(upsertManual(m), `Document "${m.title}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added manual ${m.title}`, category: 'manual', details: m.category }); }, [user, addLogEntry, track]);
@@ -422,7 +445,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       log, addLogEntry,
       users, addUser, updateUser, removeUser,
       addNewReagent, updateReagent, removeReagent,
-      instruments, addInstrument, updateInstrument, removeInstrument,
+      instruments, addInstrument, updateInstrument, removeInstrument, reportError: setSyncError,
       manuals, addManual, updateManual, removeManual,
       storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit,
       projects, addProject, updateProject, removeProject,

@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { formatDate, getRowLabels, storageUnitTypes } from '@/data/lab-data';
+import {todayStr, formatDate, getRowLabels, storageUnitTypes } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -68,7 +68,7 @@ export default function CryoPage() {
     addCryoVial({
       cellLine: newCellLine,
       passage: newPassage,
-      date: new Date().toISOString().split('T')[0],
+      date: todayStr(),
       userId: user.id,
       userName: user.name,
       storageUnitId: selectedUnitId,

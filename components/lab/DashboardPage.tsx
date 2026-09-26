@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots } from '@/data/lab-data';
+import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
@@ -713,7 +713,7 @@ interface Props {
 export default function DashboardPage({ onNavigate }: Props) {
   const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments, manuals, bookingSettings } = useLabContext();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayStr();
   const todayBookings = bookings.filter(b => b.date === today);
   const myTodayBookings = todayBookings.filter(b => b.userId === user.id);
   const lowStockReagents = reagents.filter(r => r.currentStock <= r.alertThreshold);
