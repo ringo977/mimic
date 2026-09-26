@@ -86,9 +86,9 @@ export default function CookiePolicyPage() {
                   <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">Google Privacy Policy</a>
                 </li>
                 <li>
-                  <strong>CARTO / OpenStreetMap</strong> (Network page) — map tiles for the
-                  collaborations map are fetched from CARTO servers (based on OpenStreetMap data).{' '}
-                  <a href="https://carto.com/privacy" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">CARTO Privacy Notice</a>
+                  <strong>OpenStreetMap</strong> (Network page) — map tiles for the
+                  collaborations map are fetched from the OpenStreetMap Foundation servers.{' '}
+                  <a href="https://wiki.osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer" className="text-polimi-bright-blue hover:underline">OSMF Privacy Policy</a>
                 </li>
                 <li>
                   <strong>Microsoft Forms</strong> — the application form for master students is an

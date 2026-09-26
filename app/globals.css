@@ -62,3 +62,9 @@ html {
   background-color: var(--polimi-bright-blue);
   color: white;
 }
+
+/* Network map: desaturate OpenStreetMap tiles to a light-grey basemap
+   (replaces the discontinued free CARTO "light_all" style). */
+.mimic-map-tiles {
+  filter: grayscale(1) brightness(1.08) contrast(0.85) opacity(0.7);
+}

@@ -37,10 +37,14 @@ export default function NetworkMap({ collaborators }: NetworkMapProps) {
         zoomControl: true,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
-        subdomains: 'abcd',
+      // OpenStreetMap standard tiles (no API key). CARTO's free basemaps
+      // started returning "API KEY REQUIRED" watermark tiles on 26/09/2026.
+      // The `mimic-map-tiles` class desaturates them (see globals.css) to
+      // keep the light-grey look of the previous CARTO "light_all" style.
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
+        className: 'mimic-map-tiles',
       }).addTo(map);
 
       const mimicIcon = L.divIcon({
