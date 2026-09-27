@@ -1398,7 +1398,9 @@ function ReagentsTab() {
 
   const macroInfo = reagentMacroCategories[activeMacro];
   // Items in this macro-category
-  const macroFiltered = useMemo(() => reagents.filter(r => macroInfo.subCategories.includes(r.category)), [reagents, macroInfo]);
+  // getMacroCategory falls back to "Reagents" for unknown sub-categories, so a
+  // free-text category (e.g. from a CSV import) never disappears from every tab.
+  const macroFiltered = useMemo(() => reagents.filter(r => getMacroCategory(r.category) === activeMacro), [reagents, activeMacro]);
   // Further filter by selected sub-category
   const filtered = useMemo(() => selectedSubCat === 'All' ? macroFiltered : macroFiltered.filter(r => r.category === selectedSubCat), [macroFiltered, selectedSubCat]);
   // All sub-categories for current macro (from data + from definition, deduplicated)
@@ -1448,7 +1450,8 @@ function ReagentsTab() {
   // Counts per macro-category
   const macroCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    allMacroKeys.forEach(k => { counts[k] = reagents.filter(r => reagentMacroCategories[k].subCategories.includes(r.category)).length; });
+    allMacroKeys.forEach(k => { counts[k] = 0; });
+    reagents.forEach(r => { counts[getMacroCategory(r.category)] += 1; });
     return counts;
   }, [reagents]);
 
@@ -1464,13 +1467,13 @@ function ReagentsTab() {
     headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert'],
     aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'] },
     template: [
-      ['DMEM High Glucose', 'Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2],
-      ['Trypsin-EDTA 0.05%', 'Reagents', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge A (+4 °C)', '2026-09-01', 2],
-      ['DAPI', 'Staining', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C', '2027-01-01', 1],
+      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2],
+      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', '2026-09-01', 2],
+      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', '2027-01-01', 1],
     ],
     templateName: 'consumables_template',
     notes: <>
-      <p><strong>Category</strong>: a sub-category (e.g. Culture Media, Reagents…). If blank, items go to <em>{defaultCategory}</em>.</p>
+      <p><strong>Category</strong>: a sub-category ({macroInfo.subCategories.join(', ')}). If blank, items go to <em>{defaultCategory}</em>.</p>
       <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Expiry</strong>: YYYY-MM-DD.</p>
     </>,
     onAdd: addNewReagent,

@@ -37,7 +37,7 @@ export default function WishlistPage() {
   const stockQty = stockQtyStr === '' ? 0 : Number(stockQtyStr);
   // Editable fields for new reagent creation
   const [sName, setSName] = useState('');
-  const [sCategory, setSCategory] = useState('Reagents');
+  const [sCategory, setSCategory] = useState('Cell Culture');
   const [sSupplier, setSSupplier] = useState('');
   const [sCatalog, setSCatalog] = useState('');
   const [sUnit, setSUnit] = useState('units');
@@ -87,7 +87,7 @@ export default function WishlistPage() {
     setSName(item.name);
     // Must be an existing sub-category (see reagentMacroCategories), otherwise
     // the new reagent is invisible in the admin tabs.
-    setSCategory(item.type === 'antibody' ? 'Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Reagents');
+    setSCategory(item.type === 'antibody' ? 'Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Cell Culture');
     setSSupplier(item.supplier);
     setSCatalog(item.catalogNumber);
     setSUnit('units');

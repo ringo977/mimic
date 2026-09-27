@@ -437,7 +437,9 @@ export interface Reagent {
 export type ReagentMacroCategory = 'Reagents' | 'Plasticware' | 'Microfabrication' | 'Gases & Liquids';
 
 export const reagentMacroCategories: Record<ReagentMacroCategory, { label: string; icon: string; subCategories: string[] }> = {
-  'Reagents':          { label: 'Reagents',          icon: '🧪', subCategories: ['Culture Media', 'Reagents', 'Staining', 'Antibodies', 'Chemicals'] },
+  // Sub-categories mirror the lab's inventory workbook (one sheet per category);
+  // "Cell Culture Media" is the only addition (media, supplements, sera).
+  'Reagents':          { label: 'Reagents',          icon: '🧪', subCategories: ['Cell Culture', 'Cell Culture Media', 'Biochemistry', 'Molecular Biology', 'Antibodies', 'Primers & Probes', 'Chemicals'] },
   'Plasticware':       { label: 'Plasticware',       icon: '🧫', subCategories: ['Plasticware'] },
   'Microfabrication':  { label: 'Microfabrication',  icon: '💿', subCategories: ['Microfabrication'] },
   'Gases & Liquids':   { label: 'Gases & Liquids',   icon: '⛽', subCategories: ['Gases & Liquids'] },
