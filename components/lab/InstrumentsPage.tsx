@@ -10,11 +10,19 @@ import { fetchBookingsForSlot } from '@/lib/supabase-data';
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, locations, bookingSettings, canManageAllBookings } = useLabContext();
   const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  // locationId is authoritative; the location text is a copy that goes stale on rename
+  const locName = (i: { locationId?: string; location?: string }) =>
+    locations.find(l => l.id === i.locationId)?.name || i.location || '—';
+  const locationNames = useMemo(
+    () => ['All', ...Array.from(new Set(mockInstruments.map(locName))).sort((a, b) => a.localeCompare(b))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mockInstruments, locations]);
+  const [selectedLocation, setSelectedLocation] = useState('All');
   const [selectedInstrument, setSelectedInstrument] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -35,10 +43,12 @@ export default function InstrumentsPage() {
   const filteredInstruments = useMemo(() => {
     return mockInstruments.filter(i => {
       const matchCat = selectedCategory === 'All' || i.category === selectedCategory;
+      const matchLoc = selectedLocation === 'All' || locName(i) === selectedLocation;
       const matchSearch = !search || i.name.toLowerCase().includes(search.toLowerCase());
-      return matchCat && matchSearch;
+      return matchCat && matchLoc && matchSearch;
     });
-  }, [selectedCategory, search, mockInstruments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, selectedLocation, search, mockInstruments, locations]);
 
   const instrument = mockInstruments.find(i => i.id === selectedInstrument);
   const dayBookings = bookings.filter(b => b.instrumentId === selectedInstrument && b.date === selectedDate);
@@ -120,19 +130,44 @@ export default function InstrumentsPage() {
           />
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${
-                selectedCategory === cat ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 font-manrope w-16 shrink-0">Type</span>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${
+                    selectedCategory === cat ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 font-manrope w-16 shrink-0 flex items-center gap-1"><MapPin size={10} /> Room</span>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {locationNames.map(loc => (
+                <button
+                  key={loc}
+                  onClick={() => setSelectedLocation(loc)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all border ${
+                    selectedLocation === loc ? 'bg-[#4DC9FF]/15 border-[#4DC9FF] text-[#102C53]' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {loc}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
+        {filteredInstruments.length === 0 && (
+          <p className="text-center py-10 text-sm text-gray-400 font-manrope">No instrument matches these filters.</p>
+        )}
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredInstruments.map(inst => {
@@ -154,7 +189,7 @@ export default function InstrumentsPage() {
                 <p className="text-xs text-gray-500 font-manrope mt-0.5">{inst.description}</p>
                 {inst.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{inst.manufacturer}{inst.model ? ` ${inst.model}` : ''}{inst.serialNumber ? ` · S/N ${inst.serialNumber}` : ''}</p>}
                 <div className="flex items-center gap-3 mt-2.5 text-xs text-gray-400 font-manrope">
-                  <span className="flex items-center gap-1"><MapPin size={10} />{inst.location}</span>
+                  <span className="flex items-center gap-1"><MapPin size={10} />{locName(inst)}</span>
                   {todayBookings.length > 0 && (
                     <span className="flex items-center gap-1 text-blue-500"><Clock size={10} />{todayBookings.length} today</span>
                   )}
@@ -188,7 +223,7 @@ export default function InstrumentsPage() {
             <span className="text-xl">{instrument?.icon}</span>
             <h1 className="text-lg font-bold text-gray-900 font-manrope">{instrument?.name}</h1>
           </div>
-          <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument?.location} &middot; {instrument?.description}</p>
+          <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument ? locName(instrument) : ''} &middot; {instrument?.description}</p>
           {instrument?.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{instrument.manufacturer}{instrument.model ? ` ${instrument.model}` : ''}{instrument.serialNumber ? ` · S/N ${instrument.serialNumber}` : ''}</p>}
         </div>
         {canBook && isCertified && !isPastDate && (
