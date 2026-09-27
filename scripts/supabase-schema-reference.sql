@@ -19,14 +19,16 @@
 --        ts server-side, select admin-only)
 --   8. Run supabase-2026-09-roles.sql        (lab_users role/affiliation CHECK
 --        aligned with UserRole — the live DB had an older, narrower list)
---   9. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
+--   9. Run supabase-2026-09-cryo-storage.sql (storage_units.rack_labels)
+--  10. Run supabase-2026-09-storage-boxes.sql (storage_boxes + box_id)
+--  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
---  10. Create the 'manuals' storage bucket (Storage → New bucket),
+--  12. Create the 'manuals' storage bucket (Storage → New bucket),
 --      leaving "Public bucket" OFF (files are served via signed URLs)
---  11. Recreate auth users (Authentication → Add user) and update
+--  13. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
---  12. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
---  13. Dashboard → Authentication: sign-ups OFF, confirm email ON,
+--  14. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--  15. Dashboard → Authentication: sign-ups OFF, confirm email ON,
 --      secure email change ON, min password length 8 + requirements
 -- ============================================================
 
@@ -108,7 +110,22 @@ CREATE TABLE IF NOT EXISTS storage_units (
   grid_rows      integer,
   grid_cols      integer,
   num_shelves    integer,
-  num_doors      integer
+  num_doors      integer,
+  rack_labels    jsonb              -- [{label,color}] per rack (see supabase-2026-09-cryo-storage.sql)
+);
+
+-- Boxes inside a unit: each has its own grid, so a −80 shelf box (9×9) and a
+-- dewar box (5×5) coexist. See supabase-2026-09-storage-boxes.sql.
+CREATE TABLE IF NOT EXISTS storage_boxes (
+  id              text PRIMARY KEY,
+  storage_unit_id text NOT NULL,
+  rack            integer,
+  shelf           integer,
+  number          integer NOT NULL DEFAULT 1,
+  label           text NOT NULL,
+  grid_rows       integer NOT NULL DEFAULT 1,
+  grid_cols       integer NOT NULL DEFAULT 1,
+  notes           text
 );
 
 CREATE TABLE IF NOT EXISTS reagents (
@@ -121,6 +138,7 @@ CREATE TABLE IF NOT EXISTS reagents (
   expiry_date     text,
   location        text,
   storage_unit_id text,
+  box_id          text,
   supplier        text,
   catalog_number  text,
   alert_threshold numeric NOT NULL DEFAULT 0
@@ -146,6 +164,7 @@ CREATE TABLE IF NOT EXISTS cryo_vials (
   user_id         text,
   user_name       text,
   storage_unit_id text NOT NULL,
+  box_id          text,
   rack            integer NOT NULL DEFAULT 1,
   box             integer NOT NULL DEFAULT 1,
   row             integer NOT NULL DEFAULT 0,

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import {
   Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
-  Instrument, MaintenanceLog, Manual, StorageUnit, Project, Certification, Location,
+  Instrument, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
 } from '@/data/lab-data';
 
 // ============================================================
@@ -191,13 +191,41 @@ export async function upsertStorageUnit(s: StorageUnit) {
 export async function deleteStorageUnit(id: string) { return deleteRow('storage_units', id); }
 
 // ============================================================
+// Storage Boxes
+// ============================================================
+export async function fetchStorageBoxes(): Promise<StorageBox[] | null> {
+  const rows = await fetchAll<{
+    id: string; storage_unit_id: string; rack: number | null; shelf: number | null;
+    number: number; label: string; grid_rows: number; grid_cols: number; notes: string | null;
+  }>('storage_boxes', 'label');
+  if (!rows) return null;
+  return rows.map(r => ({
+    id: r.id, storageUnitId: r.storage_unit_id,
+    rack: r.rack ?? undefined, shelf: r.shelf ?? undefined,
+    number: r.number, label: r.label,
+    gridRows: r.grid_rows, gridCols: r.grid_cols,
+    notes: r.notes ?? undefined,
+  }));
+}
+
+export async function upsertStorageBox(b: StorageBox) {
+  return upsertRow('storage_boxes', {
+    id: b.id, storage_unit_id: b.storageUnitId, rack: b.rack ?? null, shelf: b.shelf ?? null,
+    number: b.number, label: b.label, grid_rows: b.gridRows, grid_cols: b.gridCols,
+    notes: b.notes ?? null,
+  });
+}
+
+export async function deleteStorageBox(id: string) { return deleteRow('storage_boxes', id); }
+
+// ============================================================
 // Reagents
 // ============================================================
 export async function fetchReagents(): Promise<Reagent[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; category: string; current_stock: number;
     max_stock: number; unit: string; expiry_date: string; location: string;
-    storage_unit_id: string | null; supplier: string; catalog_number: string;
+    storage_unit_id: string | null; box_id: string | null; supplier: string; catalog_number: string;
     alert_threshold: number;
   }>('reagents', 'name');
   if (!rows) return null;
@@ -205,7 +233,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     id: r.id, name: r.name, category: r.category,
     currentStock: r.current_stock, maxStock: r.max_stock, unit: r.unit,
     expiryDate: r.expiry_date, location: r.location,
-    storageUnitId: r.storage_unit_id ?? undefined,
+    storageUnitId: r.storage_unit_id ?? undefined, boxId: r.box_id ?? undefined,
     supplier: r.supplier, catalogNumber: r.catalog_number,
     alertThreshold: r.alert_threshold,
   }));
@@ -218,7 +246,7 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     ...(opts?.skipStock ? {} : { current_stock: r.currentStock }),
     max_stock: r.maxStock, unit: r.unit,
     expiry_date: r.expiryDate, location: r.location,
-    storage_unit_id: r.storageUnitId ?? null,
+    storage_unit_id: r.storageUnitId ?? null, box_id: r.boxId ?? null,
     supplier: r.supplier, catalog_number: r.catalogNumber,
     alert_threshold: r.alertThreshold,
   });
@@ -351,12 +379,13 @@ export async function fetchCryoVials(): Promise<CryoVial[] | null> {
   const rows = await fetchAll<{
     id: string; cell_line: string; passage: number; date: string;
     user_id: string; user_name: string; storage_unit_id: string;
-    rack: number; box: number; row: number; col: number; notes: string;
+    box_id: string | null; rack: number; box: number; row: number; col: number; notes: string;
   }>('cryo_vials', 'cell_line');
   if (!rows) return null;
   return rows.map(r => ({
     id: r.id, cellLine: r.cell_line, passage: r.passage, date: r.date,
     userId: r.user_id, userName: r.user_name, storageUnitId: r.storage_unit_id,
+    boxId: r.box_id ?? undefined,
     rack: r.rack, box: r.box, row: r.row, col: r.col, notes: r.notes,
   }));
 }
@@ -365,6 +394,7 @@ export async function upsertCryoVial(v: CryoVial) {
   return upsertRow('cryo_vials', {
     id: v.id, cell_line: v.cellLine, passage: v.passage, date: v.date,
     user_id: v.userId, user_name: v.userName, storage_unit_id: v.storageUnitId,
+    box_id: v.boxId ?? null,
     rack: v.rack, box: v.box, row: v.row, col: v.col, notes: v.notes,
   });
 }

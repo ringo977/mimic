@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
-  StorageUnit, Project, Certification, Location, BookingSettings, AbsenceSettings,
+  StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings,
   rolePermissions, externalRolePermissions,
   generateId,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
@@ -16,6 +16,7 @@ import {
   fetchProjects, upsertProject, deleteProject,
   fetchCertifications, upsertCertification, deleteCertification,
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
+  fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
   fetchReagents, upsertReagent, deleteReagent, adjustReagentStock,
   fetchBookings, upsertBooking, deleteBooking,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
@@ -80,6 +81,10 @@ interface LabContextType {
   addStorageUnit: (s: StorageUnit) => void;
   updateStorageUnit: (s: StorageUnit) => void;
   removeStorageUnit: (id: string) => void;
+  storageBoxes: StorageBox[];
+  addStorageBox: (b: StorageBox) => void;
+  updateStorageBox: (b: StorageBox) => void;
+  removeStorageBox: (id: string) => void;
   projects: Project[];
   addProject: (p: Project) => void;
   updateProject: (p: Project) => void;
@@ -110,6 +115,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [storageUnits, setStorageUnits] = useState<StorageUnit[]>([]);
+  const [storageBoxes, setStorageBoxes] = useState<StorageBox[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -134,7 +140,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       // Fetch everything from Supabase in parallel
       const [
         sbUsers, sbInstruments, sbLocations, sbProjects, sbCertifications,
-        sbStorageUnits, sbReagents, sbBookings, sbCryoVials, sbWishlist,
+        sbStorageUnits, sbStorageBoxes, sbReagents, sbBookings, sbCryoVials, sbWishlist,
         sbLog, sbManuals,
       ] = await Promise.all([
         fetchLabUsers(),
@@ -143,6 +149,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         fetchProjects(),
         fetchCertifications(),
         fetchStorageUnits(),
+        fetchStorageBoxes(),
         fetchReagents(),
         fetchBookings(),
         fetchCryoVials(),
@@ -160,6 +167,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setProjects(sbProjects ?? []);
       setCertifications(sbCertifications ?? []);
       setStorageUnits(sbStorageUnits ?? []);
+      // storage_boxes may not exist yet (migration not run) — degrade to empty
+      setStorageBoxes(sbStorageBoxes ?? []);
       setReagents(sbReagents ?? []);
       setBookings(sbBookings ?? []);
       setCryoVials(sbCryoVials ?? []);
@@ -408,6 +417,10 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // ---- Storage Units ----
   const addStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => [...prev, s]); track(upsertStorageUnit(s), `Storage unit "${s.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added storage unit ${s.name}`, category: 'cryo', details: `${s.type}, ${s.temperature}` }); }, [user, addLogEntry, track]);
   const updateStorageUnit = useCallback((s: StorageUnit) => { setStorageUnits(prev => prev.map(x => x.id === s.id ? s : x)); track(upsertStorageUnit(s), `Storage unit "${s.name}"`); }, [track]);
+  const addStorageBox = useCallback((b: StorageBox) => { setStorageBoxes(prev => [...prev, b]); track(upsertStorageBox(b), `Box "${b.label}"`); }, [track]);
+  const updateStorageBox = useCallback((b: StorageBox) => { setStorageBoxes(prev => prev.map(x => x.id === b.id ? b : x)); track(upsertStorageBox(b), `Box "${b.label}"`); }, [track]);
+  const removeStorageBox = useCallback((id: string) => { setStorageBoxes(prev => prev.filter(x => x.id !== id)); track(deleteStorageBox(id), 'Box removal'); }, [track]);
+
   const removeStorageUnit = useCallback((id: string) => { setStorageUnits(prev => { const s = prev.find(x => x.id === id); if (s) addLogEntry({ userId: user.id, userName: user.name, action: `Removed storage unit ${s.name}`, category: 'cryo', details: s.type }); return prev.filter(x => x.id !== id); }); track(deleteStorageUnit(id), 'Storage unit removal'); }, [user, addLogEntry, track]);
 
   // ---- Projects ----
@@ -448,6 +461,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       instruments, addInstrument, updateInstrument, removeInstrument, reportError: setSyncError,
       manuals, addManual, updateManual, removeManual,
       storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit,
+      storageBoxes, addStorageBox, updateStorageBox, removeStorageBox,
       projects, addProject, updateProject, removeProject,
       certifications, addCertification, updateCertification, removeCertification,
       locations, addLocation, updateLocation, removeLocation,

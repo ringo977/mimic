@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Download, Calendar, FlaskConical, Snowflake, ShoppingCart, LogIn, BookOpen, CalendarOff } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { formatDateTime, formatTime } from '@/data/lab-data';
+import { formatDateTime, formatTime, boxPositionLabel } from '@/data/lab-data';
 import { downloadCSV } from '@/lib/csv';
 
 const categoryIcons: Record<string, typeof Calendar> = {
@@ -27,7 +27,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export default function LogPage({ showDatabase = false }: { showDatabase?: boolean }) {
-  const { permissions, log, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments } = useLabContext();
+  const { permissions, log, bookings, reagents, cryoVials, wishlist, storageUnits, storageBoxes, instruments: mockInstruments } = useLabContext();
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const activeTab = showDatabase ? 'database' : 'log';
@@ -78,7 +78,7 @@ export default function LogPage({ showDatabase = false }: { showDatabase?: boole
       id: v.id,
       cellLine: v.cellLine,
       passage: v.passage,
-      position: `${v.storageUnitId} R${v.rack} B${v.box} ${String.fromCharCode(65 + v.row)}${v.col + 1}`,
+      position: `${storageUnits.find(s => s.id === v.storageUnitId)?.name || v.storageUnitId} ${boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col)}`,
       storedBy: v.userName,
       date: v.date,
       notes: v.notes,

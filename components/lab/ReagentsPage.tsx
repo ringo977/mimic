@@ -6,7 +6,7 @@ import { useLabContext } from './LabContext';
 import { storageUnitTypes } from '@/data/lab-data';
 
 export default function ReagentsPage() {
-  const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits } = useLabContext();
+  const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits, storageBoxes } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [modal, setModal] = useState<{ type: 'withdraw' | 'add'; reagentId: string } | null>(null);
@@ -122,11 +122,10 @@ export default function ReagentsPage() {
             {/* Info */}
             <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-400 font-manrope flex-wrap">
               <span className="flex items-center gap-1"><Package size={10} />{(() => {
-                if (r.storageUnitId) {
-                  const su = storageUnits.find(s => s.id === r.storageUnitId);
-                  return su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : r.location;
-                }
-                return r.location;
+                const su = r.storageUnitId ? storageUnits.find(s => s.id === r.storageUnitId) : undefined;
+                if (!su) return r.location;
+                const box = storageBoxes.find(b => b.id === r.boxId);
+                return `${storageUnitTypes[su.type]?.icon || ''} ${su.name}${box ? ` · ${box.label}` : ''}`;
               })()}</span>
               <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
                 Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}

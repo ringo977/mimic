@@ -352,6 +352,42 @@ export interface StorageUnit {
   numDoors?: number;  // 1 = single door, 2 = left + right
 }
 
+/**
+ * A physical box inside a storage unit. Boxes are what people actually look
+ * for ("Supplements Box", "Gene BOX", "Box 3 of the blue rack"): they may sit
+ * in a rack (dewars) or loose on a shelf (−80 freezers, fridges), and each one
+ * has its own grid — 5×5 cryo boxes, 9×9 freezer boxes, 8×12 probe boxes.
+ */
+export interface StorageBox {
+  id: string;
+  storageUnitId: string;
+  rack?: number;      // undefined = the unit has no racks
+  shelf?: number;
+  number: number;     // position within the rack / shelf
+  label: string;
+  gridRows: number;
+  gridCols: number;
+  notes?: string;
+}
+
+/** Boxes of a unit, ordered the way they sit in it (rack, then position) */
+export function boxesOfUnit(boxes: StorageBox[], unitId: string): StorageBox[] {
+  return boxes
+    .filter(b => b.storageUnitId === unitId)
+    .sort((a, b) => (a.rack || 0) - (b.rack || 0) || a.number - b.number || a.label.localeCompare(b.label));
+}
+
+export function boxCapacity(b: StorageBox): number {
+  return Math.max(0, b.gridRows) * Math.max(0, b.gridCols);
+}
+
+/** Position label such as "Blue · Box 2 · C3" (rack colour is resolved by the caller) */
+export function boxPositionLabel(b: StorageBox | undefined, row: number, col: number): string {
+  if (!b) return `${String.fromCharCode(65 + row)}${col + 1}`;
+  const rows = getRowLabels(b.gridRows);
+  return `${b.rack ? `R${b.rack} · ` : ''}${b.label} · ${rows[row] || '?'}${col + 1}`;
+}
+
 /** Types that use rack + box + vial grid layout (only LN₂ dewars) */
 export const rackBasedTypes: StorageUnitType[] = ['DEWAR'];
 /** Types that use shelf + door layout (everything else) */
@@ -450,6 +486,7 @@ export interface Reagent {
   expiryDate: string;
   location: string;
   storageUnitId?: string;   // links to StorageUnit
+  boxId?: string;           // links to StorageBox (box inside the unit)
   supplier: string;
   catalogNumber: string;
   alertThreshold: number;
@@ -507,7 +544,8 @@ export interface CryoVial {
   userId: string;
   userName: string;
   storageUnitId: string;   // references StorageUnit.id
-  rack: number;
+  boxId?: string;          // references StorageBox.id (authoritative for the grid)
+  rack: number;            // legacy coordinates, kept in sync with the box
   box: number;
   row: number;
   col: number;
@@ -932,15 +970,31 @@ export function getInitialLog(): LogEntry[] {
  * Rack/box are 1-based, row/col are 0-based (as stored in cryo_vials).
  */
 export function validateVialPosition(
-  v: { storageUnitId: string; rack: number; box: number; row: number; col: number },
+  v: { storageUnitId: string; boxId?: string; rack: number; box: number; row: number; col: number },
   units: StorageUnit[],
   existing: CryoVial[],
   ignoreId?: string,
+  boxes?: StorageBox[],
 ): string | null {
   const su = units.find(s => s.id === v.storageUnitId);
   if (!su) return 'Storage unit not found.';
-  if (!su.numRacks || !su.boxesPerRack || !su.gridRows || !su.gridCols) return `${su.name} has no rack/box grid configured.`;
   const int = (n: number) => Number.isInteger(n);
+
+  // Preferred path: the vial sits in a declared box, which owns its own grid.
+  const bx = v.boxId ? boxes?.find(b => b.id === v.boxId) : undefined;
+  if (bx) {
+    if (bx.storageUnitId !== v.storageUnitId) return `${bx.label} does not belong to ${su.name}.`;
+    if (!int(v.row) || v.row < 0 || v.row >= bx.gridRows) return `Row must be between ${getRowLabels(bx.gridRows)[0]} and ${getRowLabels(bx.gridRows)[bx.gridRows - 1]}.`;
+    if (!int(v.col) || v.col < 0 || v.col >= bx.gridCols) return `Column must be between 1 and ${bx.gridCols}.`;
+    const busy = existing.find(x => x.id !== ignoreId && x.boxId === bx.id && x.row === v.row && x.col === v.col);
+    if (busy) return `Position ${boxPositionLabel(bx, v.row, v.col)} is already taken by ${busy.cellLine} P${busy.passage}.`;
+    return null;
+  }
+
+  if (v.boxId) return 'Box not found.';
+
+  // Legacy path: unit-wide rack/box grid (rows created before storage_boxes)
+  if (!su.numRacks || !su.boxesPerRack || !su.gridRows || !su.gridCols) return `${su.name} has no boxes configured.`;
   if (!int(v.rack) || v.rack < 1 || v.rack > su.numRacks) return `Rack must be between 1 and ${su.numRacks}.`;
   if (!int(v.box) || v.box < 1 || v.box > su.boxesPerRack) return `Box must be between 1 and ${su.boxesPerRack}.`;
   if (!int(v.row) || v.row < 0 || v.row >= su.gridRows) return `Row must be between 0 and ${su.gridRows - 1} (${getRowLabels(su.gridRows)[0]}–${getRowLabels(su.gridRows)[su.gridRows - 1]}).`;

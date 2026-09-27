@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import {todayStr, formatDate, getRowLabels, storageUnitTypes } from '@/data/lab-data';
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, boxPositionLabel } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -24,15 +24,18 @@ function getCellLineColor(cellLine: string): string {
 }
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, storageUnits } = useLabContext();
+  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, storageUnits, storageBoxes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
 
-  // Only show grid-capable storage units for cryo
-  const gridUnits = storageUnits.filter(s => s.numRacks && s.boxesPerRack && s.gridRows && s.gridCols);
+  // Units that hold boxes — any type: a dewar with racks, a −80 freezer with
+  // loose boxes on shelves, a fridge with an antibody box.
+  const boxUnits = useMemo(
+    () => storageUnits.filter(s => storageBoxes.some(b => b.storageUnitId === s.id)),
+    [storageUnits, storageBoxes]);
 
-  const [selectedUnitId, setSelectedUnitId] = useState(gridUnits[0]?.id || '');
-  const [selectedRack, setSelectedRack] = useState(1);
-  const [selectedBox, setSelectedBox] = useState(1);
+  const [selectedUnitId, setSelectedUnitId] = useState('');
+  const [selectedRack, setSelectedRack] = useState<number | undefined>(undefined);
+  const [selectedBoxId, setSelectedBoxId] = useState('');
   const [selectedVial, setSelectedVial] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPosition, setAddPosition] = useState<{ row: number; col: number } | null>(null);
@@ -48,20 +51,30 @@ export default function CryoPage() {
   const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
   const [newNotes, setNewNotes] = useState('');
 
-  // Get current unit config
-  const unit = gridUnits.find(s => s.id === selectedUnitId) || gridUnits[0];
-  const numRacks = unit?.numRacks || 6;
-  const boxesPerRack = unit?.boxesPerRack || 5;
-  const gridRows = unit?.gridRows || 5;
-  const gridCols = unit?.gridCols || 5;
+  const unit = boxUnits.find(s => s.id === selectedUnitId) || boxUnits[0];
+  const unitBoxes = useMemo(() => unit ? boxesOfUnit(storageBoxes, unit.id) : [], [storageBoxes, unit]);
+  const racks = useMemo(
+    () => Array.from(new Set(unitBoxes.map(b => b.rack).filter((r): r is number => !!r))).sort((a, b) => a - b),
+    [unitBoxes]);
 
-  const RACKS = Array.from({ length: numRacks }, (_, i) => i + 1);
-  const totalBoxes = boxesPerRack;
-  const ROWS = getRowLabels(gridRows);
-  const COLS = Array.from({ length: gridCols }, (_, i) => i + 1);
-  const slotsPerBox = gridRows * gridCols;
+  // Keep the selection valid when the unit (or the boxes) change
+  const rack = racks.length ? (selectedRack && racks.includes(selectedRack) ? selectedRack : racks[0]) : undefined;
+  const visibleBoxes = useMemo(
+    () => rack ? unitBoxes.filter(b => b.rack === rack) : unitBoxes,
+    [unitBoxes, rack]);
+  const box = visibleBoxes.find(b => b.id === selectedBoxId) || visibleBoxes[0];
 
-  const rackLabel = (rack: number) => unit?.rackLabels?.[rack - 1];
+  const ROWS = getRowLabels(box?.gridRows || 1);
+  const COLS = Array.from({ length: box?.gridCols || 1 }, (_, i) => i + 1);
+  const slotsPerBox = box ? boxCapacity(box) : 0;
+
+  const rackLabel = (r?: number) => (r ? unit?.rackLabels?.[r - 1] : undefined);
+
+  /** Vials in a box: by box_id, with a fallback on the legacy rack/box coordinates */
+  const vialsInBox = (b: { id: string; storageUnitId: string; rack?: number; number: number }) =>
+    cryoVials.filter(v => v.boxId
+      ? v.boxId === b.id
+      : v.storageUnitId === b.storageUnitId && v.rack === (b.rack || 0) && v.box === b.number);
 
   const isMatch = (v: typeof cryoVials[0]) => {
     if (!findLine && findPassage === '') return false;
@@ -74,24 +87,33 @@ export default function CryoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cryoVials, findLine, findPassage, findActive]);
 
-  const boxVials = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === selectedBox);
-  const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
-
-  const getVialAt = (row: number, col: number) => {
-    return boxVials.find(v => v.row === row && v.col === col);
+  const boxOf = (v: typeof cryoVials[0]) => storageBoxes.find(b => b.id === v.boxId);
+  const jumpToVial = (v: typeof cryoVials[0]) => {
+    const b = boxOf(v);
+    setSelectedUnitId(v.storageUnitId);
+    setSelectedRack(b?.rack ?? (v.rack || undefined));
+    setSelectedBoxId(b?.id || '');
+    setSelectedVial(v.id);
   };
 
+  const boxVials = box ? vialsInBox(box) : [];
+  const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
+
+  const getVialAt = (row: number, col: number) => boxVials.find(v => v.row === row && v.col === col);
+
   const handleAddVial = () => {
-    if (!addPosition || !newCellLine || !selectedUnitId) return;
+    if (!addPosition || !newCellLine || !box) return;
     addCryoVial({
       cellLine: newCellLine,
       passage: newPassage,
       date: todayStr(),
       userId: user.id,
       userName: user.name,
-      storageUnitId: selectedUnitId,
-      rack: selectedRack,
-      box: selectedBox,
+      storageUnitId: box.storageUnitId,
+      boxId: box.id,
+      // legacy coordinates, kept in sync so older views keep working
+      rack: box.rack || 0,
+      box: box.number,
       row: addPosition.row,
       col: addPosition.col,
       notes: newNotes,
@@ -102,19 +124,22 @@ export default function CryoPage() {
     setNewNotes('');
   };
 
-  const vialsInRack = (rack: number) => cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === rack).length;
+  const vialsInRack = (r: number) =>
+    unitBoxes.filter(b => b.rack === r).reduce((n, b) => n + vialsInBox(b).length, 0);
+  const rackCapacity = (r: number) =>
+    unitBoxes.filter(b => b.rack === r).reduce((n, b) => n + boxCapacity(b), 0);
 
   // Cell line legend
   const usedCellLines = Array.from(new Set(cryoVials.map(v => v.cellLine)));
 
-  if (gridUnits.length === 0) {
+  if (boxUnits.length === 0) {
     return (
       <div className="p-4 lg:p-8 max-w-6xl mx-auto">
         <h1 className="text-lg font-bold text-gray-900 font-manrope mb-4">Cryo Storage</h1>
         <div className="bg-white rounded-xl p-12 shadow-sm border border-gray-100 text-center text-gray-400 font-manrope">
           <div className="text-4xl mb-3">🧊</div>
-          <p className="text-sm">No grid-capable storage units configured.</p>
-          <p className="text-xs mt-1">Ask an admin to add a storage unit with rack/box/grid configuration.</p>
+          <p className="text-sm">No storage unit has boxes yet.</p>
+          <p className="text-xs mt-1">Ask an admin to add boxes to a unit (Admin → Storage → Boxes).</p>
         </div>
       </div>
     );
@@ -126,13 +151,14 @@ export default function CryoPage() {
 
       {/* Storage Unit Selection */}
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {gridUnits.map(su => {
+        {boxUnits.map(su => {
           const info = storageUnitTypes[su.type] || { icon: '📦', label: su.type };
           const unitVials = cryoVials.filter(v => v.storageUnitId === su.id).length;
+          const nBoxes = storageBoxes.filter(b => b.storageUnitId === su.id).length;
           return (
             <button
               key={su.id}
-              onClick={() => { setSelectedUnitId(su.id); setSelectedRack(1); setSelectedBox(1); setSelectedVial(null); }}
+              onClick={() => { setSelectedUnitId(su.id); setSelectedRack(undefined); setSelectedBoxId(''); setSelectedVial(null); }}
               className={`flex-1 min-w-[140px] p-4 rounded-xl border-2 transition-all ${
                 selectedUnitId === su.id ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
@@ -141,7 +167,7 @@ export default function CryoPage() {
                 <div className="text-3xl mb-1">{info.icon}</div>
                 <p className="text-sm font-semibold text-gray-900 font-manrope">{su.name}</p>
                 <p className="text-[10px] text-gray-400 font-manrope">{info.label} &middot; {su.temperature}</p>
-                <p className="text-xs text-gray-500 font-manrope">{unitVials} vials &middot; {su.gridRows}&times;{su.gridCols} grid</p>
+                <p className="text-xs text-gray-500 font-manrope">{unitVials} vials &middot; {nBoxes} box{nBoxes !== 1 ? 'es' : ''}</p>
               </div>
             </button>
           );
@@ -184,22 +210,17 @@ export default function CryoPage() {
               <div className="flex flex-wrap gap-1.5">
                 {matches.slice(0, 60).map(v => {
                   const su = storageUnits.find(s => s.id === v.storageUnitId);
-                  const rows = getRowLabels(su?.gridRows || 5);
-                  const rl = su?.rackLabels?.[v.rack - 1];
+                  const b = boxOf(v);
+                  const rl = su?.rackLabels?.[(b?.rack || v.rack) - 1];
                   return (
                     <button
                       key={v.id}
-                      onClick={() => {
-                        setSelectedUnitId(v.storageUnitId);
-                        setSelectedRack(v.rack);
-                        setSelectedBox(v.box);
-                        setSelectedVial(v.id);
-                      }}
+                      onClick={() => jumpToVial(v)}
                       className="px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-cyan-400 hover:bg-cyan-50 text-[11px] font-manrope flex items-center gap-1.5"
                       title={`${v.cellLine} P${v.passage} — ${su?.name || ''}`}
                     >
                       <span className="w-2 h-2 rounded-full border border-gray-300" style={rl?.color ? { backgroundColor: rl.color } : undefined} />
-                      <span className="font-mono">R{v.rack} B{v.box} {rows[v.row] || '?'}{v.col + 1}</span>
+                      <span className="font-mono">{boxPositionLabel(b, v.row, v.col)}</span>
                       <span className="text-gray-400">P{v.passage}</span>
                     </button>
                   );
@@ -212,73 +233,86 @@ export default function CryoPage() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        {/* Rack Overview */}
+        {/* Racks & boxes */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">{unit?.name || 'Unit'} &mdash; Racks</h2>
-          <div className="grid grid-cols-3 gap-2">
-            {RACKS.map(rack => {
-              const count = vialsInRack(rack);
-              const isSelected = selectedRack === rack;
-              const rl = rackLabel(rack);
-              const hits = matches.filter(v => v.storageUnitId === selectedUnitId && v.rack === rack).length;
-              return (
-                <button
-                  key={rack}
-                  onClick={() => { setSelectedRack(rack); setSelectedBox(1); setSelectedVial(null); }}
-                  className={`p-3 rounded-xl border-2 transition-all text-center ${
-                    isSelected ? 'bg-[#102C53]/5' : 'hover:border-gray-300'
-                  } ${rl?.color ? '' : isSelected ? 'border-[#102C53]' : 'border-gray-100'}`}
-                  style={rl?.color ? { borderColor: rl.color, borderWidth: isSelected ? 3 : 2 } : undefined}
-                >
-                  <p className="text-xs font-bold text-gray-900 font-manrope flex items-center justify-center gap-1">
-                    {rl?.color && <span className="w-2.5 h-2.5 rounded-full border border-gray-300 shrink-0" style={{ backgroundColor: rl.color }} />}
-                    Rack {rack}
-                  </p>
-                  {rl?.label && <p className="text-[9px] text-gray-500 font-manrope">{rl.label}</p>}
-                  <p className="text-[10px] text-gray-400 font-manrope">{count} vials{hits > 0 ? ` · ${hits} found` : ''}</p>
-                  <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5">
-                    <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(100, (count / (totalBoxes * slotsPerBox)) * 100)}%` }} />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">
+            {unit?.name || 'Unit'} &mdash; {racks.length ? 'Racks' : 'Boxes'}
+          </h2>
+
+          {racks.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {racks.map(r => {
+                const count = vialsInRack(r);
+                const cap = rackCapacity(r) || 1;
+                const isSelected = rack === r;
+                const rl = rackLabel(r);
+                const hits = matches.filter(v => v.storageUnitId === unit?.id && (boxOf(v)?.rack ?? v.rack) === r).length;
+                return (
+                  <button
+                    key={r}
+                    onClick={() => { setSelectedRack(r); setSelectedBoxId(''); setSelectedVial(null); }}
+                    className={`p-3 rounded-xl border-2 transition-all text-center ${
+                      isSelected ? 'bg-[#102C53]/5' : 'hover:border-gray-300'
+                    } ${rl?.color ? '' : isSelected ? 'border-[#102C53]' : 'border-gray-100'}`}
+                    style={rl?.color ? { borderColor: rl.color, borderWidth: isSelected ? 3 : 2 } : undefined}
+                  >
+                    <p className="text-xs font-bold text-gray-900 font-manrope flex items-center justify-center gap-1">
+                      {rl?.color && <span className="w-2.5 h-2.5 rounded-full border border-gray-300 shrink-0" style={{ backgroundColor: rl.color }} />}
+                      Rack {r}
+                    </p>
+                    {rl?.label && <p className="text-[9px] text-gray-500 font-manrope">{rl.label}</p>}
+                    <p className="text-[10px] text-gray-400 font-manrope">{count} vials{hits > 0 ? ` · ${hits} found` : ''}</p>
+                    <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5">
+                      <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(100, (count / cap) * 100)}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Box selection */}
-          <h3 className="text-xs font-semibold text-gray-700 font-manrope mt-4 mb-2">Rack {selectedRack} &mdash; Boxes</h3>
+          {racks.length > 0 && (
+            <h3 className="text-xs font-semibold text-gray-700 font-manrope mt-4 mb-2">Rack {rack} &mdash; Boxes</h3>
+          )}
           <div className="flex gap-2 flex-wrap">
-            {Array.from({ length: totalBoxes }, (_, i) => i + 1).map(box => {
-              const boxCount = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === box).length;
-              const isSelected = selectedBox === box;
-              const hits = matches.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === box).length;
+            {visibleBoxes.map(b => {
+              const boxCount = vialsInBox(b).length;
+              const isSelected = box?.id === b.id;
+              const hits = matches.filter(v => v.boxId === b.id).length;
               return (
                 <button
-                  key={box}
-                  onClick={() => { setSelectedBox(box); setSelectedVial(null); }}
-                  className={`flex-1 min-w-[40px] p-2 rounded-lg border-2 text-center transition-all ${
+                  key={b.id}
+                  onClick={() => { setSelectedBoxId(b.id); setSelectedVial(null); }}
+                  title={[b.label, b.notes, `${b.gridRows}×${b.gridCols}`].filter(Boolean).join(' — ')}
+                  className={`flex-1 min-w-[56px] p-2 rounded-lg border-2 text-center transition-all ${
                     isSelected ? 'border-cyan-500 bg-cyan-50' : hits > 0 ? 'border-amber-400 bg-amber-50' : 'border-gray-100 hover:border-gray-300'
                   }`}
                 >
-                  <p className="text-xs font-bold font-manrope">{box}</p>
-                  <p className="text-[9px] text-gray-400">{boxCount}/{slotsPerBox}{hits > 0 ? ` · ${hits}` : ''}</p>
+                  <p className="text-xs font-bold font-manrope truncate">{b.label}</p>
+                  <p className="text-[9px] text-gray-400">{boxCount}/{boxCapacity(b)}{hits > 0 ? ` · ${hits}` : ''}</p>
                 </button>
               );
             })}
+            {visibleBoxes.length === 0 && <p className="text-xs text-gray-400 font-manrope py-2">No box here yet.</p>}
           </div>
         </div>
 
         {/* Box Grid (dynamic size) */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900 font-manrope">
-              Box {selectedBox} <span className="text-gray-400 font-normal">({boxVials.length}/{slotsPerBox})</span>
-            </h2>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900 font-manrope">
+                {box?.label || 'Box'} <span className="text-gray-400 font-normal">({boxVials.length}/{slotsPerBox})</span>
+              </h2>
+              {box?.notes && <p className="text-[10px] text-gray-400 font-manrope">{box.notes}</p>}
+            </div>
           </div>
 
           {/* Grid */}
           <div className="border border-gray-200 rounded-xl overflow-hidden">
             {/* Column headers */}
-            <div className="grid bg-gray-50" style={{ gridTemplateColumns: `auto repeat(${gridCols}, 1fr)` }}>
+            <div className="grid bg-gray-50" style={{ gridTemplateColumns: `auto repeat(${COLS.length}, 1fr)` }}>
               <div className="p-1" />
               {COLS.map(col => (
                 <div key={col} className="p-1 text-center text-[9px] font-bold text-gray-500 font-manrope">{col}</div>
@@ -287,12 +321,12 @@ export default function CryoPage() {
 
             {/* Rows */}
             {ROWS.map((rowLabel, rowIdx) => (
-              <div key={rowLabel} className="grid border-t border-gray-100" style={{ gridTemplateColumns: `auto repeat(${gridCols}, 1fr)` }}>
+              <div key={rowLabel} className="grid border-t border-gray-100" style={{ gridTemplateColumns: `auto repeat(${COLS.length}, 1fr)` }}>
                 <div className="p-1 flex items-center justify-center text-[9px] font-bold text-gray-500 font-manrope bg-gray-50 min-w-[20px]">{rowLabel}</div>
                 {COLS.map((_, colIdx) => {
                   const vial = getVialAt(rowIdx, colIdx);
                   const isSelected = selectedVial === vial?.id;
-                  const isLarge = gridCols > 6;
+                  const isLarge = COLS.length > 6;
                   return (
                     <div key={colIdx} className={`p-0.5 aspect-square flex items-center justify-center ${isLarge ? 'min-w-[20px]' : ''}`}>
                       {vial ? (
@@ -365,9 +399,9 @@ export default function CryoPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Position</span>
                   <span className="text-gray-900 font-medium flex items-center gap-1.5">
-                    {(() => { const rl = rackLabel(selectedVialData.rack); return rl?.color
+                    {(() => { const rl = rackLabel(boxOf(selectedVialData)?.rack ?? selectedVialData.rack); return rl?.color
                       ? <span className="w-2.5 h-2.5 rounded-full border border-gray-300" style={{ backgroundColor: rl.color }} title={rl.label} /> : null; })()}
-                    R{selectedVialData.rack} B{selectedVialData.box} {ROWS[selectedVialData.row]}{selectedVialData.col + 1}
+                    {boxPositionLabel(boxOf(selectedVialData), selectedVialData.row, selectedVialData.col)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -421,7 +455,7 @@ export default function CryoPage() {
             <div className="space-y-4">
               <div className="bg-cyan-50 rounded-xl p-3 text-sm font-manrope">
                 <span className="font-semibold">Position: </span>
-                {unit?.name || 'Unit'} R{selectedRack} B{selectedBox} {ROWS[addPosition.row]}{addPosition.col + 1}
+                {unit?.name || 'Unit'} &middot; {boxPositionLabel(box, addPosition.row, addPosition.col)}
               </div>
 
               <div>
@@ -481,7 +515,7 @@ export default function CryoPage() {
 type VialSortKey = 'cellLine' | 'passage' | 'storage' | 'position' | 'userName' | 'date';
 
 function VialInventory() {
-  const { user, cryoVials, removeCryoVial, storageUnits, permissions } = useLabContext();
+  const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   // Mirror of the cryo_vials_delete RLS policy (owner or admin): don't show
   // withdraw buttons that the server would reject.
@@ -496,11 +530,8 @@ function VialInventory() {
   };
 
   const getUnitName = (id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
-  const getPositionStr = (v: typeof cryoVials[0]) => {
-    const su = storageUnits.find(s => s.id === v.storageUnitId);
-    const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
-    return `R${v.rack} B${v.box} ${rows[v.row] || '?'}${v.col + 1}`;
-  };
+  const getPositionStr = (v: typeof cryoVials[0]) =>
+    boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col);
 
   const filtered = useMemo(() => {
     let list = [...cryoVials];

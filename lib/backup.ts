@@ -6,7 +6,7 @@ import JSZip from 'jszip';
 // intact for all preceding tables.
 const TABLES = [
   'instruments', 'maintenance_logs', 'locations', 'projects', 'certifications',
-  'storage_units', 'reagents', 'bookings', 'cryo_vials',
+  'storage_units', 'storage_boxes', 'reagents', 'bookings', 'cryo_vials',
   'wishlist_items', 'log_entries', 'manuals', 'absences', 'app_settings',
   'lab_users',
 ] as const;

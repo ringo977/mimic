@@ -5,7 +5,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
   DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon,
-  Search, Archive, RotateCcw, CalendarOff } from 'lucide-react';
+  Search, Archive, RotateCcw, CalendarOff, Boxes } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
@@ -13,6 +13,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette,
+  StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -1198,7 +1199,8 @@ function InstrumentsTab() {
 // Storage Units Tab (was Dewars)
 // ============================================================
 function StorageUnitsTab() {
-  const { storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit, cryoVials, removeCryoVial, reagents, updateReagent, locations } = useLabContext();
+  const { storageUnits, addStorageUnit, updateStorageUnit, removeStorageUnit, storageBoxes, removeStorageBox, cryoVials, removeCryoVial, reagents, updateReagent, locations } = useLabContext();
+  const [boxUnit, setBoxUnit] = useState<StorageUnit | null>(null);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<StorageUnit | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -1278,7 +1280,10 @@ function StorageUnitsTab() {
           const info = storageUnitTypes[s.type] || { label: s.type, icon: '📦' };
           const vialCount = cryoVials.filter(v => v.storageUnitId === s.id).length;
           const reagentCount = reagents.filter(r => r.storageUnitId === s.id).length;
-          const totalSlots = isRackBased(s.type) ? (s.numRacks || 0) * (s.boxesPerRack || 0) * (s.gridRows || 0) * (s.gridCols || 0) : 0;
+          const unitBoxes = boxesOfUnit(storageBoxes, s.id);
+          const totalSlots = unitBoxes.length
+            ? unitBoxes.reduce((n, b) => n + boxCapacity(b), 0)
+            : (isRackBased(s.type) ? (s.numRacks || 0) * (s.boxesPerRack || 0) * (s.gridRows || 0) * (s.gridCols || 0) : 0);
           const pct = totalSlots > 0 ? Math.round((vialCount / totalSlots) * 100) : 0;
           return (
             <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -1324,11 +1329,18 @@ function StorageUnitsTab() {
                 {isShelfBased(s.type) && (s.numDoors || s.numShelves) && (
                   <div className="flex justify-between"><span>Layout</span><span className="text-gray-700">{s.numDoors === 2 ? '2 doors (L+R)' : '1 door'} &middot; {s.numShelves || 0} shelves</span></div>
                 )}
+                <div className="flex justify-between items-center pt-1">
+                  <span>Boxes</span>
+                  <button onClick={() => setBoxUnit(s)} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-600 text-[10px] font-medium">
+                    <Boxes size={11} /> {unitBoxes.length ? `${unitBoxes.length} — manage` : 'Add boxes'}
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
+      {boxUnit && <BoxManager unit={boxUnit} onClose={() => setBoxUnit(null)} />}
       {showForm && <Modal title={editing ? 'Edit Storage Unit' : 'Add Storage Unit'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
           <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g., ULT Freezer #1" className={inputCls} /></Field>
@@ -1436,10 +1448,136 @@ function StorageUnitsTab() {
 }
 
 // ============================================================
+// Boxes of a storage unit (grids that actually hold vials/aliquots)
+// ============================================================
+function BoxManager({ unit, onClose }: { unit: StorageUnit; onClose: () => void }) {
+  const { storageBoxes, addStorageBox, updateStorageBox, removeStorageBox, cryoVials, reagents, updateReagent } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
+  const boxes = boxesOfUnit(storageBoxes, unit.id);
+
+  // Bulk generator, pre-filled from the unit's own rack/box configuration
+  const [genRacks, setGenRacks] = useState(unit.numRacks || 0);
+  const [genPerRack, setGenPerRack] = useState(unit.boxesPerRack || 1);
+  const [genRows, setGenRows] = useState(unit.gridRows || 9);
+  const [genCols, setGenCols] = useState(unit.gridCols || 9);
+
+  const boxId = (rack: number, n: number) => rack ? `sb-${unit.id}-r${rack}-b${n}` : `sb-${unit.id}-b${n}`;
+  const defaultLabel = (n: number) => `Box ${n}`;
+
+  const generate = () => {
+    const racks = genRacks > 0 ? Array.from({ length: genRacks }, (_, i) => i + 1) : [0];
+    racks.forEach(rack => {
+      for (let n = 1; n <= genPerRack; n++) {
+        const id = boxId(rack, n);
+        if (storageBoxes.some(b => b.id === id)) continue;  // never overwrite an existing box
+        addStorageBox({
+          id, storageUnitId: unit.id, rack: rack || undefined, number: n,
+          label: defaultLabel(n), gridRows: genRows, gridCols: genCols,
+        });
+      }
+    });
+  };
+
+  const addOne = () => {
+    const n = Math.max(0, ...boxes.filter(b => !b.rack).map(b => b.number)) + 1;
+    addStorageBox({
+      id: `sb-${unit.id}-${generateId()}`, storageUnitId: unit.id, number: n,
+      label: defaultLabel(n), gridRows: genRows, gridCols: genCols,
+    });
+  };
+
+  const vialsIn = (b: StorageBox) => cryoVials.filter(v => v.boxId === b.id);
+  const reagentsIn = (b: StorageBox) => reagents.filter(r => r.boxId === b.id);
+
+  const del = (b: StorageBox) => {
+    const nv = vialsIn(b).length, nr = reagentsIn(b).length;
+    if (nv > 0) { window.alert(`"${b.label}" still holds ${nv} vial${nv > 1 ? 's' : ''}. Remove them first.`); return; }
+    const extra = nr > 0 ? ` ${nr} reagent${nr > 1 ? 's' : ''} will be unlinked from it (kept in inventory).` : '';
+    confirmDelete('Delete box?', `"${b.label}" will be permanently removed.${extra}`, () => {
+      reagentsIn(b).forEach(r => updateReagent({ ...r, boxId: undefined }));
+      removeStorageBox(b.id);
+    });
+  };
+
+  const numCls = 'w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none';
+
+  return (
+    <Modal title={`Boxes — ${unit.name}`} onClose={onClose}>
+      <div className="space-y-4">
+        <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-700 font-manrope">Generate boxes</p>
+          <div className="flex flex-wrap items-end gap-2 text-[11px] font-manrope text-gray-500">
+            <label className="space-y-1"><span className="block">Racks (0 = none)</span>
+              <input type="number" min={0} value={genRacks} onChange={e => setGenRacks(Number(e.target.value))} className={numCls} /></label>
+            <label className="space-y-1"><span className="block">{genRacks > 0 ? 'Boxes / rack' : 'Boxes'}</span>
+              <input type="number" min={1} value={genPerRack} onChange={e => setGenPerRack(Number(e.target.value))} className={numCls} /></label>
+            <label className="space-y-1"><span className="block">Rows</span>
+              <input type="number" min={1} value={genRows} onChange={e => setGenRows(Number(e.target.value))} className={numCls} /></label>
+            <label className="space-y-1"><span className="block">Cols</span>
+              <input type="number" min={1} value={genCols} onChange={e => setGenCols(Number(e.target.value))} className={numCls} /></label>
+            <button onClick={generate} className="px-3 py-1.5 rounded-lg bg-[#102C53] text-white text-xs font-semibold hover:bg-[#0c2140]">Generate</button>
+            <button onClick={addOne} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50">Add single box</button>
+          </div>
+          <p className="text-[10px] text-gray-400 font-manrope">Existing boxes are never overwritten; only the missing ones are created.</p>
+        </div>
+
+        {boxes.length === 0 ? (
+          <p className="text-xs text-gray-400 font-manrope text-center py-6">No box in this unit yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-manrope">
+              <thead><tr className="bg-gray-50 border-b border-gray-200 text-left text-gray-700">
+                <th className="px-2 py-2 font-semibold">Label</th>
+                <th className="px-2 py-2 font-semibold">Rack</th>
+                <th className="px-2 py-2 font-semibold">Shelf</th>
+                <th className="px-2 py-2 font-semibold">Grid</th>
+                <th className="px-2 py-2 font-semibold">Content</th>
+                <th className="px-2 py-2" />
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {boxes.map(b => {
+                  const used = vialsIn(b).length + reagentsIn(b).length;
+                  return (
+                    <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="px-2 py-1.5">
+                        <input value={b.label} onChange={e => updateStorageBox({ ...b, label: e.target.value })}
+                          className="w-28 px-2 py-1 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" min={0} value={b.rack ?? ''} placeholder="—"
+                          onChange={e => updateStorageBox({ ...b, rack: e.target.value === '' ? undefined : Number(e.target.value) })} className={numCls} />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input type="number" min={0} value={b.shelf ?? ''} placeholder="—"
+                          onChange={e => updateStorageBox({ ...b, shelf: e.target.value === '' ? undefined : Number(e.target.value) })} className={numCls} />
+                      </td>
+                      <td className="px-2 py-1.5 flex items-center gap-1">
+                        <input type="number" min={1} value={b.gridRows} onChange={e => updateStorageBox({ ...b, gridRows: Number(e.target.value) || 1 })} className={numCls} />
+                        <span className="text-gray-400">&times;</span>
+                        <input type="number" min={1} value={b.gridCols} onChange={e => updateStorageBox({ ...b, gridCols: Number(e.target.value) || 1 })} className={numCls} />
+                      </td>
+                      <td className="px-2 py-1.5 text-gray-500 whitespace-nowrap">{used} / {boxCapacity(b)}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button onClick={() => del(b)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      <ConfirmDialog />
+    </Modal>
+  );
+}
+
+// ============================================================
 // Reagents Tab — with macro-category selector
 // ============================================================
 function ReagentsTab() {
-  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits } = useLabContext();
+  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits, storageBoxes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [activeMacro, setActiveMacro] = useState<ReagentMacroCategory>('Reagents');
   const [selectedSubCat, setSelectedSubCat] = useState<string>('All');
@@ -1631,12 +1769,20 @@ function ReagentsTab() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Unit"><input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className={inputCls} /></Field>
             <Field label="Storage Unit">
-              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
+              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, boxId: undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
                 <option value="">— Not assigned</option>
                 {storageUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
               </select>
             </Field>
           </div>
+          {form.storageUnitId && boxesOfUnit(storageBoxes, form.storageUnitId).length > 0 && (
+            <Field label="Box (optional)">
+              <select value={form.boxId || ''} onChange={e => setForm({ ...form, boxId: e.target.value || undefined })} className={inputCls}>
+                <option value="">— No box (shelf / loose)</option>
+                {boxesOfUnit(storageBoxes, form.storageUnitId).map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+              </select>
+            </Field>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Supplier"><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} className={inputCls} /></Field>
             <Field label="Catalog #"><input value={form.catalogNumber} onChange={e => setForm({ ...form, catalogNumber: e.target.value })} className={inputCls} /></Field>
@@ -1655,19 +1801,29 @@ function ReagentsTab() {
 // Cryo Vials Tab
 // ============================================================
 function CryoTab() {
-  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits } = useLabContext();
+  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showForm, setShowForm] = useState(false);
-  // Only grid-capable units for cryo
-  const gridUnits = storageUnits.filter(s => s.numRacks && s.boxesPerRack && s.gridRows && s.gridCols);
-  const empty = () => ({ cellLine: '', passage: 0, date: todayStr(), userId: user.id, userName: user.name, storageUnitId: gridUnits[0]?.id || '', rack: 1, box: 1, row: 0, col: 0, notes: '' });
+  // Only units that have boxes can hold vials
+  const boxUnits = storageUnits.filter(s => storageBoxes.some(b => b.storageUnitId === s.id));
+  const firstUnit = boxUnits[0];
+  const firstBox = firstUnit ? boxesOfUnit(storageBoxes, firstUnit.id)[0] : undefined;
+  const empty = () => ({ cellLine: '', passage: 0, date: todayStr(), userId: user.id, userName: user.name, storageUnitId: firstUnit?.id || '', boxId: firstBox?.id, rack: firstBox?.rack || 0, box: firstBox?.number || 1, row: 0, col: 0, notes: '' });
   const [form, setForm] = useState(empty());
+  const formBoxes = boxesOfUnit(storageBoxes, form.storageUnitId);
+  const formBox = formBoxes.find(b => b.id === form.boxId);
 
   const [formError, setFormError] = useState('');
 
+  /** Selecting a box also refreshes the legacy rack/box coordinates. */
+  const pickBox = (id: string) => {
+    const b = storageBoxes.find(x => x.id === id);
+    setForm({ ...form, boxId: id, rack: b?.rack || 0, box: b?.number || 1 });
+  };
+
   const save = () => {
     if (!form.cellLine || !form.storageUnitId) return;
-    const err = validateVialPosition(form, storageUnits, cryoVials);
+    const err = validateVialPosition(form, storageUnits, cryoVials, undefined, storageBoxes);
     if (err) { setFormError(err); return; }
     setFormError('');
     addCryoVial(form);
@@ -1676,7 +1832,7 @@ function CryoTab() {
   };
 
   const getUnitName = useCallback((id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
-  const getPositionStr = useCallback((v: typeof cryoVials[0]) => { const su = storageUnits.find(s => s.id === v.storageUnitId); const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5); return `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`; }, [storageUnits]);
+  const getPositionStr = useCallback((v: typeof cryoVials[0]) => boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col), [storageBoxes]);
 
   const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [getUnitName, getPositionStr]);
   const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
@@ -1684,14 +1840,14 @@ function CryoTab() {
   const importSpec: ImportSpec<Omit<CryoVial, 'id'>> = {
     title: 'Import cryo vials (CSV)',
     headers: ['Cell Line', 'Passage', 'Storage Unit', 'Rack', 'Box', 'Row', 'Col', 'Stored By', 'Date', 'Notes'],
-    aliases: { 'Cell Line': ['cellline', 'cell'], 'Stored By': ['user', 'stored by'] },
+    aliases: { 'Cell Line': ['cellline', 'cell'], 'Stored By': ['user', 'stored by'], 'Box': ['box label', 'box name'] },
     template: [
-      ['HUVEC', 5, gridUnits[0]?.name || 'LN₂ Dewar A', 1, 1, 0, 0, '', todayStr(), 'Early passage'],
+      ['HUVEC', 5, firstUnit?.name || 'LN₂ Dewar A', firstBox?.rack || '', firstBox?.label || 'Box 1', 0, 0, '', todayStr(), 'Early passage'],
     ],
     templateName: 'cryo_vials_template',
     notes: <>
-      <p><strong>Storage Unit</strong>: must match an existing rack-based unit by name. Rows/Cols are 0-based; Rack/Box start at 1.</p>
-      <p><strong>Stored By</strong>: defaults to you if blank. <strong>Date</strong>: YYYY-MM-DD.</p>
+      <p><strong>Storage Unit</strong>: must match an existing unit by name. <strong>Box</strong>: the box label (or its number) as shown in Storage &rarr; Boxes; leave <strong>Rack</strong> empty for units without racks.</p>
+      <p><strong>Row/Col</strong> are 0-based. <strong>Stored By</strong>: defaults to you if blank. <strong>Date</strong>: YYYY-MM-DD.</p>
     </>,
     onAdd: addCryoVial,
     parseRow: (rec, rowNum) => {
@@ -1699,15 +1855,23 @@ function CryoTab() {
       const suVal = rec['Storage Unit'];
       const su = storageUnits.find(s => s.id === suVal || s.name.toLowerCase() === suVal.toLowerCase());
       if (!su) return { skip: `Row ${rowNum} (${rec['Cell Line']}): storage unit "${suVal}" not found — skipped` };
+      const boxVal = (rec['Box'] || '').trim().toLowerCase();
+      const rackVal = (rec['Rack'] || '').trim();
+      const candidates = boxesOfUnit(storageBoxes, su.id)
+        .filter(b => rackVal === '' || b.rack === Number(rackVal));
+      const bx = candidates.find(b => b.id.toLowerCase() === boxVal || b.label.toLowerCase() === boxVal)
+        || candidates.find(b => String(b.number) === boxVal);
+      if (!bx) return { skip: `Row ${rowNum} (${rec['Cell Line']}): box "${rec['Box']}"${rackVal ? ` in rack ${rackVal}` : ''} not found in ${su.name} — skipped` };
       const numD = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
       const item: Omit<CryoVial, 'id'> = {
         cellLine: rec['Cell Line'], passage: numD(rec['Passage'], 0),
         date: rec['Date'] || todayStr(),
         userId: user.id, userName: rec['Stored By'] || user.name, storageUnitId: su.id,
-        rack: numD(rec['Rack'], 1), box: numD(rec['Box'], 1), row: numD(rec['Row'], 0), col: numD(rec['Col'], 0),
+        boxId: bx.id, rack: bx.rack || 0, box: bx.number,
+        row: numD(rec['Row'], 0), col: numD(rec['Col'], 0),
         notes: rec['Notes'],
       };
-      const posErr = validateVialPosition(item, storageUnits, cryoVials);
+      const posErr = validateVialPosition(item, storageUnits, cryoVials, undefined, storageBoxes);
       if (posErr) return { skip: `Row ${rowNum} (${rec['Cell Line']}): ${posErr}` };
       return { item };
     },
@@ -1719,10 +1883,9 @@ function CryoTab() {
         <p className="text-sm text-gray-500 font-manrope">{cryoVials.length} vials stored</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Cell Line','Passage','Storage Unit','Position','Stored By','Date','Notes'], cryoVials.map(v => {
-            const su = storageUnits.find(s => s.id === v.storageUnitId);
-            const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
-            return [v.cellLine, v.passage, getUnitName(v.storageUnitId), `R${v.rack}B${v.box} ${rows[v.row] || '?'}${v.col + 1}`, v.userName, v.date, v.notes];
+          <button onClick={() => downloadCSV(['Cell Line','Passage','Storage Unit','Rack','Box','Row','Col','Stored By','Date','Notes'], cryoVials.map(v => {
+            const bx = storageBoxes.find(b => b.id === v.boxId);
+            return [v.cellLine, v.passage, getUnitName(v.storageUnitId), bx?.rack || '', bx?.label || '', v.row, v.col, v.userName, v.date, v.notes];
           }), 'cryo_vials')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => { setForm(empty()); setShowForm(true); }} className={btnAdd}><Plus size={14} /> Add Vial</button>
         </div>
@@ -1740,12 +1903,11 @@ function CryoTab() {
         </tr></thead><tbody className="divide-y divide-gray-100">
           {sortedVials.map(v => {
             const su = storageUnits.find(s => s.id === v.storageUnitId);
-            const rows = su?.gridRows ? getRowLabels(su.gridRows) : getRowLabels(5);
             return (
               <tr key={v.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-900">{v.cellLine}</td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
                 <td className="px-3 py-2 text-gray-500">{su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : v.storageUnitId}</td>
-                <td className="px-3 py-2 text-gray-600 font-mono">R{v.rack} B{v.box} {rows[v.row] || '?'}{v.col + 1}</td>
+                <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>
                 <td className="px-3 py-2 text-gray-500">{v.userName}</td><td className="px-3 py-2 text-gray-500">{v.date}</td>
                 <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{v.notes}</td>
                 <td className="px-3 py-2 text-right"><button onClick={() => confirmDelete('Remove Vial?', `${v.cellLine} P${v.passage} will be permanently removed.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
@@ -1761,14 +1923,21 @@ function CryoTab() {
             <Field label="Passage"><input type="number" min={0} value={form.passage || ''} onChange={e => setForm({ ...form, passage: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
             <Field label="Date"><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className={inputCls} /></Field>
           </div>
-          <Field label="Storage Unit"><select value={form.storageUnitId} onChange={e => setForm({ ...form, storageUnitId: e.target.value })} className={inputCls}>
-            {gridUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
-          </select></Field>
-          <div className="grid grid-cols-4 gap-2">
-            <Field label="Rack"><input type="number" min={1} value={form.rack || ''} onChange={e => setForm({ ...form, rack: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Box"><input type="number" min={1} value={form.box || ''} onChange={e => setForm({ ...form, box: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Row"><input type="number" min={0} value={form.row} onChange={e => setForm({ ...form, row: Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Col"><input type="number" min={0} value={form.col} onChange={e => setForm({ ...form, col: Number(e.target.value) })} className={inputCls} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Storage Unit"><select value={form.storageUnitId} onChange={e => {
+              const unitId = e.target.value;
+              const b = boxesOfUnit(storageBoxes, unitId)[0];
+              setForm({ ...form, storageUnitId: unitId, boxId: b?.id, rack: b?.rack || 0, box: b?.number || 1 });
+            }} className={inputCls}>
+              {boxUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
+            </select></Field>
+            <Field label="Box"><select value={form.boxId || ''} onChange={e => pickBox(e.target.value)} className={inputCls}>
+              {formBoxes.map(b => <option key={b.id} value={b.id}>{b.label} ({b.gridRows}&times;{b.gridCols})</option>)}
+            </select></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label={`Row (0–${(formBox?.gridRows || 1) - 1})`}><input type="number" min={0} value={form.row} onChange={e => setForm({ ...form, row: Number(e.target.value) })} className={inputCls} /></Field>
+            <Field label={`Col (0–${(formBox?.gridCols || 1) - 1})`}><input type="number" min={0} value={form.col} onChange={e => setForm({ ...form, col: Number(e.target.value) })} className={inputCls} /></Field>
           </div>
           <Field label="Notes"><input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className={inputCls} /></Field>
           {formError && <p className="text-xs text-red-600 font-manrope bg-red-50 border border-red-100 rounded-lg px-3 py-2">{formError}</p>}
