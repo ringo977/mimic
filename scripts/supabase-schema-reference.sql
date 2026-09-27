@@ -9,8 +9,8 @@
 -- DRIFT CHECK: run supabase-inspect.sql in the SQL Editor (read only) and
 -- compare its output with this file. Two objects created by hand in the
 -- dashboard had already drifted from the repo — lab_users_role_check (older,
--- narrower role list) and reagents.expiry_date NOT NULL — and both surfaced
--- only as failed imports in September 2026.
+-- narrower role list), reagents.expiry_date NOT NULL and instruments.description
+-- NOT NULL — and they surfaced only as failed imports in September 2026.
 --
 -- Full recovery procedure:
 --   1. Run this script                       (tables)
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS instruments (
   location                  text,
   location_id               text,
   requires_certification    boolean NOT NULL DEFAULT false,
-  description               text,
+  description               text,   -- NOT NULL in the live DB (drift, see supabase-inspect.sql)
   icon                      text,
   serial_number             text,
   manufacturer              text,

@@ -47,7 +47,8 @@ UPDATE locations
 -- ------------------------------------------------------------
 UPDATE instruments i
    SET responsible_user_id = u.id,
-       description = NULLIF(btrim(regexp_replace(i.description, 'Responsabile:[^.]*\.?', '')), '')
+       -- description is NOT NULL in the live DB: empty string, never NULL
+       description = btrim(regexp_replace(COALESCE(i.description, ''), 'Responsabile:[^.]*\.?', ''))
   FROM (VALUES
     ('Confocal microscope', 'Mattia Ballerini'),
     ('CytoFLEX',            'Stefania Brambilla'),
