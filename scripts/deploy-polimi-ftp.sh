@@ -144,7 +144,7 @@ cd ${FTP_REMOTE_DIR}
 echo "→ Wiping remote ${FTP_REMOTE_DIR}/ …"
 # -a = all entry types. Without it lftp's glob expands ONLY plain files, so
 # directories (_next/, images/, …) were never wiped and stale files
-# accumulated on the server (found 26/09/2026). `*` never matches dotfiles
+# accumulated on the server (found 26/09/2026). In lftp "*" never matches dotfiles
 # in lftp, so .htaccess survives even if the upload below is interrupted
 # (mirror overwrites it anyway). Known orphan dotfiles are removed explicitly.
 glob -a rm -rf *
