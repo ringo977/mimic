@@ -6,6 +6,12 @@
 -- (lib/supabase-data.ts, lib/supabase-users.ts) in July 2026.
 -- The LIVE database remains the source of truth for exact types.
 --
+-- DRIFT CHECK: run supabase-inspect.sql in the SQL Editor (read only) and
+-- compare its output with this file. Two objects created by hand in the
+-- dashboard had already drifted from the repo — lab_users_role_check (older,
+-- narrower role list) and reagents.expiry_date NOT NULL — and both surfaced
+-- only as failed imports in September 2026.
+--
 -- Full recovery procedure:
 --   1. Run this script                       (tables)
 --   2. Run supabase-booking-settings.sql     (app_settings + half hours)
