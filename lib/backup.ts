@@ -32,7 +32,7 @@ export async function exportDatabaseJSON(): Promise<string> {
   for (const table of TABLES) {
     // Paged: a single select() stops silently at 1000 rows, and a truncated
     // backup restored later would delete every row beyond that as "stale".
-    const data = await fetchAllRows<Record<string, unknown>>(table, pkOf(table));
+    const data = await fetchAllRows<Record<string, unknown>>(table, pkOf(table), pkOf(table));
     if (data === null) { failed.push(table); continue; }
     dump[table] = data;
   }
@@ -58,6 +58,9 @@ export function validateBackupJSON(json: string): {
 } {
   let parsed: Record<string, unknown>;
   try { parsed = JSON.parse(json); } catch { return { valid: false, errors: ['Invalid JSON file — could not parse.'], summary: {} }; }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { valid: false, errors: ['Backup must be a JSON object with a _meta block and one array per table.'], summary: {} };
+  }
 
   const errors: string[] = [];
   const summary: Record<string, number> = {};
@@ -121,6 +124,9 @@ export async function importDatabaseJSON(json: string): Promise<{
   const imported: Record<string, number> = {};
   let parsed: Record<string, unknown>;
   try { parsed = JSON.parse(json); } catch { return { ok: false, errors: ['Invalid JSON file'], imported: {} }; }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, errors: ['Backup must be a JSON object'], imported: {} };
+  }
 
   // Phase 1: Validate before touching anything
   const validation = validateBackupJSON(json);
@@ -181,7 +187,7 @@ export async function importDatabaseJSON(json: string): Promise<{
     // upsert for this table succeeded (never wipe more than we restored).
     if (!tableFailed && DELETE_STALE.has(table)) {
       const keep = new Set(rows.map(r => (r as Record<string, unknown>)[pk]).filter(v => typeof v === 'string') as string[]);
-      const existing = await fetchAllRows<Record<string, unknown>>(table, pk);
+      const existing = await fetchAllRows<Record<string, unknown>>(table, pk, pk);
       if (!existing) {
         errors.push(`Restored ${table}, but could not check for stale rows (read failed)`);
       } else {
