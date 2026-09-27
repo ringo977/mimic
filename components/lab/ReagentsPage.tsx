@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { storageUnitTypes } from '@/data/lab-data';
+import { storageUnitTypes, reagentPlaceLabel, reagentShelf, isShelfBased, boxesOfUnit, Reagent, StorageUnit } from '@/data/lab-data';
 
 export default function ReagentsPage() {
   const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits, storageBoxes } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [view, setView] = useState<'list' | 'units'>('list');
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [modal, setModal] = useState<{ type: 'withdraw' | 'add'; reagentId: string } | null>(null);
   const [amountStr, setAmountStr] = useState('1');
   const [purpose, setPurpose] = useState('');
@@ -64,7 +66,26 @@ export default function ReagentsPage() {
 
   return (
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4">
-      <h1 className="text-lg font-bold text-gray-900 font-manrope">Reagent Stock</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-lg font-bold text-gray-900 font-manrope">Reagent Stock</h1>
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-manrope">
+          <button onClick={() => setView('list')} className={`flex items-center gap-1 px-3 py-1.5 ${view === 'list' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}><LayoutGrid size={13} /> Items</button>
+          <button onClick={() => setView('units')} className={`flex items-center gap-1 px-3 py-1.5 ${view === 'units' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}><Refrigerator size={13} /> By unit</button>
+        </div>
+      </div>
+
+      {view === 'units' && (
+        <UnitShelvesView
+          reagents={reagents} storageUnits={storageUnits} storageBoxes={storageBoxes}
+          selectedUnitId={selectedUnitId} onSelectUnit={setSelectedUnitId}
+          search={search} onSearch={setSearch}
+          canWithdraw={permissions.canWithdrawReagents} canAdd={permissions.canAddReagents}
+          onWithdraw={id => { setModal({ type: 'withdraw', reagentId: id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
+          onAdd={id => { setModal({ type: 'add', reagentId: id }); setAmountStr('1'); }}
+        />
+      )}
+
+      {view === 'list' && <>
 
       {/* Search */}
       <div className="relative">
@@ -123,9 +144,8 @@ export default function ReagentsPage() {
             <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-400 font-manrope flex-wrap">
               <span className="flex items-center gap-1"><Package size={10} />{(() => {
                 const su = r.storageUnitId ? storageUnits.find(s => s.id === r.storageUnitId) : undefined;
-                if (!su) return r.location;
-                const box = storageBoxes.find(b => b.id === r.boxId);
-                return `${storageUnitTypes[su.type]?.icon || ''} ${su.name}${box ? ` · ${box.label}` : ''}`;
+                const label = reagentPlaceLabel(r, storageUnits, storageBoxes);
+                return su ? `${storageUnitTypes[su.type]?.icon || ''} ${label}` : label;
               })()}</span>
               <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
                 Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
@@ -161,6 +181,7 @@ export default function ReagentsPage() {
       {filtered.length === 0 && (
         <div className="text-center py-12 text-gray-400 font-manrope text-sm">No reagents found</div>
       )}
+      </>}
 
       {/* Modal */}
       {modal && modalReagent && (
@@ -231,6 +252,141 @@ export default function ReagentsPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// By unit: shelves top → bottom, boxes and loose items on each
+// ============================================================
+function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId, onSelectUnit, search, onSearch, canWithdraw, canAdd, onWithdraw, onAdd }: {
+  reagents: Reagent[];
+  storageUnits: StorageUnit[];
+  storageBoxes: ReturnType<typeof boxesOfUnit>;
+  selectedUnitId: string;
+  onSelectUnit: (id: string) => void;
+  search: string;
+  onSearch: (s: string) => void;
+  canWithdraw: boolean;
+  canAdd: boolean;
+  onWithdraw: (id: string) => void;
+  onAdd: (id: string) => void;
+}) {
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    reagents.forEach(r => { if (r.storageUnitId) m.set(r.storageUnitId, (m.get(r.storageUnitId) || 0) + 1); });
+    return m;
+  }, [reagents]);
+  const units = useMemo(() => storageUnits.filter(u => (counts.get(u.id) || 0) > 0 || boxesOfUnit(storageBoxes, u.id).length > 0), [storageUnits, counts, storageBoxes]);
+  const unit = units.find(u => u.id === selectedUnitId) || units[0];
+  const unassigned = reagents.filter(r => !r.storageUnitId);
+
+  const items = useMemo(() => {
+    if (!unit) return [];
+    const q = search.toLowerCase();
+    return reagents.filter(r => r.storageUnitId === unit.id && (!q || r.name.toLowerCase().includes(q) || r.catalogNumber.toLowerCase().includes(q)));
+  }, [reagents, unit, search]);
+
+  const shelfCount = unit && isShelfBased(unit.type) ? (unit.numShelves || 0) : 0;
+  const boxes = unit ? boxesOfUnit(storageBoxes, unit.id) : [];
+  const maxShelfUsed = Math.max(0, ...items.map(r => reagentShelf(r, storageBoxes) || 0), ...boxes.map(b => b.shelf || 0));
+  const shelves = Array.from({ length: Math.max(shelfCount, maxShelfUsed) }, (_, i) => i + 1);
+  const onShelf = (n: number | undefined) => items.filter(r => reagentShelf(r, storageBoxes) === n);
+  const boxesOnShelf = (n: number | undefined) => boxes.filter(b => (b.shelf ?? undefined) === n);
+
+  const Row = ({ r }: { r: Reagent }) => {
+    const low = r.currentStock <= r.alertThreshold;
+    return (
+      <div className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0 text-xs font-manrope">
+        <span className={`flex-1 min-w-0 truncate ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}>{r.name}</span>
+        <span className="text-gray-400 shrink-0 tabular-nums">{r.currentStock}<span className="text-gray-300">/{r.maxStock}</span> {r.unit}</span>
+        {low && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
+        {canWithdraw && <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>}
+        {canAdd && <button onClick={() => onAdd(r.id)} className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Restock"><Plus size={11} /></button>}
+      </div>
+    );
+  };
+
+  const Group = ({ title, list, boxesHere }: { title: string; list: Reagent[]; boxesHere: typeof boxes }) => {
+    const loose = list.filter(r => !r.boxId || !boxesHere.some(b => b.id === r.boxId));
+    if (list.length === 0 && boxesHere.length === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-dashed border-gray-200 px-4 py-3 flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-400 font-manrope">{title}</span>
+          <span className="text-[10px] text-gray-300 font-manrope">empty</span>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-700 font-manrope">{title}</span>
+          <span className="text-[10px] text-gray-400 font-manrope">{list.length} item{list.length === 1 ? '' : 's'}{boxesHere.length ? ` · ${boxesHere.length} box${boxesHere.length === 1 ? '' : 'es'}` : ''}</span>
+        </div>
+        {boxesHere.length > 0 && (
+          <div className="grid sm:grid-cols-2 gap-2">
+            {boxesHere.map(b => {
+              const inBox = list.filter(r => r.boxId === b.id);
+              return (
+                <div key={b.id} className="rounded-lg border border-gray-200 bg-gray-50/60 p-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-gray-700 font-manrope">📦 {b.label}</span>
+                    <span className="text-[10px] text-gray-400 font-manrope">{inBox.length}</span>
+                  </div>
+                  {inBox.length === 0
+                    ? <p className="text-[10px] text-gray-300 font-manrope">nothing linked yet</p>
+                    : inBox.map(r => <Row key={r.id} r={r} />)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {loose.length > 0 && (
+          <div>
+            {boxesHere.length > 0 && <p className="text-[10px] text-gray-400 font-manrope mb-1">Loose on the shelf</p>}
+            {loose.map(r => <Row key={r.id} r={r} />)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (units.length === 0) {
+    return <div className="text-center py-12 text-gray-400 font-manrope text-sm">No reagent is linked to a storage unit yet.</div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {units.map(u => (
+          <button key={u.id} onClick={() => onSelectUnit(u.id)}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${unit?.id === u.id ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            {storageUnitTypes[u.type]?.icon} {u.name} <span className="opacity-60">{counts.get(u.id) || 0}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+        <input value={search} onChange={e => onSearch(e.target.value)} placeholder={`Search in ${unit?.name || 'this unit'}…`}
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none" />
+      </div>
+
+      {unit && (
+        <p className="text-[11px] text-gray-400 font-manrope">
+          {unit.temperature}{unit.location ? ` · ${unit.location}` : ''}
+          {shelfCount > 0 ? ` · ${shelfCount} shelves, 1 = top` : isShelfBased(unit.type) ? ' · shelf count not set (Admin → Storage)' : ''}
+        </p>
+      )}
+
+      {shelves.map(n => <Group key={n} title={`Shelf ${n}`} list={onShelf(n)} boxesHere={boxesOnShelf(n)} />)}
+      {(onShelf(undefined).length > 0 || boxesOnShelf(undefined).length > 0) && (
+        <Group title={shelves.length ? 'No shelf specified' : 'Contents'} list={onShelf(undefined)} boxesHere={boxesOnShelf(undefined)} />
+      )}
+
+      {unassigned.length > 0 && (
+        <p className="text-[11px] text-gray-400 font-manrope text-center pt-2">{unassigned.length} item{unassigned.length === 1 ? '' : 's'} not linked to any storage unit (shown in the Items view).</p>
       )}
     </div>
   );

@@ -230,7 +230,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
   const rows = await fetchAll<{
     id: string; name: string; category: string; current_stock: number;
     max_stock: number; unit: string; expiry_date: string; location: string;
-    storage_unit_id: string | null; box_id: string | null; supplier: string; catalog_number: string;
+    storage_unit_id: string | null; box_id: string | null; shelf: number | null; supplier: string; catalog_number: string;
     alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
   }>('reagents', 'name');
   if (!rows) return null;
@@ -238,7 +238,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     id: r.id, name: r.name, category: r.category,
     currentStock: r.current_stock, maxStock: r.max_stock, unit: r.unit,
     expiryDate: r.expiry_date, location: r.location,
-    storageUnitId: r.storage_unit_id ?? undefined, boxId: r.box_id ?? undefined,
+    storageUnitId: r.storage_unit_id ?? undefined, boxId: r.box_id ?? undefined, shelf: r.shelf ?? undefined,
     supplier: r.supplier, catalogNumber: r.catalog_number,
     alertThreshold: r.alert_threshold,
     lot: r.lot ?? undefined, owner: r.owner ?? undefined, notes: r.notes ?? undefined,
@@ -252,7 +252,7 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     ...(opts?.skipStock ? {} : { current_stock: r.currentStock }),
     max_stock: r.maxStock, unit: r.unit,
     expiry_date: r.expiryDate, location: r.location,
-    storage_unit_id: r.storageUnitId ?? null, box_id: r.boxId ?? null,
+    storage_unit_id: r.storageUnitId ?? null, box_id: r.boxId ?? null, shelf: r.shelf ?? null,
     supplier: r.supplier, catalog_number: r.catalogNumber,
     alert_threshold: r.alertThreshold,
     lot: r.lot ?? null, owner: r.owner ?? null, notes: r.notes ?? null,

@@ -584,12 +584,42 @@ export interface Reagent {
   location: string;
   storageUnitId?: string;   // links to StorageUnit
   boxId?: string;           // links to StorageBox (box inside the unit)
+  shelf?: number;           // 1 = top shelf; falls back to the box's shelf
   supplier: string;
   catalogNumber: string;
   alertThreshold: number;
   lot?: string;             // lot / batch number
   owner?: string;           // whoever bought it (free text: may be an alumnus)
   notes?: string;           // free text, e.g. "2 aliquots in use"
+}
+
+/** Shelf a reagent sits on: its own value, else the shelf of its box. */
+export function reagentShelf(r: Reagent, boxes: StorageBox[]): number | undefined {
+  if (r.shelf != null) return r.shelf;
+  const b = r.boxId ? boxes.find(x => x.id === r.boxId) : undefined;
+  return b?.shelf;
+}
+
+/** Free-text sub-location left in `location` after the unit name
+ *  ("Freezer −20 °C MiMic · Supplements Box" → "Supplements Box"). */
+export function reagentSublocation(r: Reagent, unit: StorageUnit | undefined): string {
+  if (!unit) return '';
+  const loc = (r.location || '').trim();
+  // bulk-loaded rows read "<unit name> · <sublocation>"; hand-typed ones may hold just the sublocation
+  const rest = loc.startsWith(unit.name) ? loc.slice(unit.name.length) : loc;
+  return rest.replace(/^\s*[·•\-–]\s*/, '').trim();
+}
+
+/** "Fridge +4 °C MiMic · Shelf 1 · Supplements Box" — everything known about where it is. */
+export function reagentPlaceLabel(r: Reagent, units: StorageUnit[], boxes: StorageBox[]): string {
+  const unit = r.storageUnitId ? units.find(u => u.id === r.storageUnitId) : undefined;
+  if (!unit) return r.location;
+  const box = r.boxId ? boxes.find(b => b.id === r.boxId) : undefined;
+  const shelf = reagentShelf(r, boxes);
+  const sub = box ? '' : reagentSublocation(r, unit);
+  // don't repeat a shelf that is already spelled out in the free text
+  const subClean = shelf != null ? sub.replace(/shelf\s*#?\s*\d+/i, '').replace(/^\s*[·,]\s*|\s*[·,]\s*$/g, '').trim() : sub;
+  return [unit.name, shelf != null ? `Shelf ${shelf}` : '', box?.label || '', subClean].filter(Boolean).join(' · ');
 }
 
 // Macro-categories group sub-categories for admin panel navigation

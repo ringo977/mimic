@@ -32,6 +32,7 @@
 --      then supabase-2026-09-instrument-icons.sql (types & icons)
 --      then supabase-2026-09-booking-policy.sql  (booking_policy + trigger)
 --      then supabase-2026-09-fields.sql           (room codes, lot/owner/notes…)
+--      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
@@ -192,6 +193,7 @@ CREATE TABLE IF NOT EXISTS reagents (
   lot              text,
   owner            text,   -- who bought it (free text: may be an alumnus)
   notes            text,
+  shelf            integer,   -- 1 = top shelf; NULL → inherits storage_boxes.shelf via box_id
   CONSTRAINT reagents_stock_check
     CHECK ((current_stock >= (0)::numeric))   -- 2026-09-tighten.sql
 );

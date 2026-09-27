@@ -15,7 +15,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
-  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni } from '@/data/lab-data';
+  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentPlaceLabel } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
 import { downloadCSV } from '@/lib/csv';
@@ -1579,8 +1579,9 @@ function BoxManager({ unit, onClose }: { unit: StorageUnit; onClose: () => void 
   // Bulk generator, pre-filled from the unit's own rack/box configuration
   const [genRacks, setGenRacks] = useState(unit.numRacks || 0);
   const [genPerRack, setGenPerRack] = useState(unit.boxesPerRack || 1);
-  const [genRows, setGenRows] = useState(unit.gridRows || 9);
-  const [genCols, setGenCols] = useState(unit.gridCols || 9);
+  // Cryo units default to a vial grid; shelf units to plain 1×1 container boxes
+  const [genRows, setGenRows] = useState(unit.gridRows || (isRackBased(unit.type) ? 9 : 1));
+  const [genCols, setGenCols] = useState(unit.gridCols || (isRackBased(unit.type) ? 9 : 1));
 
   const boxId = (rack: number, n: number) => rack ? `sb-${unit.id}-r${rack}-b${n}` : `sb-${unit.id}-b${n}`;
   const defaultLabel = (n: number) => `Box ${n}`;
@@ -1639,7 +1640,7 @@ function BoxManager({ unit, onClose }: { unit: StorageUnit; onClose: () => void 
             <button onClick={generate} className="px-3 py-1.5 rounded-lg bg-[#102C53] text-white text-xs font-semibold hover:bg-[#0c2140]">Generate</button>
             <button onClick={addOne} className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50">Add single box</button>
           </div>
-          <p className="text-[10px] text-gray-400 font-manrope">Existing boxes are never overwritten; only the missing ones are created.</p>
+          <p className="text-[10px] text-gray-400 font-manrope">Rows &times; Cols is the vial grid of a cryobox. Leave 1 &times; 1 for a plain container box (reagents are linked to the box, not to a cell). Existing boxes are never overwritten.</p>
         </div>
 
         {boxes.length === 0 ? (
@@ -1731,6 +1732,9 @@ function ReagentsTab() {
   const defaultCategory = selectedSubCat !== 'All' ? selectedSubCat : macroInfo.subCategories[0];
   const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2 });
   const [form, setForm] = useState<Reagent>(empty());
+  const formUnit = form.storageUnitId ? storageUnits.find(s => s.id === form.storageUnitId) : undefined;
+  const formShelves = formUnit && isShelfBased(formUnit.type) ? (formUnit.numShelves || 0) : 0;
+  const formBoxes = formUnit ? boxesOfUnit(storageBoxes, formUnit.id) : [];
 
   const open = (r?: Reagent) => { setForm(r ? { ...r } : empty()); setEditing(r || null); setShowForm(true); };
   const save = () => {
@@ -1773,17 +1777,17 @@ function ReagentsTab() {
   };
   const importSpec: ImportSpec<Reagent> = {
     title: 'Import items (CSV)',
-    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert', 'Lot', 'Owner', 'Notes'],
-    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'], 'Lot': ['batch', 'lot number'], 'Owner': ['bought by', 'responsible'] },
+    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Shelf', 'Box', 'Expiry', 'Alert', 'Lot', 'Owner', 'Notes'],
+    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Shelf': ['ripiano'], 'Box': ['box label', 'scatola'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'], 'Lot': ['batch', 'lot number'], 'Owner': ['bought by', 'responsible'] },
     template: [
-      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2, '', '', ''],
-      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', '2026-09-01', 2, 'H015928', 'SBR', ''],
-      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', '2027-01-01', 1, '', '', '2 aliquots in use'],
+      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '', '', '2026-06-15', 2, '', '', ''],
+      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', 1, '', '2026-09-01', 2, 'H015928', 'SBR', ''],
+      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', 2, 'Fluorescence Box', '2027-01-01', 1, '', '', '2 aliquots in use'],
     ],
     templateName: 'consumables_template',
     notes: <>
       <p><strong>Category</strong>: a sub-category ({macroInfo.subCategories.join(', ')}). If blank, items go to <em>{defaultCategory}</em>.</p>
-      <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Expiry</strong>: YYYY-MM-DD.</p>
+      <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Shelf</strong>: number, 1 = top. <strong>Box</strong>: label of a box already created in that unit (Admin → Storage → Boxes). <strong>Expiry</strong>: YYYY-MM-DD.</p>
       <p><strong>Lot</strong>, <strong>Owner</strong> and <strong>Notes</strong> are free text (owner may be someone who has left).</p>
     </>,
     onAdd: addNewReagent,
@@ -1793,16 +1797,23 @@ function ReagentsTab() {
       const storageUnitId = findUnitId(storageVal);
       const num = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
       const currentStock = num(rec['Stock'], 0);
+      const boxVal = (rec['Box'] || '').trim();
+      const box = storageUnitId && boxVal
+        ? boxesOfUnit(storageBoxes, storageUnitId).find(b => b.label.toLowerCase() === boxVal.toLowerCase())
+        : undefined;
+      const shelfVal = rec['Shelf'] !== '' && Number.isFinite(Number(rec['Shelf'])) && Number(rec['Shelf']) > 0 ? Number(rec['Shelf']) : undefined;
       const item: Reagent = {
         id: generateId(), name: rec['Name'], category: rec['Category'] || defaultCategory,
         currentStock, maxStock: num(rec['Max'], Math.max(currentStock, 1)), unit: rec['Unit'] || 'units',
         expiryDate: rec['Expiry'], location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
-        storageUnitId, supplier: rec['Supplier'], catalogNumber: rec['Cat#'], alertThreshold: num(rec['Alert'], 0),
+        storageUnitId, boxId: box?.id, shelf: shelfVal ?? box?.shelf,
+        supplier: rec['Supplier'], catalogNumber: rec['Cat#'], alertThreshold: num(rec['Alert'], 0),
         lot: rec['Lot'] || undefined, owner: rec['Owner'] || undefined, notes: rec['Notes'] || undefined,
       };
-      return storageVal && !storageUnitId
-        ? { item, note: `Row ${rowNum} (${item.name}): storage "${storageVal}" not found — imported without a storage unit` }
-        : { item };
+      const notes: string[] = [];
+      if (storageVal && !storageUnitId) notes.push(`storage "${storageVal}" not found — imported without a storage unit`);
+      if (boxVal && storageUnitId && !box) notes.push(`box "${boxVal}" not found in that unit — imported without a box`);
+      return notes.length ? { item, note: `Row ${rowNum} (${item.name}): ${notes.join('; ')}` } : { item };
     },
   };
 
@@ -1842,7 +1853,7 @@ function ReagentsTab() {
         <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert','Lot','Owner','Notes'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '']), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Shelf','Box','Expiry','Alert','Lot','Owner','Notes'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), reagentShelf(r, storageBoxes) ?? '', storageBoxes.find(b => b.id === r.boxId)?.label || '', r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '']), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
@@ -1863,7 +1874,7 @@ function ReagentsTab() {
               {availableSubCategories.length > 1 && <td className="px-3 py-2 text-gray-500">{r.category}</td>}
               <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}/{r.maxStock} {r.unit}</span></td>
               <td className="px-3 py-2 text-gray-500">{r.supplier}</td><td className="px-3 py-2 text-gray-500 font-mono">{r.catalogNumber}</td>
-              <td className="px-3 py-2 text-gray-500 max-w-[120px] truncate">{getUnitName(r.storageUnitId)}</td>
+              <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={reagentPlaceLabel(r, storageUnits, storageBoxes)}>{reagentPlaceLabel(r, storageUnits, storageBoxes) || '—'}</td>
               <td className="px-3 py-2 text-gray-500">{r.expiryDate}</td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => open(r)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
@@ -1892,19 +1903,36 @@ function ReagentsTab() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Unit"><input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className={inputCls} /></Field>
             <Field label="Storage Unit">
-              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, boxId: undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
+              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, boxId: undefined, shelf: undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
                 <option value="">— Not assigned</option>
                 {storageUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
               </select>
             </Field>
           </div>
-          {form.storageUnitId && boxesOfUnit(storageBoxes, form.storageUnitId).length > 0 && (
-            <Field label="Box (optional)">
-              <select value={form.boxId || ''} onChange={e => setForm({ ...form, boxId: e.target.value || undefined })} className={inputCls}>
-                <option value="">— No box (shelf / loose)</option>
-                {boxesOfUnit(storageBoxes, form.storageUnitId).map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-              </select>
-            </Field>
+          {formUnit && (formShelves > 0 || formBoxes.length > 0) && (
+            <div className="grid grid-cols-2 gap-3">
+              {formShelves > 0 && (
+                <Field label="Shelf (1 = top)">
+                  <select value={form.shelf ?? ''} onChange={e => setForm({ ...form, shelf: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls}>
+                    <option value="">— Not specified</option>
+                    {Array.from({ length: formShelves }, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>Shelf {n}{n === 1 ? ' (top)' : n === formShelves ? ' (bottom)' : ''}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              {formBoxes.length > 0 && (
+                <Field label="Box (optional)">
+                  <select value={form.boxId || ''} onChange={e => {
+                    const b = formBoxes.find(x => x.id === e.target.value);
+                    setForm({ ...form, boxId: b?.id, shelf: b?.shelf ?? form.shelf });
+                  }} className={inputCls}>
+                    <option value="">— No box (loose on the shelf)</option>
+                    {formBoxes.map(b => <option key={b.id} value={b.id}>{b.label}{b.shelf != null ? ` (shelf ${b.shelf})` : ''}</option>)}
+                  </select>
+                </Field>
+              )}
+            </div>
           )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Supplier"><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} className={inputCls} /></Field>
