@@ -312,6 +312,27 @@ export const storageUnitTypes: Record<StorageUnitType, { label: string; temperat
   SAFETY:      { label: 'Safety Cabinet',       temperature: 'RT',          icon: '⚠️' },
 };
 
+/** Physical racks carry a colour code as well as a number (Arpege 40: blue,
+ *  green, red, black, yellow, white) — the colour is how people find them. */
+export interface RackLabel {
+  label: string;   // e.g. "Blue"
+  color: string;   // hex, used inline (Tailwind cannot generate classes from data)
+}
+
+export const rackColorPalette: { label: string; color: string }[] = [
+  { label: 'Blue',   color: '#2563EB' },
+  { label: 'Green',  color: '#16A34A' },
+  { label: 'Red',    color: '#DC2626' },
+  { label: 'Black',  color: '#111827' },
+  { label: 'Yellow', color: '#EAB308' },
+  { label: 'White',  color: '#D1D5DB' },
+  { label: 'Orange', color: '#EA580C' },
+  { label: 'Purple', color: '#7C3AED' },
+  { label: 'Cyan',   color: '#06B6D4' },
+  { label: 'Pink',   color: '#DB2777' },
+  { label: 'Grey',   color: '#6B7280' },
+];
+
 export interface StorageUnit {
   id: string;
   name: string;
@@ -325,6 +346,7 @@ export interface StorageUnit {
   boxesPerRack?: number;
   gridRows?: number;
   gridCols?: number;
+  rackLabels?: RackLabel[];   // index 0 = rack 1; shorter than numRacks is fine
   // Shelf/door config (for freezers, fridges, cabinets, etc.)
   numShelves?: number;
   numDoors?: number;  // 1 = single door, 2 = left + right

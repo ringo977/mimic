@@ -12,7 +12,7 @@ import UserDetailModal from './UserDetailModal';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
-  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour,
+  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -1365,6 +1365,39 @@ function StorageUnitsTab() {
               {(form.numRacks && form.boxesPerRack && form.gridRows && form.gridCols) ? (
                 <div className="bg-cyan-50 rounded-xl p-2.5 mt-2 text-xs font-manrope text-cyan-700">
                   Total capacity: {form.numRacks * form.boxesPerRack * form.gridRows * form.gridCols} vial slots
+                </div>
+              ) : null}
+              {/* Racks are identified by colour on the physical unit, not just by number */}
+              {form.numRacks ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-semibold text-gray-600 font-manrope mb-1.5">Rack colours <span className="font-normal text-gray-400">(optional)</span></p>
+                  <div className="space-y-1.5">
+                    {Array.from({ length: Math.min(form.numRacks, 20) }, (_, i) => {
+                      const rl = form.rackLabels?.[i];
+                      const setRack = (next: RackLabel | undefined) => {
+                        const labels = Array.from({ length: form.numRacks || 0 }, (_, k) => form.rackLabels?.[k] || { label: '', color: '' });
+                        if (next) labels[i] = next; else labels[i] = { label: '', color: '' };
+                        setForm({ ...form, rackLabels: labels.some(l => l.label || l.color) ? labels : undefined });
+                      };
+                      return (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="w-14 shrink-0 text-[11px] text-gray-500 font-manrope">Rack {i + 1}</span>
+                          <span className="w-4 h-4 shrink-0 rounded-full border border-gray-300" style={rl?.color ? { backgroundColor: rl.color } : undefined} />
+                          <select
+                            value={rl?.label || ''}
+                            onChange={e => {
+                              const p = rackColorPalette.find(c => c.label === e.target.value);
+                              setRack(p ? { label: p.label, color: p.color } : undefined);
+                            }}
+                            className={inputCls}
+                          >
+                            <option value="">— no colour</option>
+                            {rackColorPalette.map(c => <option key={c.label} value={c.label}>{c.label}</option>)}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </div>

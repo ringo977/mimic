@@ -163,6 +163,7 @@ export async function fetchStorageUnits(): Promise<StorageUnit[] | null> {
     num_racks: number | null; boxes_per_rack: number | null;
     grid_rows: number | null; grid_cols: number | null;
     num_shelves: number | null; num_doors: number | null;
+    rack_labels: StorageUnit['rackLabels'] | null;
   }>('storage_units', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -172,6 +173,7 @@ export async function fetchStorageUnits(): Promise<StorageUnit[] | null> {
     numRacks: r.num_racks ?? undefined, boxesPerRack: r.boxes_per_rack ?? undefined,
     gridRows: r.grid_rows ?? undefined, gridCols: r.grid_cols ?? undefined,
     numShelves: r.num_shelves ?? undefined, numDoors: r.num_doors ?? undefined,
+    rackLabels: r.rack_labels ?? undefined,
   }));
 }
 
@@ -182,6 +184,7 @@ export async function upsertStorageUnit(s: StorageUnit) {
     num_racks: s.numRacks ?? null, boxes_per_rack: s.boxesPerRack ?? null,
     grid_rows: s.gridRows ?? null, grid_cols: s.gridCols ?? null,
     num_shelves: s.numShelves ?? null, num_doors: s.numDoors ?? null,
+    rack_labels: s.rackLabels ?? null,
   });
 }
 

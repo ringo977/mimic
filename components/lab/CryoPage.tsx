@@ -37,6 +37,11 @@ export default function CryoPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPosition, setAddPosition] = useState<{ row: number; col: number } | null>(null);
 
+  // "Where is it?" filter: highlights matching vials in the grid and lists
+  // their positions across every unit, so a cell line can be located quickly.
+  const [findLine, setFindLine] = useState('');
+  const [findPassage, setFindPassage] = useState('');
+
   // Form state
   const [newCellLine, setNewCellLine] = useState('');
   const [newPassageStr, setNewPassageStr] = useState('0');
@@ -55,6 +60,19 @@ export default function CryoPage() {
   const ROWS = getRowLabels(gridRows);
   const COLS = Array.from({ length: gridCols }, (_, i) => i + 1);
   const slotsPerBox = gridRows * gridCols;
+
+  const rackLabel = (rack: number) => unit?.rackLabels?.[rack - 1];
+
+  const isMatch = (v: typeof cryoVials[0]) => {
+    if (!findLine && findPassage === '') return false;
+    if (findLine && !v.cellLine.toLowerCase().includes(findLine.toLowerCase())) return false;
+    if (findPassage !== '' && v.passage !== Number(findPassage)) return false;
+    return true;
+  };
+  const findActive = Boolean(findLine) || findPassage !== '';
+  const matches = useMemo(() => findActive ? cryoVials.filter(isMatch) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cryoVials, findLine, findPassage, findActive]);
 
   const boxVials = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === selectedBox);
   const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
@@ -130,6 +148,69 @@ export default function CryoPage() {
         })}
       </div>
 
+      {/* Find a cell line */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2"><Search size={14} /> Find a cell line</h2>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            value={findLine}
+            onChange={e => setFindLine(e.target.value)}
+            placeholder="Cell line (e.g., HUVECs, A549)"
+            list="findlines"
+            className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+          />
+          <datalist id="findlines">{usedCellLines.map(cl => <option key={cl} value={cl} />)}</datalist>
+          <input
+            type="number"
+            min={0}
+            value={findPassage}
+            onChange={e => setFindPassage(e.target.value)}
+            placeholder="Passage"
+            className="w-full sm:w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+          />
+          {findActive && (
+            <button onClick={() => { setFindLine(''); setFindPassage(''); }}
+              className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-xs font-medium font-manrope hover:bg-gray-200 whitespace-nowrap">
+              Clear
+            </button>
+          )}
+        </div>
+        {findActive && (
+          matches.length === 0 ? (
+            <p className="text-xs text-gray-400 font-manrope">No vial matches.</p>
+          ) : (
+            <div>
+              <p className="text-xs text-gray-500 font-manrope mb-2">{matches.length} vial{matches.length !== 1 ? 's' : ''} found &mdash; click a position to open it:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {matches.slice(0, 60).map(v => {
+                  const su = storageUnits.find(s => s.id === v.storageUnitId);
+                  const rows = getRowLabels(su?.gridRows || 5);
+                  const rl = su?.rackLabels?.[v.rack - 1];
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => {
+                        setSelectedUnitId(v.storageUnitId);
+                        setSelectedRack(v.rack);
+                        setSelectedBox(v.box);
+                        setSelectedVial(v.id);
+                      }}
+                      className="px-2 py-1 rounded-lg border border-gray-200 bg-white hover:border-cyan-400 hover:bg-cyan-50 text-[11px] font-manrope flex items-center gap-1.5"
+                      title={`${v.cellLine} P${v.passage} — ${su?.name || ''}`}
+                    >
+                      <span className="w-2 h-2 rounded-full border border-gray-300" style={rl?.color ? { backgroundColor: rl.color } : undefined} />
+                      <span className="font-mono">R{v.rack} B{v.box} {rows[v.row] || '?'}{v.col + 1}</span>
+                      <span className="text-gray-400">P{v.passage}</span>
+                    </button>
+                  );
+                })}
+                {matches.length > 60 && <span className="text-[11px] text-gray-400 font-manrope self-center">+{matches.length - 60} more</span>}
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Rack Overview */}
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -138,16 +219,23 @@ export default function CryoPage() {
             {RACKS.map(rack => {
               const count = vialsInRack(rack);
               const isSelected = selectedRack === rack;
+              const rl = rackLabel(rack);
+              const hits = matches.filter(v => v.storageUnitId === selectedUnitId && v.rack === rack).length;
               return (
                 <button
                   key={rack}
                   onClick={() => { setSelectedRack(rack); setSelectedBox(1); setSelectedVial(null); }}
                   className={`p-3 rounded-xl border-2 transition-all text-center ${
-                    isSelected ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-100 hover:border-gray-300'
-                  }`}
+                    isSelected ? 'bg-[#102C53]/5' : 'hover:border-gray-300'
+                  } ${rl?.color ? '' : isSelected ? 'border-[#102C53]' : 'border-gray-100'}`}
+                  style={rl?.color ? { borderColor: rl.color, borderWidth: isSelected ? 3 : 2 } : undefined}
                 >
-                  <p className="text-xs font-bold text-gray-900 font-manrope">Rack {rack}</p>
-                  <p className="text-[10px] text-gray-400 font-manrope">{count} vials</p>
+                  <p className="text-xs font-bold text-gray-900 font-manrope flex items-center justify-center gap-1">
+                    {rl?.color && <span className="w-2.5 h-2.5 rounded-full border border-gray-300 shrink-0" style={{ backgroundColor: rl.color }} />}
+                    Rack {rack}
+                  </p>
+                  {rl?.label && <p className="text-[9px] text-gray-500 font-manrope">{rl.label}</p>}
+                  <p className="text-[10px] text-gray-400 font-manrope">{count} vials{hits > 0 ? ` · ${hits} found` : ''}</p>
                   <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5">
                     <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(100, (count / (totalBoxes * slotsPerBox)) * 100)}%` }} />
                   </div>
@@ -162,16 +250,17 @@ export default function CryoPage() {
             {Array.from({ length: totalBoxes }, (_, i) => i + 1).map(box => {
               const boxCount = cryoVials.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === box).length;
               const isSelected = selectedBox === box;
+              const hits = matches.filter(v => v.storageUnitId === selectedUnitId && v.rack === selectedRack && v.box === box).length;
               return (
                 <button
                   key={box}
                   onClick={() => { setSelectedBox(box); setSelectedVial(null); }}
                   className={`flex-1 min-w-[40px] p-2 rounded-lg border-2 text-center transition-all ${
-                    isSelected ? 'border-cyan-500 bg-cyan-50' : 'border-gray-100 hover:border-gray-300'
+                    isSelected ? 'border-cyan-500 bg-cyan-50' : hits > 0 ? 'border-amber-400 bg-amber-50' : 'border-gray-100 hover:border-gray-300'
                   }`}
                 >
                   <p className="text-xs font-bold font-manrope">{box}</p>
-                  <p className="text-[9px] text-gray-400">{boxCount}/{slotsPerBox}</p>
+                  <p className="text-[9px] text-gray-400">{boxCount}/{slotsPerBox}{hits > 0 ? ` · ${hits}` : ''}</p>
                 </button>
               );
             })}
@@ -212,6 +301,7 @@ export default function CryoPage() {
                           className={`w-full h-full rounded-full flex items-center justify-center text-white font-bold transition-all
                             ${getCellLineColor(vial.cellLine)}
                             ${isSelected ? 'ring-2 ring-offset-1 ring-[#102C53] scale-110' : 'hover:scale-105'}
+                            ${findActive ? (isMatch(vial) ? 'ring-2 ring-offset-1 ring-amber-500' : 'opacity-25') : ''}
                           `}
                           style={{ fontSize: isLarge ? '6px' : '8px' }}
                           title={`${vial.cellLine} P${vial.passage}`}
@@ -274,7 +364,11 @@ export default function CryoPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Position</span>
-                  <span className="text-gray-900 font-medium">R{selectedVialData.rack} B{selectedVialData.box} {ROWS[selectedVialData.row]}{selectedVialData.col + 1}</span>
+                  <span className="text-gray-900 font-medium flex items-center gap-1.5">
+                    {(() => { const rl = rackLabel(selectedVialData.rack); return rl?.color
+                      ? <span className="w-2.5 h-2.5 rounded-full border border-gray-300" style={{ backgroundColor: rl.color }} title={rl.label} /> : null; })()}
+                    R{selectedVialData.rack} B{selectedVialData.box} {ROWS[selectedVialData.row]}{selectedVialData.col + 1}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Stored</span>
