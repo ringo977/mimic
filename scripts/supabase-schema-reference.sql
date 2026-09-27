@@ -39,7 +39,10 @@
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
 --        booking managers, certification enforced, stock RPC v2 — LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
---      leaving "Public bucket" OFF (files are served via signed URLs)
+--      leaving "Public bucket" OFF (files are served via signed URLs).
+--      Do NOT apply any dashboard policy template to it: the bucket
+--      policies come from the tighten script. If a stray "…_all TO public"
+--      policy appears, run supabase-2026-09-storage-cleanup.sql
 --  13. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
 --  13b. Bootstrap the first admin row in lab_users (SQL template at the end
