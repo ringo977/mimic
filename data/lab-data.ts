@@ -525,7 +525,7 @@ export interface LogEntry {
 export interface Manual {
   id: string;
   title: string;
-  category: 'protocol' | 'manual' | 'sds';
+  category: 'protocol' | 'manual' | 'sds' | 'general';
   instrument?: string;
   description: string;
   lastUpdated: string;

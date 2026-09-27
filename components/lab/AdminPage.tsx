@@ -1755,8 +1755,8 @@ function ManualsTab() {
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Manual | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const categories: Manual['category'][] = ['protocol', 'manual', 'sds'];
-  const catLabels: Record<string, string> = { protocol: 'Protocol', manual: 'Manual', sds: 'Safety Data Sheet' };
+  const categories: Manual['category'][] = ['protocol', 'manual', 'sds', 'general'];
+  const catLabels: Record<string, string> = { protocol: 'Protocol', manual: 'Manual', sds: 'Safety Data Sheet', general: 'Lab Document' };
   const empty = (): Manual => ({ id: generateId(), title: '', category: 'protocol', description: '', lastUpdated: todayStr(), uploadedBy: '' });
   const [form, setForm] = useState<Manual>(empty());
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1814,7 +1814,7 @@ function ManualsTab() {
     parseRow: (rec, rowNum) => {
       if (!rec['Title']) return { skip: `Row ${rowNum}: missing title` };
       const catRaw = rec['Category'].toLowerCase();
-      const category = (['protocol', 'manual', 'sds'] as Manual['category'][]).includes(catRaw as Manual['category']) ? catRaw as Manual['category'] : 'protocol';
+      const category = categories.includes(catRaw as Manual['category']) ? catRaw as Manual['category'] : 'protocol';
       const item: Manual = {
         id: generateId(), title: rec['Title'], category, description: rec['Description'],
         instrument: rec['Instrument'] || undefined,
@@ -1848,7 +1848,7 @@ function ManualsTab() {
           {sortedManuals.map(m => (
             <tr key={m.id} className="hover:bg-gray-50">
               <td className="px-3 py-2 font-medium text-gray-900 max-w-[250px] truncate">{m.title}</td>
-              <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${m.category === 'protocol' ? 'bg-blue-50 text-blue-700' : m.category === 'manual' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{catLabels[m.category]}</span></td>
+              <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${m.category === 'protocol' ? 'bg-blue-50 text-blue-700' : m.category === 'manual' ? 'bg-emerald-50 text-emerald-700' : m.category === 'sds' ? 'bg-amber-50 text-amber-700' : 'bg-violet-50 text-violet-700'}`}>{catLabels[m.category]}</span></td>
               <td className="px-3 py-2 text-gray-500">{m.instrument || '—'}</td>
               <td className="px-3 py-2">{m.fileUrl ? <span className="px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-[10px] font-medium">&#10003; {m.fileName}</span> : <span className="text-gray-300 text-[10px]">—</span>}</td>
               <td className="px-3 py-2 text-gray-500">{m.lastUpdated}</td><td className="px-3 py-2 text-gray-500">{m.uploadedBy}</td>

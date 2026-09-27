@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, FileText, BookOpen, AlertTriangle, Download } from 'lucide-react';
+import { Search, FileText, BookOpen, AlertTriangle, Download, Info } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { formatDate } from '@/data/lab-data';
 
@@ -9,6 +9,7 @@ const categoryLabels = {
   protocol: { label: 'Protocols', icon: BookOpen, color: 'bg-blue-100 text-blue-700' },
   manual: { label: 'Manuals', icon: FileText, color: 'bg-emerald-100 text-emerald-700' },
   sds: { label: 'Safety Data Sheets', icon: AlertTriangle, color: 'bg-amber-100 text-amber-700' },
+  general: { label: 'Lab Documents', icon: Info, color: 'bg-violet-100 text-violet-700' },
 };
 
 // The manuals bucket is private: file_url holds a storage path that must be
@@ -29,7 +30,7 @@ export async function openManualFile(fileUrl: string) {
 export default function ManualsPage() {
   const { manuals: allManuals } = useLabContext();
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'protocol' | 'manual' | 'sds'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | keyof typeof categoryLabels>('all');
 
   const filtered = useMemo(() => {
     return allManuals.filter(m => {
@@ -44,6 +45,7 @@ export default function ManualsPage() {
     protocol: allManuals.filter(m => m.category === 'protocol').length,
     manual: allManuals.filter(m => m.category === 'manual').length,
     sds: allManuals.filter(m => m.category === 'sds').length,
+    general: allManuals.filter(m => m.category === 'general').length,
   };
 
   return (
@@ -51,7 +53,7 @@ export default function ManualsPage() {
       <h1 className="text-lg font-bold text-gray-900 font-manrope">Manuals, Protocols & SDS</h1>
 
       {/* Category Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {(Object.entries(categoryLabels) as [keyof typeof categoryLabels, typeof categoryLabels[keyof typeof categoryLabels]][]).map(([key, val]) => {
           const Icon = val.icon;
           return (
@@ -83,7 +85,7 @@ export default function ManualsPage() {
 
       {/* Category filter pills */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {(['all', 'protocol', 'manual', 'sds'] as const).map(cat => (
+        {(['all', 'protocol', 'manual', 'sds', 'general'] as const).map(cat => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
