@@ -33,6 +33,7 @@
 --      then supabase-2026-09-booking-policy.sql  (booking_policy + trigger)
 --      then supabase-2026-09-fields.sql           (room codes, lot/owner/notes…)
 --      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
+--      then supabase-2026-09-door.sql             (door side, double-door units)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
@@ -173,7 +174,10 @@ CREATE TABLE IF NOT EXISTS storage_boxes (
   label            text NOT NULL,
   grid_rows        integer NOT NULL DEFAULT 1,
   grid_cols        integer NOT NULL DEFAULT 1,
-  notes            text
+  notes            text,
+  door             text,      -- 'left' | 'right' in double-door units (2026-09-door.sql)
+  CONSTRAINT storage_boxes_door_check
+    CHECK (door IN ('left', 'right'))
 );
 
 CREATE TABLE IF NOT EXISTS reagents (
@@ -194,6 +198,9 @@ CREATE TABLE IF NOT EXISTS reagents (
   owner            text,   -- who bought it (free text: may be an alumnus)
   notes            text,
   shelf            integer,   -- 1 = top shelf; NULL → inherits storage_boxes.shelf via box_id
+  door             text,      -- 'left' | 'right' in double-door units; NULL → inherits the box's
+  CONSTRAINT reagents_door_check
+    CHECK (door IN ('left', 'right')),   -- 2026-09-door.sql
   CONSTRAINT reagents_stock_check
     CHECK ((current_stock >= (0)::numeric))   -- 2026-09-tighten.sql
 );

@@ -454,11 +454,15 @@ export interface StorageUnit {
  * in a rack (dewars) or loose on a shelf (−80 freezers, fridges), and each one
  * has its own grid — 5×5 cryo boxes, 9×9 freezer boxes, 8×12 probe boxes.
  */
+export type DoorSide = 'left' | 'right';
+export const doorSideLabel: Record<DoorSide, string> = { left: 'Left', right: 'Right' };
+
 export interface StorageBox {
   id: string;
   storageUnitId: string;
   rack?: number;      // undefined = the unit has no racks
   shelf?: number;
+  door?: DoorSide;    // only meaningful in double-door units
   number: number;     // position within the rack / shelf
   label: string;
   gridRows: number;
@@ -585,6 +589,7 @@ export interface Reagent {
   storageUnitId?: string;   // links to StorageUnit
   boxId?: string;           // links to StorageBox (box inside the unit)
   shelf?: number;           // 1 = top shelf; falls back to the box's shelf
+  door?: DoorSide;          // left / right in double-door units; falls back to the box's door
   supplier: string;
   catalogNumber: string;
   alertThreshold: number;
@@ -598,6 +603,13 @@ export function reagentShelf(r: Reagent, boxes: StorageBox[]): number | undefine
   if (r.shelf != null) return r.shelf;
   const b = r.boxId ? boxes.find(x => x.id === r.boxId) : undefined;
   return b?.shelf;
+}
+
+/** Door side of a reagent: its own value, else the side of its box. */
+export function reagentDoor(r: Reagent, boxes: StorageBox[]): DoorSide | undefined {
+  if (r.door) return r.door;
+  const b = r.boxId ? boxes.find(x => x.id === r.boxId) : undefined;
+  return b?.door;
 }
 
 /** Free-text sub-location left in `location` after the unit name
@@ -616,10 +628,11 @@ export function reagentPlaceLabel(r: Reagent, units: StorageUnit[], boxes: Stora
   if (!unit) return r.location;
   const box = r.boxId ? boxes.find(b => b.id === r.boxId) : undefined;
   const shelf = reagentShelf(r, boxes);
+  const door = (unit.numDoors || 1) > 1 ? reagentDoor(r, boxes) : undefined;
   const sub = box ? '' : reagentSublocation(r, unit);
   // don't repeat a shelf that is already spelled out in the free text
   const subClean = shelf != null ? sub.replace(/shelf\s*#?\s*\d+/i, '').replace(/^\s*[·,]\s*|\s*[·,]\s*$/g, '').trim() : sub;
-  return [unit.name, shelf != null ? `Shelf ${shelf}` : '', box?.label || '', subClean].filter(Boolean).join(' · ');
+  return [unit.name, door ? doorSideLabel[door] : '', shelf != null ? `Shelf ${shelf}` : '', box?.label || '', subClean].filter(Boolean).join(' · ');
 }
 
 // Macro-categories group sub-categories for admin panel navigation

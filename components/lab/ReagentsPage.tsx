@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { storageUnitTypes, reagentPlaceLabel, reagentShelf, isShelfBased, boxesOfUnit, Reagent, StorageUnit } from '@/data/lab-data';
+import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, Reagent, StorageUnit, DoorSide } from '@/data/lab-data';
 
 export default function ReagentsPage() {
   const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits, storageBoxes } = useLabContext();
@@ -292,8 +292,11 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
   const boxes = unit ? boxesOfUnit(storageBoxes, unit.id) : [];
   const maxShelfUsed = Math.max(0, ...items.map(r => reagentShelf(r, storageBoxes) || 0), ...boxes.map(b => b.shelf || 0));
   const shelves = Array.from({ length: Math.max(shelfCount, maxShelfUsed) }, (_, i) => i + 1);
-  const onShelf = (n: number | undefined) => items.filter(r => reagentShelf(r, storageBoxes) === n);
-  const boxesOnShelf = (n: number | undefined) => boxes.filter(b => (b.shelf ?? undefined) === n);
+  const twoDoors = !!unit && isShelfBased(unit.type) && (unit.numDoors || 1) > 1;
+  const onShelf = (n: number | undefined, door?: DoorSide | null) =>
+    items.filter(r => reagentShelf(r, storageBoxes) === n && (door === undefined || (reagentDoor(r, storageBoxes) ?? null) === door));
+  const boxesOnShelf = (n: number | undefined, door?: DoorSide | null) =>
+    boxes.filter(b => (b.shelf ?? undefined) === n && (door === undefined || (b.door ?? null) === door));
 
   const Row = ({ r }: { r: Reagent }) => {
     const low = r.currentStock <= r.alertThreshold;
@@ -377,10 +380,28 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
         <p className="text-[11px] text-gray-400 font-manrope">
           {unit.temperature}{unit.location ? ` · ${unit.location}` : ''}
           {shelfCount > 0 ? ` · ${shelfCount} shelves, 1 = top` : isShelfBased(unit.type) ? ' · shelf count not set (Admin → Storage)' : ''}
+          {twoDoors ? ' · double door' : ''}
         </p>
       )}
 
-      {shelves.map(n => <Group key={n} title={`Shelf ${n}`} list={onShelf(n)} boxesHere={boxesOnShelf(n)} />)}
+      {twoDoors && (
+        <div className="grid grid-cols-2 gap-3 text-center text-[10px] font-semibold text-gray-400 font-manrope uppercase tracking-wide">
+          <span>{doorSideLabel.left} door</span><span>{doorSideLabel.right} door</span>
+        </div>
+      )}
+      {shelves.map(n => twoDoors ? (
+        <div key={n} className="space-y-1">
+          <div className="grid grid-cols-2 gap-3">
+            <Group title={`Shelf ${n} · ${doorSideLabel.left}`} list={onShelf(n, 'left')} boxesHere={boxesOnShelf(n, 'left')} />
+            <Group title={`Shelf ${n} · ${doorSideLabel.right}`} list={onShelf(n, 'right')} boxesHere={boxesOnShelf(n, 'right')} />
+          </div>
+          {(onShelf(n, null).length > 0 || boxesOnShelf(n, null).length > 0) && (
+            <Group title={`Shelf ${n} · door not specified`} list={onShelf(n, null)} boxesHere={boxesOnShelf(n, null)} />
+          )}
+        </div>
+      ) : (
+        <Group key={n} title={`Shelf ${n}`} list={onShelf(n)} boxesHere={boxesOnShelf(n)} />
+      ))}
       {(onShelf(undefined).length > 0 || boxesOnShelf(undefined).length > 0) && (
         <Group title={shelves.length ? 'No shelf specified' : 'Contents'} list={onShelf(undefined)} boxesHere={boxesOnShelf(undefined)} />
       )}
