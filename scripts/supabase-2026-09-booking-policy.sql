@@ -2,6 +2,10 @@
 -- MiMic Lab Manager — per-instrument booking rules (Sep 2026)
 -- Run in Supabase → SQL Editor. Idempotent: safe to re-run.
 --
+-- NOTE (28 Sep 2026): enforce_booking_policy() is redefined by
+-- supabase-2026-09-fix-assessment.sql (certification check, quota lock,
+-- is_booking_manager()). Run that script after this one.
+--
 -- Two things happen here.
 --
 -- 1. The PDMS hood was imported from Elemental as four instruments

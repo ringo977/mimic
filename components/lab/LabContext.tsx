@@ -17,7 +17,7 @@ import {
   fetchCertifications, upsertCertification, deleteCertification,
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
-  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock,
+  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock,
   fetchBookings, upsertBooking, deleteBooking,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
   fetchWishlist, upsertWishlistItem,
@@ -281,37 +281,40 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // two people adjust the same reagent at once). Optimistic local update
   // first, then reconcile with the value returned by the server. Falls back
   // to the legacy full-row upsert if the RPC is not installed.
-  const changeReagentStock = useCallback((reagentId: string, delta: number, label: string) => {
-    setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.min(r.maxStock, Math.max(0, r.currentStock + delta)) } : r));
-    (async () => {
-      const newStock = await adjustReagentStock(reagentId, delta);
-      if (newStock !== null) {
-        setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: newStock } : r));
-      } else {
-        setReagents(prev => {
-          const r = prev.find(x => x.id === reagentId);
-          if (r) track(upsertReagent(r), label);
-          return prev;
-        });
-      }
-    })();
-  }, [track]);
+  // Optimistic update, then the server decides. If it refuses (role, stock
+  // below zero, connection) the local value is put back to what the server
+  // holds — never written over from the browser.
+  const changeReagentStock = useCallback(async (reagentId: string, delta: number, label: string): Promise<boolean> => {
+    setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.max(0, r.currentStock + delta) } : r));
+    const res = await adjustReagentStock(reagentId, delta);
+    if ('stock' in res) {
+      setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: res.stock } : r));
+      return true;
+    }
+    const serverStock = await fetchReagentStock(reagentId);
+    if (serverStock !== null) setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: serverStock } : r));
+    setSyncError(`${label}: refused by the server (${res.error}). The stock shown is the server's value.`);
+    return false;
+  }, []);
 
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
     const rg = reagents.find(r => r.id === reagentId);
-    // Stock cannot go below zero (server RPC clamps): log what was actually
-    // withdrawn, not what was requested.
+    // Never ask for more than there is (the server would refuse): log what
+    // was actually withdrawn, not what was requested — and only once the
+    // server has accepted it.
     const actual = rg ? Math.min(amount, Math.max(0, rg.currentStock)) : amount;
     if (actual <= 0) return;
-    changeReagentStock(reagentId, -actual, 'Reagent withdrawal');
     const clamped = actual !== amount ? ` (requested ${amount}, only ${actual} in stock)` : '';
-    addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${actual} ${rg?.unit || ''}${clamped} - ${purpose} (${project})` });
+    changeReagentStock(reagentId, -actual, 'Reagent withdrawal').then(ok => {
+      if (ok) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${actual} ${rg?.unit || ''}${clamped} - ${purpose} (${project})` });
+    });
   }, [user, reagents, addLogEntry, changeReagentStock]);
 
   const addReagentStock = useCallback((reagentId: string, amount: number) => {
-    changeReagentStock(reagentId, amount, 'Reagent restock');
     const rg = reagents.find(r => r.id === reagentId);
-    addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${rg?.name || reagentId}`, category: 'reagent', details: `+${amount} ${rg?.unit || ''}` });
+    changeReagentStock(reagentId, amount, 'Reagent restock').then(ok => {
+      if (ok) addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${rg?.name || reagentId}`, category: 'reagent', details: `+${amount} ${rg?.unit || ''}` });
+    });
   }, [user, reagents, addLogEntry, changeReagentStock]);
 
   // ---- Cryo ----

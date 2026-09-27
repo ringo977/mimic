@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { fetchAllRows } from './supabase-data';
 import JSZip from 'jszip';
 
 // Import order: lab_users LAST — if anything goes wrong midway, the row
@@ -28,9 +29,11 @@ export async function exportDatabaseJSON(): Promise<string> {
   const dump: Record<string, unknown[]> = {};
   const failed: string[] = [];
   for (const table of TABLES) {
-    const { data, error } = await supabase.from(table).select('*');
-    if (error) { failed.push(`${table} (${error.message})`); continue; }
-    dump[table] = data || [];
+    // Paged: a single select() stops silently at 1000 rows, and a truncated
+    // backup restored later would delete every row beyond that as "stale".
+    const data = await fetchAllRows<Record<string, unknown>>(table, pkOf(table));
+    if (data === null) { failed.push(table); continue; }
+    dump[table] = data;
   }
   // An incomplete backup silently written to disk is worse than no backup.
   if (failed.length > 0) {
@@ -166,9 +169,9 @@ export async function importDatabaseJSON(json: string): Promise<{
     // upsert for this table succeeded (never wipe more than we restored).
     if (!tableFailed && DELETE_STALE.has(table)) {
       const keep = new Set(rows.map(r => (r as Record<string, unknown>)[pk]).filter(v => typeof v === 'string') as string[]);
-      const { data: existing, error: selErr } = await supabase.from(table).select(pk);
-      if (selErr || !existing) {
-        errors.push(`Restored ${table}, but could not check for stale rows: ${selErr?.message ?? 'unknown error'}`);
+      const existing = await fetchAllRows<Record<string, unknown>>(table, pk);
+      if (!existing) {
+        errors.push(`Restored ${table}, but could not check for stale rows (read failed)`);
       } else {
         const stale = existing.map(r => (r as unknown as Record<string, string>)[pk]).filter(id => typeof id === 'string' && !keep.has(id));
         for (let i = 0; i < stale.length; i += 200) {

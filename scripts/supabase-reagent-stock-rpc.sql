@@ -1,6 +1,11 @@
 -- ============================================================
 -- MiMic Lab Manager — Atomic reagent stock adjustment
 -- ============================================================
+-- SUPERSEDED (28 Sep 2026) by the version in
+-- supabase-2026-09-fix-assessment.sql: SECURITY DEFINER, role check,
+-- rejects a withdrawal below zero instead of clamping. Kept only because
+-- the recovery order runs this file first; the later script overwrites it.
+-- ============================================================
 -- Run this in: Supabase Dashboard → SQL Editor. Idempotent.
 --
 -- Why: the app used to read the stock, compute the new value in the

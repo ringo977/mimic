@@ -9,11 +9,22 @@ import {
 // ============================================================
 // Returns null on error (unreachable DB, RLS denial, …) so callers can
 // distinguish "fetch failed" from "table is legitimately empty".
-async function fetchAll<T>(table: string, order = 'id'): Promise<T[] | null> {
-  const { data, error } = await supabase.from(table).select('*').order(order);
-  if (error) { console.error(`Failed to fetch ${table}:`, error.message); return null; }
-  return data || [];
+// PostgREST returns at most 1000 rows per request (Supabase default
+// max-rows) and says nothing when it truncates. Reagents and vials are
+// already in the hundreds, so every whole-table read pages through in
+// chunks and only stops when a chunk comes back short.
+const PAGE = 1000;
+export async function fetchAllRows<T>(table: string, order = 'id'): Promise<T[] | null> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from(table).select('*').order(order).range(from, from + PAGE - 1);
+    if (error) { console.error(`Failed to fetch ${table}:`, error.message); return null; }
+    rows.push(...((data || []) as T[]));
+    if (!data || data.length < PAGE) break;
+  }
+  return rows;
 }
+const fetchAll = fetchAllRows;
 
 async function upsertRow<T>(table: string, row: T): Promise<T | null> {
   const { data, error } = await supabase.from(table).upsert(row).select().single();
@@ -261,16 +272,23 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
 
 export async function deleteReagent(id: string) { return deleteRow('reagents', id); }
 
-// Atomic server-side stock adjustment (see scripts/supabase-reagent-stock-rpc.sql).
-// Returns the new stock, or null if the RPC is unavailable/failed — callers
-// should then fall back to the legacy full-row upsert.
-export async function adjustReagentStock(reagentId: string, delta: number): Promise<number | null> {
+// Atomic server-side stock adjustment (scripts/supabase-2026-09-fix-assessment.sql).
+// The RPC checks the caller's role and REJECTS a withdrawal below zero, so a
+// failure is an answer, not a transport problem: callers must not "fall back"
+// to writing the row themselves.
+export async function adjustReagentStock(reagentId: string, delta: number): Promise<{ stock: number } | { error: string }> {
   const { data, error } = await supabase.rpc('adjust_reagent_stock', { p_reagent_id: reagentId, p_delta: delta });
-  if (error || data === null || data === undefined) {
-    if (error) console.warn('adjust_reagent_stock RPC failed:', error.message);
-    return null;
-  }
-  return Number(data);
+  if (error) return { error: error.message };
+  if (data === null || data === undefined) return { error: 'no stock returned' };
+  return { stock: Number(data) };
+}
+
+// Current stock of one reagent, straight from the server (used to undo an
+// optimistic update the server refused).
+export async function fetchReagentStock(reagentId: string): Promise<number | null> {
+  const { data, error } = await supabase.from('reagents').select('current_stock').eq('id', reagentId).maybeSingle();
+  if (error || !data) return null;
+  return Number(data.current_stock);
 }
 
 // ============================================================

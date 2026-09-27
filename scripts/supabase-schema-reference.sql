@@ -35,7 +35,9 @@
 --      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
 --      then supabase-2026-09-door.sql             (door side, double-door units)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
---        approval triggers, CHECK constraints — ALWAYS LAST)
+--        approval triggers, CHECK constraints)
+--      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
+--        booking managers, certification enforced, stock RPC v2 — LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
 --      leaving "Public bucket" OFF (files are served via signed URLs)
 --  13. Recreate auth users (Authentication → Add user) and update
