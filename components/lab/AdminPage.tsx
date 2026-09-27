@@ -339,12 +339,14 @@ function UsersTab() {
       <p><strong>Role</strong>: one of {roles.join(', ')}. <strong>Affiliation</strong>: {affiliations.join(', ')}.</p>
       <p><strong>Admin</strong>: Yes/No. <strong>Start Date</strong>: YYYY-MM-DD. <strong>Supervisor</strong>: name or email of an existing member (PhD or above).</p>
       <p><strong>Certifications/Projects</strong>: names separated by &ldquo;;&rdquo; (must already exist).</p>
+      <p><strong>Existing members</strong> (same email) are not duplicated: certifications and projects are merged, empty profile fields filled in; name, role, affiliation and admin flag stay unchanged.</p>
     </>,
-    onAdd: addUser,
+    onAdd: (u) => users.some(x => x.id === u.id) ? updateUser(u) : addUser(u),
     parseRow: (rec, rowNum) => {
       if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
       if (!rec['Email']) return { skip: `Row ${rowNum} (${rec['Name']}): missing email` };
       const notes: string[] = [];
+      const existing = users.find(x => x.email.toLowerCase() === rec['Email'].toLowerCase());
       const roleRaw = rec['Role'].toLowerCase().replace(/\s+/g, '_');
       const role = (roles as string[]).includes(roleRaw) ? roleRaw as UserRole : 'guest';
       if (rec['Role'] && role !== roleRaw) notes.push(`role "${rec['Role']}" not recognized → set to guest`);
@@ -374,6 +376,21 @@ function UsersTab() {
         certifications: resolve(rec['Certifications'], certifications),
         projects: resolve(rec['Projects'], projects),
       };
+      if (existing) {
+        // Merge into the existing account instead of hitting the UNIQUE(email)
+        // constraint: identity/role fields are kept, lists are unioned.
+        const merged: LabUser = {
+          ...existing,
+          abbreviation: existing.abbreviation || item.abbreviation,
+          personCode: existing.personCode || item.personCode,
+          startDate: existing.startDate || item.startDate,
+          supervisorId: existing.supervisorId || item.supervisorId,
+          certifications: Array.from(new Set([...existing.certifications, ...item.certifications])),
+          projects: Array.from(new Set([...existing.projects, ...item.projects])),
+        };
+        notes.unshift('already a member → certifications/projects merged, other fields unchanged');
+        return { item: merged, note: `Row ${rowNum} (${merged.name}): ${notes.join('; ')}` };
+      }
       return notes.length ? { item, note: `Row ${rowNum} (${item.name}): ${notes.join('; ')}` } : { item };
     },
   };
