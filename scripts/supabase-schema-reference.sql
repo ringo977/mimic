@@ -17,14 +17,16 @@
 --   7. Run supabase-site-analytics.sql       (page_views + site_stats)
 --        then supabase-page-views-retention.sql (retention 13 months,
 --        ts server-side, select admin-only)
---   8. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
+--   8. Run supabase-2026-09-roles.sql        (lab_users role/affiliation CHECK
+--        aligned with UserRole — the live DB had an older, narrower list)
+--   9. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
---   9. Create the 'manuals' storage bucket (Storage → New bucket),
+--  10. Create the 'manuals' storage bucket (Storage → New bucket),
 --      leaving "Public bucket" OFF (files are served via signed URLs)
---  10. Recreate auth users (Authentication → Add user) and update
+--  11. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
---  11. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
---  12. Dashboard → Authentication: sign-ups OFF, confirm email ON,
+--  12. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--  13. Dashboard → Authentication: sign-ups OFF, confirm email ON,
 --      secure email change ON, min password length 8 + requirements
 -- ============================================================
 
