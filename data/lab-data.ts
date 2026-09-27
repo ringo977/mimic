@@ -283,6 +283,95 @@ export interface Instrument {
   maintenancePeriodMonths?: number;
   lastMaintenanceDate?: string;
   nextMaintenanceDate?: string;
+  bookingPolicy?: BookingPolicy;
+}
+
+/**
+ * Per-instrument booking rules, on top of the lab-wide timeline.
+ * The PDMS hood is the reason this exists: one hood, four fixed 3-hour slots,
+ * six slots per person per week, and a window on how far ahead you can book.
+ * Absent (or empty) fields mean "no rule", i.e. the free timeline.
+ */
+export interface BookingPolicy {
+  slots?: { start: number; end: number }[];  // fixed slots, decimal hours
+  maxSlotsPerWeek?: number;                  // per person, Monday–Sunday
+  maxAdvanceDays?: number;                   // how far ahead a booking can start
+  note?: string;                             // shown in the booking form
+}
+
+/** Monday of the week containing the given YYYY-MM-DD (weeks run Mon–Sun). */
+export function weekStart(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d, 12);
+  return addDaysStr(dateStr, -((dt.getDay() + 6) % 7));
+}
+
+/** Starting point offered in the admin UI: the PDMS hood's four 3-hour slots. */
+export const defaultFixedSlots = [
+  { start: 8, end: 11 }, { start: 11, end: 14 }, { start: 14, end: 17 }, { start: 17, end: 20 },
+];
+
+const hhmm = (h: number) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+export function slotLabel(s: { start: number; end: number }): string { return `${hhmm(s.start)}–${hhmm(s.end)}`; }
+
+/** Slots of an instrument that are already taken on a given date. */
+export function slotTaken(
+  bookings: Booking[], instrumentId: string, date: string,
+  slot: { start: number; end: number }, ignoreId?: string,
+): Booking | undefined {
+  return bookings.find(b => b.instrumentId === instrumentId && b.date === date && b.id !== ignoreId
+    && slot.start < b.endHour - 1e-6 && slot.end > b.startHour + 1e-6);
+}
+
+/** How many slots a person already booked on that instrument in that week. */
+export function slotsUsedInWeek(
+  bookings: Booking[], instrumentId: string, userId: string, date: string, ignoreId?: string,
+): number {
+  const from = weekStart(date), to = addDaysStr(from, 7);
+  return bookings.filter(b => b.instrumentId === instrumentId && b.userId === userId && b.id !== ignoreId
+    && b.date >= from && b.date < to).length;
+}
+
+/**
+ * Check a booking against the instrument's policy. Returns an error message,
+ * or null when the booking is allowed. Managers are expected to bypass this.
+ */
+export function validateBookingPolicy(args: {
+  instrument: Instrument | undefined;
+  bookings: Booking[];
+  userId: string;
+  date: string;
+  startHour: number;
+  endHour: number;
+  today: string;
+  ignoreId?: string;
+}): string | null {
+  const p = args.instrument?.bookingPolicy;
+  if (!p || !args.instrument) return null;
+
+  if (p.slots && p.slots.length > 0) {
+    const match = p.slots.find(s => Math.abs(s.start - args.startHour) < 1e-6 && Math.abs(s.end - args.endHour) < 1e-6);
+    if (!match) {
+      return `${args.instrument.name} is bookable only in fixed slots: ${p.slots.map(slotLabel).join(', ')}.`;
+    }
+  }
+
+  if (p.maxAdvanceDays !== undefined && p.maxAdvanceDays >= 0) {
+    const last = addDaysStr(args.today, p.maxAdvanceDays);
+    if (args.date > last) {
+      return `${args.instrument.name} can be booked up to ${p.maxAdvanceDays} days ahead (until ${last}).`;
+    }
+  }
+
+  if (p.maxSlotsPerWeek !== undefined && p.maxSlotsPerWeek > 0) {
+    const used = slotsUsedInWeek(args.bookings, args.instrument.id, args.userId, args.date, args.ignoreId);
+    if (used >= p.maxSlotsPerWeek) {
+      const from = weekStart(args.date);
+      return `Weekly limit reached: ${used} of ${p.maxSlotsPerWeek} slots already booked on ${args.instrument.name} in the week of ${from}.`;
+    }
+  }
+
+  return null;
 }
 
 export interface MaintenanceLog {

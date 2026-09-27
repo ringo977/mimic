@@ -3,7 +3,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots } from '@/data/lab-data';
+import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
+  validateBookingPolicy, slotLabel, slotTaken, slotsUsedInWeek, weekStart, addDaysStr } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
@@ -143,9 +144,25 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 
   const bookableInstruments = instruments.filter(i => !i.requiresCertification || user.certifications.includes(i.id) || i.id === instrumentId);
   const inst = instruments.find(i => i.id === (instrumentId || existing?.instrumentId));
+  // Instruments with their own rules (the PDMS hood: fixed slots, weekly quota)
+  const policy = inst?.bookingPolicy;
+  const fixedSlots = policy?.slots && policy.slots.length > 0 ? policy.slots : null;
+  const quotaUsed = policy?.maxSlotsPerWeek && inst
+    ? slotsUsedInWeek(bookings, inst.id, user.id, date, existing?.id) : 0;
+  const lastBookableDate = policy?.maxAdvanceDays !== undefined ? addDaysStr(todayStr, policy.maxAdvanceDays) : '';
   const isPastDate = date < todayStr;
   const isToday = date === todayStr;
   const endOptions = [...slots.filter(s => s > startHour + EPS), bookingSettings.openEndHour];
+
+  // Fixed-slot instruments: snap the form to a real slot as soon as one is picked
+  useEffect(() => {
+    if (!fixedSlots) return;
+    if (fixedSlots.some(s => Math.abs(s.start - startHour) < EPS && Math.abs(s.end - endHour) < EPS)) return;
+    const free = fixedSlots.find(s => !slotTaken(bookings, inst!.id, date, s, existing?.id)) || fixedSlots[0];
+    setStartHour(free.start);
+    setEndHour(free.end);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instrumentId, date, fixedSlots]);
 
   const conflict = (s: number, e: number) => bookings.some(b =>
     b.instrumentId === instrumentId && b.date === date && b.id !== existing?.id &&
@@ -159,6 +176,13 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     if (!isManager && isPastDate) { setError('Cannot book a date in the past.'); return; }
     if (!isManager && isToday && startHour < nowHour - EPS) { setError('Cannot book a time in the past.'); return; }
     if (conflict(startHour, endHour)) { setError('Time conflict with an existing booking.'); return; }
+    if (!isManager) {
+      const policyError = validateBookingPolicy({
+        instrument: inst, bookings, userId: user.id, date, startHour, endHour,
+        today: todayStr, ignoreId: existing?.id,
+      });
+      if (policyError) { setError(policyError); return; }
+    }
     setBusy(true);
     const fresh = await fetchBookingsForSlot(instrumentId, date);
     if (fresh === null) {
@@ -294,11 +318,51 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
               type="date"
               value={date}
               min={todayStr}
+              max={!isManager && lastBookableDate ? lastBookableDate : undefined}
               onChange={e => setDate(e.target.value)}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
             />
           </div>
 
+          {fixedSlots ? (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Slot</label>
+              <div className="grid grid-cols-2 gap-2">
+                {fixedSlots.map(s => {
+                  const taken = slotTaken(bookings, inst!.id, date, s, existing?.id);
+                  const selected = Math.abs(s.start - startHour) < EPS && Math.abs(s.end - endHour) < EPS;
+                  return (
+                    <button
+                      key={`${s.start}-${s.end}`}
+                      type="button"
+                      disabled={Boolean(taken) && !isManager}
+                      onClick={() => { setStartHour(s.start); setEndHour(s.end); setError(''); }}
+                      className={`px-3 py-2.5 rounded-xl text-sm font-manrope border-2 transition-all ${
+                        selected ? 'border-[#102C53] bg-[#102C53]/5 font-semibold text-gray-900'
+                          : taken ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                      }`}
+                      title={taken ? `Taken — ${taken.userName}` : undefined}
+                    >
+                      {slotLabel(s)}
+                      {taken && <span className="block text-[10px] font-normal truncate">{taken.userName}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 space-y-1">
+                {policy?.maxSlotsPerWeek && (
+                  <p className={`text-[11px] font-manrope ${quotaUsed >= policy.maxSlotsPerWeek ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                    {quotaUsed} of {policy.maxSlotsPerWeek} slots used in the week of {formatDate(weekStart(date))}.
+                  </p>
+                )}
+                {lastBookableDate && (
+                  <p className="text-[11px] text-gray-400 font-manrope">Bookable up to {formatDate(lastBookableDate)} ({policy?.maxAdvanceDays} days ahead).</p>
+                )}
+                {policy?.note && <p className="text-[11px] text-gray-500 font-manrope">{policy.note}</p>}
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start</label>
@@ -321,8 +385,9 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
               </select>
             </div>
           </div>
+          )}
 
-          {!isWorkingHour(startHour, bookingSettings) && (
+          {!fixedSlots && !isWorkingHour(startHour, bookingSettings) && (
             <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
               <Moon size={13} /> Outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
             </div>
@@ -482,6 +547,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
       // Don't block on past time when editing an existing booking: it may already
       // be in the past (earlier today) and the user still wants to adjust it.
       if (conflictFor(b.instrumentId, b.date, d.start, d.end, b.id)) return;
+      // Fixed-slot instruments cannot be dragged to an arbitrary time
+      const pol = instruments.find(i => i.id === b.instrumentId)?.bookingPolicy;
+      if (pol?.slots?.length && !pol.slots.some(s => Math.abs(s.start - d.start) < EPS && Math.abs(s.end - d.end) < EPS)) return;
       updateBooking({ ...b, startHour: d.start, endHour: d.end });
     };
     window.addEventListener('pointermove', onMove);

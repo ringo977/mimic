@@ -12,7 +12,7 @@ import UserDetailModal from './UserDetailModal';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
-  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette,
+  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
@@ -946,6 +946,22 @@ function InstrumentsTab() {
     const loc = locations.find(l => l.id === locId);
     setForm(f => ({ ...f, locationId: locId || undefined, location: loc?.name || f.location }));
   };
+  /** Patch the policy, dropping it entirely when nothing is left in it. */
+  const setPolicy = (patch: Partial<NonNullable<Instrument['bookingPolicy']>>) => {
+    setForm(f => {
+      const next = { ...f.bookingPolicy, ...patch };
+      const empty = !next.slots?.length && next.maxSlotsPerWeek === undefined
+        && next.maxAdvanceDays === undefined && !next.note;
+      return { ...f, bookingPolicy: empty ? undefined : next };
+    });
+  };
+  const setSlot = (idx: number, slot: { start: number; end: number } | null) => {
+    setForm(f => {
+      const slots = [...(f.bookingPolicy?.slots || [])];
+      if (slot === null) slots.splice(idx, 1); else slots[idx] = slot;
+      return { ...f, bookingPolicy: { ...f.bookingPolicy, slots } };
+    });
+  };
   const save = () => { if (!form.name) return; editing ? updateInstrument(form) : addInstrument(form); setShowForm(false); };
   const instAcc = useMemo(() => ({ name: (i: Instrument) => i.name, category: (i: Instrument) => i.category, location: (i: Instrument) => { const l = locations.find(x => x.id === i.locationId); return l?.name || i.location; }, cert: (i: Instrument) => i.requiresCertification ? 1 : 0, maintenance: (i: Instrument) => i.nextMaintenanceDate || 'z' }), [locations]);
   const { sorted: sortedInst, sortKey: iSortKey, sortAsc: iSortAsc, toggle: iToggle } = useSort(instruments, 'name', instAcc);
@@ -1128,6 +1144,62 @@ function InstrumentsTab() {
               <Field label="Last Maintenance"><input type="date" value={form.lastMaintenanceDate || ''} onChange={e => setForm({ ...form, lastMaintenanceDate: e.target.value || undefined })} className={inputCls} /></Field>
               <Field label="Next Expected"><input type="date" value={form.nextMaintenanceDate || ''} onChange={e => setForm({ ...form, nextMaintenanceDate: e.target.value || undefined })} className={inputCls} /></Field>
             </div>
+          </div>
+
+          {/* Booking rules (PDMS hood: fixed slots + weekly quota) */}
+          <div className="border-t border-gray-100 pt-3 mt-1">
+            <p className="text-xs font-semibold text-gray-500 font-manrope uppercase tracking-wider mb-2">Booking Rules</p>
+            <label className="flex items-center gap-2 cursor-pointer mb-2">
+              <input
+                type="checkbox"
+                checked={Boolean(form.bookingPolicy?.slots?.length)}
+                onChange={e => setForm({
+                  ...form,
+                  bookingPolicy: e.target.checked
+                    ? { ...form.bookingPolicy, slots: form.bookingPolicy?.slots?.length ? form.bookingPolicy.slots : defaultFixedSlots }
+                    : { ...form.bookingPolicy, slots: undefined },
+                })}
+                className="w-4 h-4 rounded border-gray-300 text-[#102C53]"
+              />
+              <span className="text-sm font-manrope text-gray-700">Bookable only in fixed slots</span>
+            </label>
+
+            {Boolean(form.bookingPolicy?.slots?.length) && (
+              <div className="space-y-1.5 mb-2 pl-6">
+                {(form.bookingPolicy?.slots || []).map((s, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input type="number" min={0} max={24} step={0.5} value={s.start}
+                      onChange={e => setSlot(idx, { ...s, start: Number(e.target.value) })}
+                      className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope" />
+                    <span className="text-gray-400 text-xs">→</span>
+                    <input type="number" min={0} max={24} step={0.5} value={s.end}
+                      onChange={e => setSlot(idx, { ...s, end: Number(e.target.value) })}
+                      className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope" />
+                    <span className="text-[11px] text-gray-400 font-manrope flex-1">{slotLabel(s)}</span>
+                    <button type="button" onClick={() => setSlot(idx, null)} className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={12} /></button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setSlot((form.bookingPolicy?.slots || []).length, { start: 8, end: 11 })}
+                  className="text-[11px] text-[#102C53] font-medium font-manrope hover:underline">+ add slot</button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Max slots / week per person">
+                <input type="number" min={0} value={form.bookingPolicy?.maxSlotsPerWeek ?? ''} placeholder="no limit"
+                  onChange={e => setPolicy({ maxSlotsPerWeek: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className={inputCls} />
+              </Field>
+              <Field label="Bookable days ahead">
+                <input type="number" min={0} value={form.bookingPolicy?.maxAdvanceDays ?? ''} placeholder="no limit"
+                  onChange={e => setPolicy({ maxAdvanceDays: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className={inputCls} />
+              </Field>
+            </div>
+            <Field label="Note shown when booking">
+              <input value={form.bookingPolicy?.note || ''} placeholder="e.g., sign-up opens Friday at 11:00"
+                onChange={e => setPolicy({ note: e.target.value || undefined })} className={inputCls} />
+            </Field>
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.requiresCertification} onChange={e => setForm({ ...form, requiresCertification: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-[#102C53]" /><span className="text-sm font-manrope text-gray-700">Requires certification</span></label>

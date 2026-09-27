@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { formatTime, buildBookingSlots, isWorkingHour } from '@/data/lab-data';
+import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, slotTaken, slotsUsedInWeek, weekStart, addDaysStr, formatDate } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
 const EPS = 1e-9;
@@ -71,9 +71,18 @@ export default function InstrumentsPage() {
   // Is a given slot start no longer bookable (in the past)?
   const slotIsPast = (slotStart: number) => isPastDate || (isToday && slotStart < nowHour - EPS);
 
+  // Instruments with fixed slots (PDMS hood): clicking anywhere inside a slot
+  // books the whole slot, so the timeline stays usable at 30-minute resolution.
+  const policy = instrument?.bookingPolicy;
+  const fixedSlots = policy?.slots && policy.slots.length > 0 ? policy.slots : null;
+  const quotaUsed = policy?.maxSlotsPerWeek && selectedInstrument
+    ? slotsUsedInWeek(bookings, selectedInstrument, user.id, selectedDate) : 0;
+  const lastBookableDate = policy?.maxAdvanceDays !== undefined ? addDaysStr(todayStr, policy.maxAdvanceDays) : '';
+
   const openModalAt = (start: number) => {
-    setBookStartHour(start);
-    setBookEndHour(Math.min(start + 1, bookingSettings.openEndHour));
+    const slot = fixedSlots?.find(s => start >= s.start - EPS && start < s.end - EPS) || fixedSlots?.[0];
+    setBookStartHour(slot ? slot.start : start);
+    setBookEndHour(slot ? slot.end : Math.min(start + 1, bookingSettings.openEndHour));
     setBookNotes('');
     setBookError('');
     setShowBookingModal(true);
@@ -86,6 +95,11 @@ export default function InstrumentsPage() {
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
     if (isToday && bookStartHour < nowHour - EPS) { setBookError('Cannot book a time slot in the past.'); return; }
     if (hasConflict(bookStartHour, bookEndHour)) { setBookError('Time conflict with an existing booking.'); return; }
+    const policyError = validateBookingPolicy({
+      instrument, bookings, userId: user.id, date: selectedDate,
+      startHour: bookStartHour, endHour: bookEndHour, today: todayStr,
+    });
+    if (policyError) { setBookError(policyError); return; }
 
     setBooking(true);
     // Re-check against the freshest server state to reduce double-booking races.
@@ -382,6 +396,45 @@ export default function InstrumentsPage() {
                 <p className="text-xs text-gray-500 font-manrope">{dateLabel}</p>
               </div>
 
+              {fixedSlots ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Slot</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {fixedSlots.map(s => {
+                      const taken = slotTaken(bookings, selectedInstrument!, selectedDate, s);
+                      const selected = Math.abs(s.start - bookStartHour) < EPS && Math.abs(s.end - bookEndHour) < EPS;
+                      return (
+                        <button
+                          key={`${s.start}-${s.end}`}
+                          type="button"
+                          disabled={Boolean(taken)}
+                          onClick={() => { setBookStartHour(s.start); setBookEndHour(s.end); setBookError(''); }}
+                          className={`px-3 py-2.5 rounded-xl text-sm font-manrope border-2 transition-all ${
+                            selected ? 'border-[#102C53] bg-[#102C53]/5 font-semibold text-gray-900'
+                              : taken ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                                : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                          }`}
+                          title={taken ? `Taken — ${taken.userName}` : undefined}
+                        >
+                          {slotLabel(s)}
+                          {taken && <span className="block text-[10px] font-normal truncate">{taken.userName}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {policy?.maxSlotsPerWeek && (
+                      <p className={`text-[11px] font-manrope ${quotaUsed >= policy.maxSlotsPerWeek ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                        {quotaUsed} of {policy.maxSlotsPerWeek} slots used in the week of {formatDate(weekStart(selectedDate))}.
+                      </p>
+                    )}
+                    {lastBookableDate && (
+                      <p className="text-[11px] text-gray-400 font-manrope">Bookable up to {formatDate(lastBookableDate)} ({policy?.maxAdvanceDays} days ahead).</p>
+                    )}
+                    {policy?.note && <p className="text-[11px] text-gray-500 font-manrope">{policy.note}</p>}
+                  </div>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start Time</label>
@@ -404,8 +457,9 @@ export default function InstrumentsPage() {
                   </select>
                 </div>
               </div>
+              )}
 
-              {!isWorkingHour(bookStartHour, bookingSettings) && (
+              {!fixedSlots && !isWorkingHour(bookStartHour, bookingSettings) && (
                 <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
                   <Moon size={13} /> This booking is outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
                 </div>

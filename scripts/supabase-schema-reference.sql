@@ -21,6 +21,8 @@
 --        aligned with UserRole — the live DB had an older, narrower list)
 --   9. Run supabase-2026-09-cryo-storage.sql (storage_units.rack_labels)
 --  10. Run supabase-2026-09-storage-boxes.sql (storage_boxes + box_id)
+--      then supabase-2026-09-instrument-icons.sql (types & icons)
+--      then supabase-2026-09-booking-policy.sql  (booking_policy + trigger)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
@@ -69,7 +71,8 @@ CREATE TABLE IF NOT EXISTS instruments (
   commission_date           text,
   maintenance_period_months numeric,
   last_maintenance_date     text,
-  next_maintenance_date     text
+  next_maintenance_date     text,
+  booking_policy            jsonb   -- fixed slots / weekly quota (supabase-2026-09-booking-policy.sql)
 );
 
 CREATE TABLE IF NOT EXISTS maintenance_logs (

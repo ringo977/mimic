@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import {
   Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
-  Instrument, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
+  Instrument, BookingPolicy, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
 } from '@/data/lab-data';
 
 // ============================================================
@@ -46,6 +46,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     purchase_date: string | null; commission_date: string | null;
     maintenance_period_months: number | null;
     last_maintenance_date: string | null; next_maintenance_date: string | null;
+    booking_policy: BookingPolicy | null;
   }>('instruments', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -61,6 +62,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     maintenancePeriodMonths: r.maintenance_period_months ?? undefined,
     lastMaintenanceDate: r.last_maintenance_date ?? undefined,
     nextMaintenanceDate: r.next_maintenance_date ?? undefined,
+    bookingPolicy: r.booking_policy ?? undefined,
   }));
 }
 
@@ -77,6 +79,7 @@ export async function upsertInstrument(i: Instrument) {
     maintenance_period_months: i.maintenancePeriodMonths ?? null,
     last_maintenance_date: i.lastMaintenanceDate ?? null,
     next_maintenance_date: i.nextMaintenanceDate ?? null,
+    booking_policy: i.bookingPolicy ?? null,
   });
 }
 
