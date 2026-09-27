@@ -13,14 +13,25 @@ import {
 // max-rows) and says nothing when it truncates. Reagents and vials are
 // already in the hundreds, so every whole-table read pages through in
 // chunks and only stops when a chunk comes back short.
+//
+// Robust against two things: a server max-rows lower than PAGE (each page
+// advances by what actually came back, and the loop runs until the exact
+// count is reached), and a non-unique sort key (the primary key is always
+// the tie-breaker, so a row cannot slip between two pages).
 const PAGE = 1000;
-export async function fetchAllRows<T>(table: string, order = 'id'): Promise<T[] | null> {
+export async function fetchAllRows<T>(table: string, order = 'id', pk = 'id'): Promise<T[] | null> {
   const rows: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase.from(table).select('*').order(order).range(from, from + PAGE - 1);
+  let from = 0;
+  for (;;) {
+    let q = supabase.from(table).select('*', { count: 'exact' }).order(order);
+    if (order !== pk) q = q.order(pk);
+    const { data, error, count } = await q.range(from, from + PAGE - 1);
     if (error) { console.error(`Failed to fetch ${table}:`, error.message); return null; }
-    rows.push(...((data || []) as T[]));
-    if (!data || data.length < PAGE) break;
+    const got = (data || []) as T[];
+    rows.push(...got);
+    from += got.length;
+    const total = count ?? Number.POSITIVE_INFINITY;
+    if (got.length === 0 || rows.length >= total) break;
   }
   return rows;
 }
@@ -276,11 +287,23 @@ export async function deleteReagent(id: string) { return deleteRow('reagents', i
 // The RPC checks the caller's role and REJECTS a withdrawal below zero, so a
 // failure is an answer, not a transport problem: callers must not "fall back"
 // to writing the row themselves.
-export async function adjustReagentStock(reagentId: string, delta: number): Promise<{ stock: number } | { error: string }> {
-  const { data, error } = await supabase.rpc('adjust_reagent_stock', { p_reagent_id: reagentId, p_delta: delta });
+//
+// The server also writes the log_entries row in the same transaction and
+// returns it, so the app shows exactly what was recorded.
+export async function adjustReagentStock(
+  reagentId: string, delta: number, purpose?: string, project?: string,
+): Promise<{ stock: number; log: LogEntry | null } | { error: string }> {
+  const { data, error } = await supabase.rpc('adjust_reagent_stock', {
+    p_reagent_id: reagentId, p_delta: delta, p_purpose: purpose ?? null, p_project: project ?? null,
+  });
   if (error) return { error: error.message };
   if (data === null || data === undefined) return { error: 'no stock returned' };
-  return { stock: Number(data) };
+  // v3 returns { stock, applied, log }; the superseded v1/v2 returned a bare number.
+  if (typeof data === 'object' && 'stock' in data) {
+    const d = data as { stock: number; log?: LogEntry };
+    return { stock: Number(d.stock), log: d.log ?? null };
+  }
+  return { stock: Number(data), log: null };
 }
 
 // Current stock of one reagent, straight from the server (used to undo an

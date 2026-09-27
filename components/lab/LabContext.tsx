@@ -284,38 +284,31 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   // Optimistic update, then the server decides. If it refuses (role, stock
   // below zero, connection) the local value is put back to what the server
   // holds — never written over from the browser.
-  const changeReagentStock = useCallback(async (reagentId: string, delta: number, label: string): Promise<boolean> => {
+  // The server writes the movement AND its log row in one transaction and
+  // returns both; the browser only mirrors them. It never writes a log line
+  // of its own for stock moves, so the log cannot disagree with the stock.
+  const changeReagentStock = useCallback(async (reagentId: string, delta: number, label: string, purpose?: string, project?: string) => {
     setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: Math.max(0, r.currentStock + delta) } : r));
-    const res = await adjustReagentStock(reagentId, delta);
+    const res = await adjustReagentStock(reagentId, delta, purpose, project);
     if ('stock' in res) {
       setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: res.stock } : r));
-      return true;
+      if (res.log) setLog(prev => [res.log as LogEntry, ...prev]);
+      return;
     }
     const serverStock = await fetchReagentStock(reagentId);
     if (serverStock !== null) setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, currentStock: serverStock } : r));
     setSyncError(`${label}: refused by the server (${res.error}). The stock shown is the server's value.`);
-    return false;
   }, []);
 
   const withdrawReagent = useCallback((reagentId: string, amount: number, purpose: string, project: string) => {
-    const rg = reagents.find(r => r.id === reagentId);
-    // Never ask for more than there is (the server would refuse): log what
-    // was actually withdrawn, not what was requested — and only once the
-    // server has accepted it.
-    const actual = rg ? Math.min(amount, Math.max(0, rg.currentStock)) : amount;
-    if (actual <= 0) return;
-    const clamped = actual !== amount ? ` (requested ${amount}, only ${actual} in stock)` : '';
-    changeReagentStock(reagentId, -actual, 'Reagent withdrawal').then(ok => {
-      if (ok) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew ${rg?.name || reagentId}`, category: 'reagent', details: `${actual} ${rg?.unit || ''}${clamped} - ${purpose} (${project})` });
-    });
-  }, [user, reagents, addLogEntry, changeReagentStock]);
+    if (amount <= 0) return;
+    changeReagentStock(reagentId, -amount, 'Reagent withdrawal', purpose, project);
+  }, [changeReagentStock]);
 
   const addReagentStock = useCallback((reagentId: string, amount: number) => {
-    const rg = reagents.find(r => r.id === reagentId);
-    changeReagentStock(reagentId, amount, 'Reagent restock').then(ok => {
-      if (ok) addLogEntry({ userId: user.id, userName: user.name, action: `Restocked ${rg?.name || reagentId}`, category: 'reagent', details: `+${amount} ${rg?.unit || ''}` });
-    });
-  }, [user, reagents, addLogEntry, changeReagentStock]);
+    if (amount <= 0) return;
+    changeReagentStock(reagentId, amount, 'Reagent restock');
+  }, [changeReagentStock]);
 
   // ---- Cryo ----
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {

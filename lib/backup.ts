@@ -14,6 +14,7 @@ const TABLES = [
 
 // Primary key per table (used for upsert and validation)
 const TABLE_PK: Record<string, string> = { app_settings: 'key' };
+const BACKUP_VERSION = 2;
 const pkOf = (table: string) => TABLE_PK[table] ?? 'id';
 
 // Tables where rows missing from the backup are deleted on restore.
@@ -40,7 +41,7 @@ export async function exportDatabaseJSON(): Promise<string> {
     throw new Error(`Backup aborted — could not export: ${failed.join(', ')}`);
   }
   return JSON.stringify({
-    _meta: { version: 2, exportedAt: new Date().toISOString(), tables: TABLES.length },
+    _meta: { version: BACKUP_VERSION, exportedAt: new Date().toISOString(), tables: TABLES.length },
     ...dump,
   }, null, 2);
 }
@@ -64,6 +65,15 @@ export function validateBackupJSON(json: string): {
 
   if (!meta || typeof meta.version !== 'number') {
     errors.push('Missing or invalid _meta block. This may not be a MiMic backup file.');
+  } else if (meta.version !== BACKUP_VERSION) {
+    errors.push(`Backup format version ${meta.version} is not supported by this app (expected ${BACKUP_VERSION}). Restore it with the app version that produced it.`);
+  }
+
+  // A restore deletes rows that are not in the file: a file missing a table
+  // is not "a partial backup", it is a file we must not restore from.
+  const missing = TABLES.filter(t => parsed[t] === undefined);
+  if (missing.length > 0) {
+    errors.push(`Not a full backup — missing table(s): ${missing.join(', ')}.`);
   }
 
   let hasData = false;
@@ -126,7 +136,10 @@ export async function importDatabaseJSON(json: string): Promise<{
   // Phase 2: Upsert table by table
   for (const table of TABLES) {
     const raw = parsed[table];
-    if (!Array.isArray(raw) || raw.length === 0) continue;
+    if (!Array.isArray(raw)) continue;   // cannot happen after validation
+    // An EMPTY array is meaningful: the table had no rows at backup time, so
+    // the stale-row phase below must still run and empty it (except for the
+    // tables never deleted from). Skipping it would keep whatever is there.
     let rows: unknown[] = raw;
     const pk = pkOf(table);
 
@@ -148,7 +161,6 @@ export async function importDatabaseJSON(json: string): Promise<{
           const { auth_user_id: _dropped, ...rest } = r as Record<string, unknown>;
           return rest;
         });
-      if (rows.length === 0) continue;
     }
 
     let tableUpserted = 0;

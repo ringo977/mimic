@@ -22,11 +22,16 @@
 --   4. cryo_vials: a member may edit only their own vials and cannot hand
 --      them to somebody else; storing / withdrawing needs canManageCryo.
 --                                                                  [SEC-02]
---   5. reagents: create / edit / restock need canAddReagents; withdrawing
---      goes through adjust_reagent_stock(), now SECURITY DEFINER with its own
---      permission check (canWithdrawReagents) that REJECTS a withdrawal below
---      zero instead of silently clamping. max_stock = 0 no longer pins the
---      stock at zero.                                      [SEC-03, FUN-02]
+--   5. reagents: create / edit need canAddReagents; stock moves go through
+--      adjust_reagent_stock(), now SECURITY DEFINER: withdrawing needs
+--      canWithdrawReagents, restocking needs canAddReagents; below zero or
+--      above max_stock is REJECTED (never clamped); the movement and its log
+--      row are written in one transaction with the quantity really applied.
+--      max_stock = 0 means "no maximum".                   [SEC-03, FUN-02]
+--   5b. wishlist: requesting needs canRequestOrders, editing is limited to
+--      the requester's own items or approvers; is_lab_approver() now equals
+--      canApproveOrders (external lab managers were approvers by mistake).
+--                                                          [SEC-03, FUN-03]
 --   6. enforce_booking_policy(): certification required by the instrument is
 --      now checked in the database too, not only by the calendar UI; the
 --      weekly quota count takes a transaction lock so two simultaneous
@@ -92,6 +97,8 @@ AS $$
                CASE WHEN u.affiliation = 'MiMic Lab'
                     THEN u.role NOT IN ('msc', 'guest')
                     ELSE u.role IN ('researcher', 'lab_manager', 'project_manager', 'postdoc') END
+             WHEN 'approve_orders' THEN
+               u.affiliation = 'MiMic Lab' AND u.role IN ('lab_manager', 'project_manager')
              ELSE false
            END
       )
@@ -197,51 +204,128 @@ CREATE POLICY "reagents_update" ON reagents
 -- Supersedes supabase-reagent-stock-rpc.sql. SECURITY DEFINER so that a PhD
 -- student (canWithdrawReagents but not canAddReagents) can still withdraw
 -- even though the reagents UPDATE policy no longer lets them write the row.
-CREATE OR REPLACE FUNCTION adjust_reagent_stock(p_reagent_id text, p_delta numeric)
-RETURNS numeric
+--
+--   * p_delta < 0 = withdrawal  → needs canWithdrawReagents
+--   * p_delta > 0 = restock     → needs canAddReagents
+--   * below zero, or above max_stock (when max_stock > 0): REJECTED, never
+--     clamped — the UI already stops the user at those bounds, so the DB
+--     must agree instead of quietly writing a different quantity.
+--   * the movement and its log_entries row are written in the SAME
+--     transaction, with the quantity that was really applied. The row is
+--     returned so the app can show it without writing a second copy.
+DROP FUNCTION IF EXISTS adjust_reagent_stock(text, numeric);
+CREATE OR REPLACE FUNCTION adjust_reagent_stock(
+  p_reagent_id text,
+  p_delta      numeric,
+  p_purpose    text DEFAULT NULL,
+  p_project    text DEFAULT NULL
+)
+RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  cur  numeric;
-  mx   numeric;
-  nxt  numeric;
+  r        reagents%ROWTYPE;
+  me       lab_users%ROWTYPE;
+  nxt      numeric;
+  log_id   text;
+  log_ts   text;
+  action   text;
+  details  text;
 BEGIN
-  IF NOT lab_can('withdraw_reagents') THEN
-    RAISE EXCEPTION 'Your role cannot change reagent stock';
+  IF p_delta IS NULL OR p_delta = 0 THEN
+    RAISE EXCEPTION 'Quantity must be non-zero';
   END IF;
 
-  SELECT current_stock, max_stock INTO cur, mx
-    FROM reagents WHERE id = p_reagent_id FOR UPDATE;
+  SELECT * INTO me FROM lab_users WHERE id = current_lab_user_id();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Not a lab member';
+  END IF;
+
+  IF p_delta < 0 AND NOT lab_can('withdraw_reagents') THEN
+    RAISE EXCEPTION 'Your role cannot withdraw reagents';
+  END IF;
+  IF p_delta > 0 AND NOT lab_can('add_reagents') THEN
+    RAISE EXCEPTION 'Your role cannot restock reagents';
+  END IF;
+
+  SELECT * INTO r FROM reagents WHERE id = p_reagent_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Reagent not found';
   END IF;
 
-  nxt := cur + p_delta;
+  nxt := r.current_stock + p_delta;
   IF nxt < 0 THEN
-    RAISE EXCEPTION 'Not enough stock: % available, % requested', cur, -p_delta;
+    RAISE EXCEPTION 'Not enough stock: % available, % requested', r.current_stock, -p_delta;
   END IF;
-  -- Never exceed the declared maximum, unless none is declared (0 / NULL)
-  IF coalesce(mx, 0) > 0 AND nxt > mx THEN
-    nxt := mx;
+  IF coalesce(r.max_stock, 0) > 0 AND nxt > r.max_stock THEN
+    RAISE EXCEPTION 'Exceeds the maximum stock (%): % in stock, % requested', r.max_stock, r.current_stock, p_delta;
   END IF;
 
   UPDATE reagents SET current_stock = nxt WHERE id = p_reagent_id;
-  RETURN nxt;
+
+  -- Same wording the app used to write from the browser
+  IF p_delta < 0 THEN
+    action  := 'Withdrew ' || r.name;
+    details := trim(both from (-p_delta)::text || ' ' || coalesce(r.unit, ''))
+               || CASE WHEN coalesce(p_purpose, '') <> '' OR coalesce(p_project, '') <> ''
+                       THEN ' - ' || coalesce(p_purpose, '') || ' (' || coalesce(p_project, '') || ')'
+                       ELSE '' END;
+  ELSE
+    action  := 'Restocked ' || r.name;
+    details := trim(both from '+' || p_delta::text || ' ' || coalesce(r.unit, ''));
+  END IF;
+
+  log_id := lower(to_hex((extract(epoch from clock_timestamp()) * 1000)::bigint))
+            || substr(md5(random()::text || clock_timestamp()::text), 1, 9);
+  log_ts := to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+
+  INSERT INTO log_entries (id, "timestamp", user_id, user_name, action, category, details)
+  VALUES (log_id, log_ts, me.id, me.name, action, 'reagent', details);
+
+  RETURN jsonb_build_object(
+    'stock', nxt,
+    'applied', p_delta,
+    'log', jsonb_build_object(
+      'id', log_id, 'timestamp', log_ts, 'userId', me.id, 'userName', me.name,
+      'action', action, 'category', 'reagent', 'details', details)
+  );
 END;
 $$;
 
-REVOKE ALL ON FUNCTION adjust_reagent_stock(text, numeric) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION adjust_reagent_stock(text, numeric) TO authenticated;
+REVOKE ALL ON FUNCTION adjust_reagent_stock(text, numeric, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION adjust_reagent_stock(text, numeric, text, text) TO authenticated;
 
 -- ============================================================
--- 6. Wishlist — requesting an order needs canRequestOrders
+-- 6. Wishlist — requesting needs canRequestOrders; editing is for the
+--    requester (own items, no handing over) or an approver; approvers
+--    follow canApproveOrders exactly (admin / pi / MiMic lab_manager and
+--    project_manager), not the wider list is_lab_approver() used to have.
 -- ============================================================
+CREATE OR REPLACE FUNCTION is_lab_approver()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT lab_can('approve_orders');
+$$;
+
 DROP POLICY IF EXISTS "wishlist_items_insert" ON wishlist_items;
 CREATE POLICY "wishlist_items_insert" ON wishlist_items
   FOR INSERT TO authenticated
-  WITH CHECK (lab_can('request_orders'));
+  WITH CHECK (
+    lab_can('request_orders')
+    AND (requested_by = current_lab_user_id() OR is_lab_approver())
+  );
+
+DROP POLICY IF EXISTS "wishlist_items_update" ON wishlist_items;
+CREATE POLICY "wishlist_items_update" ON wishlist_items
+  FOR UPDATE TO authenticated
+  USING      (is_lab_approver() OR (lab_can('request_orders') AND requested_by = current_lab_user_id()))
+  WITH CHECK (is_lab_approver() OR (lab_can('request_orders') AND requested_by = current_lab_user_id()));
 
 -- ============================================================
 -- 7. Bookings — managers may act on anybody's booking
@@ -420,10 +504,12 @@ WHERE  schemaname = 'public'
   AND  tablename IN ('instruments', 'cryo_vials', 'reagents', 'wishlist_items', 'bookings')
 ORDER  BY tablename, cmd, policyname;
 
--- Expected: 5 functions, all SECURITY DEFINER with search_path set
-SELECT p.proname, p.prosecdef AS security_definer, p.proconfig
+-- Expected: 7 functions, all SECURITY DEFINER with search_path set;
+-- adjust_reagent_stock must appear ONCE, with 4 arguments.
+SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS args,
+       p.prosecdef AS security_definer, p.proconfig
 FROM   pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE  n.nspname = 'public'
-  AND  p.proname IN ('lab_can', 'is_booking_manager', 'adjust_reagent_stock',
+  AND  p.proname IN ('lab_can', 'is_booking_manager', 'is_lab_approver', 'adjust_reagent_stock',
                      'enforce_booking_policy', 'protect_instrument_fields', 'protect_lab_user_fields')
 ORDER  BY p.proname;

@@ -2553,9 +2553,10 @@ function BackupTab() {
         e.target.value = '';
         return;
       }
+      // Show every table, zeros included: an empty table in the file means
+      // the live table will be EMPTIED by the restore.
       const lines = Object.entries(check.summary)
-        .filter(([, n]) => n > 0)
-        .map(([t, n]) => `  • ${t}: ${n} rows`)
+        .map(([t, n]) => `  • ${t}: ${n} rows${n === 0 && t !== 'lab_users' && t !== 'app_settings' ? '  ← will be emptied' : ''}`)
         .join('\n');
       const when = check.meta?.exportedAt ? new Date(check.meta.exportedAt).toLocaleString() : 'unknown date';
       const msg = `Restore backup from ${when}?\n\n${lines}\n\nExisting rows are updated/added; rows not in the backup are removed (users and settings are never deleted). Export a fresh backup first if unsure.`;

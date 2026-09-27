@@ -42,6 +42,10 @@
 --      leaving "Public bucket" OFF (files are served via signed URLs)
 --  13. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
+--  13b. Bootstrap the first admin row in lab_users (SQL template at the end
+--      of this file), log in, enrol TOTP — without it Restore is refused
+--  13c. Re-run the RLS check block at the end of this file: it must print
+--      "RLS enabled on every table in public."
 --  14. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
 --  15. Dashboard → Authentication: sign-ups OFF, confirm email ON,
 --      secure email change ON, min password length 8 + requirements
@@ -314,5 +318,66 @@ RETURNS boolean LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS
 $$;
 
 -- ============================================================
--- DONE. Continue with the other scripts (steps 2-8 in the header).
+-- Row Level Security — ON for every table defined here.
+-- The policies come from the later scripts, but a table with RLS enabled
+-- and no policy denies everything, which is the safe starting point. The
+-- old supabase-rls-policies.sql (superseded, not part of the procedure)
+-- used to be the only place that switched RLS on: a rebuild that skipped
+-- it would have left these 14 tables wide open to the anon key.
+-- ============================================================
+ALTER TABLE lab_users        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE locations        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE instruments      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE maintenance_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE certifications   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage_units    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage_boxes    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reagents         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cryo_vials       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE wishlist_items   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE log_entries      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE manuals          ENABLE ROW LEVEL SECURITY;
+
+-- Fail loudly if anything in public is still unprotected (also catches
+-- tables created by hand from the dashboard later on: re-run this block
+-- after the whole procedure as a final check).
+DO $$
+DECLARE
+  open_tables text;
+BEGIN
+  SELECT string_agg(c.relname, ', ' ORDER BY c.relname) INTO open_tables
+  FROM   pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE  n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity;
+  IF open_tables IS NOT NULL THEN
+    RAISE EXCEPTION 'Tables WITHOUT row level security: %', open_tables;
+  END IF;
+  RAISE NOTICE 'RLS enabled on every table in public.';
+END $$;
+
+-- ============================================================
+-- First admin bootstrap (disaster recovery only)
+-- ============================================================
+-- On a fresh project lab_users is empty, so is_lab_admin() is false for
+-- everybody and the app's Restore (which runs under RLS) is refused. Before
+-- step 14 insert the row of the person doing the restore — with the SAME
+-- email as their auth account (step 13). The trg_link_lab_user_auth
+-- trigger links it at first login; the app then demands TOTP enrolment
+-- (is_lab_admin requires MFA), after which the JSON restore works.
+--
+-- Use your REAL lab_users id, copied from the backup JSON ("lab_users" →
+-- your row → "id"): the restore never touches the caller's own row (it is
+-- filtered out by email), so whatever you insert here is what you will
+-- have afterwards. With the real id there is nothing to clean up.
+--
+--   INSERT INTO lab_users (id, email, name, abbreviation, role, affiliation, is_admin, status)
+--   VALUES ('<id from backup>', 'nome.cognome@polimi.it', 'Nome Cognome', 'NCO', 'pi', 'MiMic Lab', true, 'active')
+--   ON CONFLICT (id) DO UPDATE SET is_admin = true, status = 'active';
+--
+-- Certifications / projects of that row can be re-entered from Admin →
+-- Users after the restore (they are the only fields the import skips).
+
+-- ============================================================
+-- DONE. Continue with the other scripts (steps 2-15 in the header).
 -- ============================================================

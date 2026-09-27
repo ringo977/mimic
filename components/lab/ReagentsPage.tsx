@@ -31,10 +31,13 @@ export default function ReagentsPage() {
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
 
-  // Withdrawals are capped at what is actually in stock (the server clamps
-  // at 0 anyway; this keeps the log truthful and the button honest).
+  // Same bounds the server enforces (and rejects, not clamps): withdraw at
+  // most what is in stock; restock up to the maximum, or freely when no
+  // maximum is set (maxStock 0).
   const maxAmount = modalReagent
-    ? (modal?.type === 'withdraw' ? modalReagent.currentStock : Math.max(0, modalReagent.maxStock - modalReagent.currentStock))
+    ? (modal?.type === 'withdraw'
+        ? modalReagent.currentStock
+        : (modalReagent.maxStock > 0 ? Math.max(0, modalReagent.maxStock - modalReagent.currentStock) : Number.POSITIVE_INFINITY))
     : 0;
   const amountTooHigh = !!modalReagent && amount > maxAmount;
 
@@ -205,13 +208,15 @@ export default function ReagentsPage() {
                 <input
                   type="number"
                   min={1}
-                  max={maxAmount}
+                  max={Number.isFinite(maxAmount) ? maxAmount : undefined}
                   value={amountStr}
                   onChange={e => setAmountStr(e.target.value)}
                   className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${amountTooHigh ? 'border-red-300' : 'border-gray-200'}`}
                 />
                 <p className={`text-[11px] mt-1 font-manrope ${amountTooHigh ? 'text-red-600' : 'text-gray-400'}`}>
-                  {modal.type === 'withdraw' ? `Max ${maxAmount} ${modalReagent.unit} available` : `Room for ${maxAmount} ${modalReagent.unit} (max stock ${modalReagent.maxStock})`}
+                  {modal.type === 'withdraw'
+                    ? `Max ${maxAmount} ${modalReagent.unit} available`
+                    : Number.isFinite(maxAmount) ? `Room for ${maxAmount} ${modalReagent.unit} (max stock ${modalReagent.maxStock})` : 'No maximum set for this reagent'}
                 </p>
               </div>
 
