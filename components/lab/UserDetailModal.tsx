@@ -20,7 +20,9 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
   const supervises = users.filter(x => x.supervisorId === u.id && x.status !== 'alumni');
   const isAlumni = u.status === 'alumni';
   const myProjects = u.projects.map(id => projects.find(p => p.id === id)?.name || id);
-  const myCerts = u.certifications.map(id => certifications.find(c => c.id === id)?.name || id);
+  const myCerts = u.certifications.map(id => ({
+    id, name: certifications.find(c => c.id === id)?.name || id, at: u.certifiedAt?.[id],
+  }));
   const period = u.startDate || u.endDate
     ? `${u.startDate ? formatDate(u.startDate) : '…'} – ${isAlumni ? (u.endDate ? formatDate(u.endDate) : '…') : 'present'}`
     : null;
@@ -85,7 +87,11 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1"><Award size={11} /> Certifications ({myCerts.length})</p>
             {myCerts.length === 0 ? <p className="text-xs text-gray-400">None</p> : (
               <div className="flex flex-wrap gap-1.5">
-                {myCerts.map(c => <span key={c} className="px-2 py-0.5 rounded-lg bg-green-50 text-green-700 text-[11px] font-medium">{c}</span>)}
+                {myCerts.map(c => (
+                  <span key={c.id} className="px-2 py-0.5 rounded-lg bg-green-50 text-green-700 text-[11px] font-medium">
+                    {c.name}{c.at ? <span className="font-normal text-green-600/70"> · {formatDate(c.at)}</span> : null}
+                  </span>
+                ))}
               </div>
             )}
           </div>

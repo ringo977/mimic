@@ -20,6 +20,7 @@ export interface SupabaseLabUser {
   training_microfab_date?: string | null;
   training_bio_done?: boolean | null;
   training_bio_date?: string | null;
+  certified_at?: Record<string, string> | null;
   created_at?: string;
 }
 
@@ -43,6 +44,7 @@ function toLabUser(row: SupabaseLabUser): LabUser {
     trainingMicrofabDate: row.training_microfab_date || undefined,
     trainingBioDone: row.training_bio_done ?? false,
     trainingBioDate: row.training_bio_date || undefined,
+    certifiedAt: row.certified_at || undefined,
   };
 }
 
@@ -66,6 +68,7 @@ function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at'> {
     training_microfab_date: u.trainingMicrofabDate || null,
     training_bio_done: u.trainingBioDone ?? false,
     training_bio_date: u.trainingBioDate || null,
+    certified_at: u.certifiedAt && Object.keys(u.certifiedAt).length > 0 ? u.certifiedAt : null,
   };
 }
 

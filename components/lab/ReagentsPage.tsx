@@ -130,7 +130,10 @@ export default function ReagentsPage() {
               <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
                 Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
               </span>
+              {r.lot && <span className="font-mono">lot {r.lot}</span>}
+              {r.owner && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{r.owner}</span>}
             </div>
+            {r.notes && <p className="mt-1.5 text-[10px] text-gray-400 font-manrope italic">{r.notes}</p>}
 
             {/* Actions */}
             <div className="flex gap-2 mt-3">

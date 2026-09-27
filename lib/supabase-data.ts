@@ -46,7 +46,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     purchase_date: string | null; commission_date: string | null;
     maintenance_period_months: number | null;
     last_maintenance_date: string | null; next_maintenance_date: string | null;
-    booking_policy: BookingPolicy | null;
+    booking_policy: BookingPolicy | null; responsible_user_id: string | null;
   }>('instruments', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -63,6 +63,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     lastMaintenanceDate: r.last_maintenance_date ?? undefined,
     nextMaintenanceDate: r.next_maintenance_date ?? undefined,
     bookingPolicy: r.booking_policy ?? undefined,
+    responsibleUserId: r.responsible_user_id ?? undefined,
   }));
 }
 
@@ -80,6 +81,7 @@ export async function upsertInstrument(i: Instrument) {
     last_maintenance_date: i.lastMaintenanceDate ?? null,
     next_maintenance_date: i.nextMaintenanceDate ?? null,
     booking_policy: i.bookingPolicy ?? null,
+    responsible_user_id: i.responsibleUserId ?? null,
   });
 }
 
@@ -229,7 +231,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     id: string; name: string; category: string; current_stock: number;
     max_stock: number; unit: string; expiry_date: string; location: string;
     storage_unit_id: string | null; box_id: string | null; supplier: string; catalog_number: string;
-    alert_threshold: number;
+    alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
   }>('reagents', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -239,6 +241,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     storageUnitId: r.storage_unit_id ?? undefined, boxId: r.box_id ?? undefined,
     supplier: r.supplier, catalogNumber: r.catalog_number,
     alertThreshold: r.alert_threshold,
+    lot: r.lot ?? undefined, owner: r.owner ?? undefined, notes: r.notes ?? undefined,
   }));
 }
 
@@ -252,6 +255,7 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     storage_unit_id: r.storageUnitId ?? null, box_id: r.boxId ?? null,
     supplier: r.supplier, catalog_number: r.catalogNumber,
     alert_threshold: r.alertThreshold,
+    lot: r.lot ?? null, owner: r.owner ?? null, notes: r.notes ?? null,
   });
 }
 

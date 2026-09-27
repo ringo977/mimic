@@ -15,7 +15,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
-  SUPERVISOR_ROLES, SUPERVISED_ROLES } from '@/data/lab-data';
+  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
 import { downloadCSV } from '@/lib/csv';
@@ -324,7 +324,21 @@ function UsersTab() {
 
   const open = (u?: LabUser) => { setForm(u ? { ...u } : empty()); setEditing(u || null); setShowForm(true); };
   const save = () => { if (!form.name || !form.email) return; editing ? updateUser(form) : addUser(form); setShowForm(false); };
-  const toggleCert = (id: string) => setForm(f => ({ ...f, certifications: f.certifications.includes(id) ? f.certifications.filter(c => c !== id) : [...f.certifications, id] }));
+  const toggleCert = (id: string) => setForm(f => {
+    const has = f.certifications.includes(id);
+    const certifiedAt = { ...(f.certifiedAt || {}) };
+    if (has) delete certifiedAt[id]; else certifiedAt[id] = certifiedAt[id] || '';
+    return {
+      ...f,
+      certifications: has ? f.certifications.filter(c => c !== id) : [...f.certifications, id],
+      certifiedAt: Object.keys(certifiedAt).length ? certifiedAt : undefined,
+    };
+  });
+  const setCertDate = (id: string, date: string) => setForm(f => {
+    const certifiedAt = { ...(f.certifiedAt || {}) };
+    if (date) certifiedAt[id] = date; else delete certifiedAt[id];
+    return { ...f, certifiedAt: Object.keys(certifiedAt).length ? certifiedAt : undefined };
+  });
   const toggleProj = (id: string) => setForm(f => ({ ...f, projects: f.projects.includes(id) ? f.projects.filter(p => p !== id) : [...f.projects, id] }));
 
   const importSpec: ImportSpec<LabUser> = {
@@ -576,6 +590,22 @@ function UsersTab() {
               ))}
             </div>
           </Field>
+          {form.certifications.length > 0 && (
+            <Field label="Training dates (optional)">
+              <div className="space-y-1.5 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-xl">
+                {form.certifications.map(id => {
+                  const c = certifications.find(x => x.id === id);
+                  return (
+                    <div key={id} className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-600 font-manrope flex-1 truncate">{c?.name || id}</span>
+                      <input type="date" value={form.certifiedAt?.[id] || ''} onChange={e => setCertDate(id, e.target.value)}
+                        className="px-2 py-1 border border-gray-200 rounded-lg text-[11px] font-manrope" />
+                    </div>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
           <button onClick={save} disabled={!form.name||!form.email} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add User'}</button>
         </div>
       </Modal>}
@@ -835,23 +865,24 @@ function LocationsTab() {
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Location | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const empty = (): Location => ({ id: generateId(), name: '', building: '', floor: '', notes: '' });
+  const empty = (): Location => ({ id: generateId(), name: '', building: '', floor: '', roomCode: '', notes: '' });
   const [form, setForm] = useState<Location>(empty());
   const open = (l?: Location) => { setForm(l ? { ...l } : empty()); setEditing(l || null); setShowForm(true); };
   const save = () => { if (!form.name) return; editing ? updateLocation(form) : addLocation(form); setShowForm(false); };
 
   const importSpec: ImportSpec<Location> = {
     title: 'Import locations (CSV)',
-    headers: ['Name', 'Building', 'Floor', 'Notes'],
+    headers: ['Name', 'Building', 'Floor', 'Room Code', 'Notes'],
+    aliases: { 'Room Code': ['room', 'code', 'vano'] },
     template: [
-      ['Room 101', 'Building 3', 'Ground Floor', 'Main cell culture lab'],
-      ['Cleanroom', 'DEIB', '2nd Floor', 'ISO-7'],
+      ['Room 101', 'Building 3', 'Ground Floor', 'MIA0306005025a', 'Main cell culture lab'],
+      ['Cleanroom', 'DEIB', '2nd Floor', '', 'ISO-7'],
     ],
     templateName: 'locations_template',
     onAdd: addLocation,
     parseRow: (rec, rowNum) => {
       if (!rec['Name']) return { skip: `Row ${rowNum}: missing name` };
-      return { item: { id: generateId(), name: rec['Name'], building: rec['Building'], floor: rec['Floor'], notes: rec['Notes'] } };
+      return { item: { id: generateId(), name: rec['Name'], building: rec['Building'], floor: rec['Floor'], roomCode: rec['Room Code'] || undefined, notes: rec['Notes'] } };
     },
   };
 
@@ -861,10 +892,10 @@ function LocationsTab() {
         <p className="text-sm text-gray-500 font-manrope">{locations.length} locations</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Name','Building','Floor','Notes','Instruments','Storage Units'], locations.map(l => {
+          <button onClick={() => downloadCSV(['Name','Building','Floor','Room Code','Notes','Instruments','Storage Units'], locations.map(l => {
             const instCount = instruments.filter(i => i.locationId === l.id).length;
             const suCount = storageUnits.filter(s => s.locationId === l.id).length;
-            return [l.name, l.building || '', l.floor || '', l.notes || '', instCount, suCount];
+            return [l.name, l.building || '', l.floor || '', l.roomCode || '', l.notes || '', instCount, suCount];
           }), 'locations')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add Location</button>
         </div>
@@ -881,6 +912,7 @@ function LocationsTab() {
                   <div>
                     <h3 className="text-sm font-bold text-gray-900 font-manrope">{l.name}</h3>
                     <p className="text-[10px] text-gray-400 font-manrope">{[l.building, l.floor].filter(Boolean).join(' · ') || '—'}</p>
+                    {l.roomCode && <p className="text-[10px] text-gray-400 font-mono">{l.roomCode}</p>}
                   </div>
                 </div>
                 <div className="flex gap-0.5">
@@ -916,6 +948,7 @@ function LocationsTab() {
             <Field label="Building"><input value={form.building || ''} onChange={e => setForm({ ...form, building: e.target.value })} placeholder="e.g., DEIB" className={inputCls} /></Field>
             <Field label="Floor"><input value={form.floor || ''} onChange={e => setForm({ ...form, floor: e.target.value })} placeholder="e.g., 1st Floor" className={inputCls} /></Field>
           </div>
+          <Field label="Room code (Polimi)"><input value={form.roomCode || ''} onChange={e => setForm({ ...form, roomCode: e.target.value || undefined })} placeholder="e.g., MIA0306005025a" className={inputCls} /></Field>
           <Field label="Notes"><textarea value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value })} rows={2} placeholder="e.g., Main cell culture lab" className={inputCls + ' resize-none'} /></Field>
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Location'}</button>
         </div>
@@ -929,7 +962,7 @@ function LocationsTab() {
 // Instruments Tab
 // ============================================================
 function InstrumentsTab() {
-  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, user, addLogEntry, bookings, removeBooking, certifications, updateCertification, reportError } = useLabContext();
+  const { instruments, addInstrument, updateInstrument, removeInstrument, locations, users, user, addLogEntry, bookings, removeBooking, certifications, updateCertification, reportError } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Instrument | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -966,19 +999,24 @@ function InstrumentsTab() {
   const instAcc = useMemo(() => ({ name: (i: Instrument) => i.name, category: (i: Instrument) => i.category, location: (i: Instrument) => { const l = locations.find(x => x.id === i.locationId); return l?.name || i.location; }, cert: (i: Instrument) => i.requiresCertification ? 1 : 0, maintenance: (i: Instrument) => i.nextMaintenanceDate || 'z' }), [locations]);
   const { sorted: sortedInst, sortKey: iSortKey, sortAsc: iSortAsc, toggle: iToggle } = useSort(instruments, 'name', instAcc);
 
+  const findUser = (val: string) => {
+    const v = (val || '').trim().toLowerCase();
+    return v ? users.find(u => u.name.toLowerCase() === v || u.email.toLowerCase() === v || u.abbreviation.toLowerCase() === v) : undefined;
+  };
+
   const importSpec: ImportSpec<Instrument> = {
     title: 'Import instruments (CSV)',
-    headers: ['Name', 'Category', 'Location', 'S/N', 'Manufacturer', 'Model', 'Purchase Date', 'Next Maintenance', 'Cert', 'Icon'],
-    aliases: { 'S/N': ['serial', 'serial number'], 'Purchase Date': ['purchase'], 'Next Maintenance': ['maintenance', 'next maintenance date'], 'Cert': ['requires certification', 'certification'], 'Icon': ['emoji'] },
+    headers: ['Name', 'Category', 'Location', 'S/N', 'Manufacturer', 'Model', 'Purchase Date', 'Next Maintenance', 'Cert', 'Icon', 'Responsible'],
+    aliases: { 'S/N': ['serial', 'serial number'], 'Purchase Date': ['purchase'], 'Next Maintenance': ['maintenance', 'next maintenance date'], 'Cert': ['requires certification', 'certification'], 'Icon': ['emoji'], 'Responsible': ['owner', 'in charge'] },
     template: [
-      ['Confocal Microscope', 'Microscopy', 'Room 101', 'SN-12345', 'Leica', 'SP8', '2023-01-15', '2026-12-01', 'Yes', ''],
-      ['CO₂ Incubator', 'Cell Culture', 'Room 101', '', 'Thermo', 'Heracell', '', '', 'No', '🌡️'],
+      ['Confocal Microscope', 'Microscopy', 'Room 101', 'SN-12345', 'Leica', 'SP8', '2023-01-15', '2026-12-01', 'Yes', '', 'Mattia Ballerini'],
+      ['CO₂ Incubator', 'Cell Culture', 'Room 101', '', 'Thermo', 'Heracell', '', '', 'No', '🌡️', ''],
     ],
     templateName: 'instruments_template',
     notes: <>
       <p><strong>Category</strong>: e.g. {instrumentCategories.join(', ')} (free text allowed; defaults to Cell Culture).</p>
       <p><strong>Location</strong>: matched to an existing location by name. <strong>Cert</strong>: Yes/No. Dates as YYYY-MM-DD.</p>
-      <p><strong>Icon</strong>: optional emoji; if empty it is guessed from the name (Mamba &rarr; 🐍, PCR &rarr; 🧬, laptop &rarr; 💻…).</p>
+      <p><strong>Icon</strong>: optional emoji; if empty it is guessed from the name (Mamba &rarr; 🐍, PCR &rarr; 🧬, laptop &rarr; 💻…). <strong>Responsible</strong>: name or email of a lab member.</p>
     </>,
     onAdd: addInstrument,
     parseRow: (rec, rowNum) => {
@@ -992,6 +1030,7 @@ function InstrumentsTab() {
         icon: rec['Icon'] || suggestInstrumentIcon(rec['Name'], rec['Category'] || 'Cell Culture'),
         serialNumber: rec['S/N'] || undefined, manufacturer: rec['Manufacturer'] || undefined, model: rec['Model'] || undefined,
         purchaseDate: rec['Purchase Date'] || undefined, nextMaintenanceDate: rec['Next Maintenance'] || undefined,
+        responsibleUserId: findUser(rec['Responsible'])?.id,
       };
       return locVal && !loc ? { item, note: `Row ${rowNum} (${item.name}): location "${locVal}" not matched — kept as text only` } : { item };
     },
@@ -1120,6 +1159,12 @@ function InstrumentsTab() {
               </select>
             </Field>
           </div>
+          <Field label="Responsible">
+            <select value={form.responsibleUserId || ''} onChange={e => setForm({ ...form, responsibleUserId: e.target.value || undefined })} className={inputCls}>
+              <option value="">— Nobody assigned</option>
+              {users.filter(u => !isAlumni(u)).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </Field>
           <Field label="Description"><input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className={inputCls} /></Field>
 
           {/* Inventory section */}
@@ -1728,17 +1773,18 @@ function ReagentsTab() {
   };
   const importSpec: ImportSpec<Reagent> = {
     title: 'Import items (CSV)',
-    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert'],
-    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'] },
+    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Expiry', 'Alert', 'Lot', 'Owner', 'Notes'],
+    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'], 'Lot': ['batch', 'lot number'], 'Owner': ['bought by', 'responsible'] },
     template: [
-      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2],
-      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', '2026-09-01', 2],
-      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', '2027-01-01', 1],
+      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '2026-06-15', 2, '', '', ''],
+      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', '2026-09-01', 2, 'H015928', 'SBR', ''],
+      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', '2027-01-01', 1, '', '', '2 aliquots in use'],
     ],
     templateName: 'consumables_template',
     notes: <>
       <p><strong>Category</strong>: a sub-category ({macroInfo.subCategories.join(', ')}). If blank, items go to <em>{defaultCategory}</em>.</p>
       <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Expiry</strong>: YYYY-MM-DD.</p>
+      <p><strong>Lot</strong>, <strong>Owner</strong> and <strong>Notes</strong> are free text (owner may be someone who has left).</p>
     </>,
     onAdd: addNewReagent,
     parseRow: (rec, rowNum) => {
@@ -1752,6 +1798,7 @@ function ReagentsTab() {
         currentStock, maxStock: num(rec['Max'], Math.max(currentStock, 1)), unit: rec['Unit'] || 'units',
         expiryDate: rec['Expiry'], location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
         storageUnitId, supplier: rec['Supplier'], catalogNumber: rec['Cat#'], alertThreshold: num(rec['Alert'], 0),
+        lot: rec['Lot'] || undefined, owner: rec['Owner'] || undefined, notes: rec['Notes'] || undefined,
       };
       return storageVal && !storageUnitId
         ? { item, note: `Row ${rowNum} (${item.name}): storage "${storageVal}" not found — imported without a storage unit` }
@@ -1795,7 +1842,7 @@ function ReagentsTab() {
         <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Expiry','Alert','Lot','Owner','Notes'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '']), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
@@ -1864,6 +1911,13 @@ function ReagentsTab() {
             <Field label="Catalog #"><input value={form.catalogNumber} onChange={e => setForm({ ...form, catalogNumber: e.target.value })} className={inputCls} /></Field>
           </div>
           <Field label="Expiry Date"><input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className={inputCls} /></Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Lot / batch"><input value={form.lot || ''} onChange={e => setForm({ ...form, lot: e.target.value || undefined })} placeholder="e.g., H015928" className={inputCls} /></Field>
+            <Field label="Owner"><input value={form.owner || ''} onChange={e => setForm({ ...form, owner: e.target.value || undefined })} placeholder="who bought it" list="reagent-owners" className={inputCls} />
+              <datalist id="reagent-owners">{Array.from(new Set(reagents.map(r => r.owner).filter(Boolean))).map(o => <option key={o} value={o} />)}</datalist>
+            </Field>
+          </div>
+          <Field label="Notes"><input value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value || undefined })} placeholder="e.g., 2 aliquots in use" className={inputCls} /></Field>
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Item'}</button>
         </div>
       </Modal>}

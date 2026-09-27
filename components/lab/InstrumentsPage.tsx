@@ -10,7 +10,7 @@ import { fetchBookingsForSlot } from '@/lib/supabase-data';
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, locations, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
   const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
@@ -18,6 +18,8 @@ export default function InstrumentsPage() {
   // locationId is authoritative; the location text is a copy that goes stale on rename
   const locName = (i: { locationId?: string; location?: string }) =>
     locations.find(l => l.id === i.locationId)?.name || i.location || '—';
+  const respName = (i: { responsibleUserId?: string }) =>
+    i.responsibleUserId ? users.find(u => u.id === i.responsibleUserId)?.name : undefined;
   const locationNames = useMemo(
     () => ['All', ...Array.from(new Set(mockInstruments.map(locName))).sort((a, b) => a.localeCompare(b))],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -202,6 +204,7 @@ export default function InstrumentsPage() {
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope">{inst.name}</h3>
                 <p className="text-xs text-gray-500 font-manrope mt-0.5">{inst.description}</p>
                 {inst.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{inst.manufacturer}{inst.model ? ` ${inst.model}` : ''}{inst.serialNumber ? ` · S/N ${inst.serialNumber}` : ''}</p>}
+                {respName(inst) && <p className="text-[10px] text-gray-400 font-manrope">Resp. {respName(inst)}</p>}
                 <div className="flex items-center gap-3 mt-2.5 text-xs text-gray-400 font-manrope">
                   <span className="flex items-center gap-1"><MapPin size={10} />{locName(inst)}</span>
                   {todayBookings.length > 0 && (

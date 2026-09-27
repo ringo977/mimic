@@ -23,6 +23,7 @@
 --  10. Run supabase-2026-09-storage-boxes.sql (storage_boxes + box_id)
 --      then supabase-2026-09-instrument-icons.sql (types & icons)
 --      then supabase-2026-09-booking-policy.sql  (booking_policy + trigger)
+--      then supabase-2026-09-fields.sql           (room codes, lot/owner/notes…)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints — ALWAYS LAST)
 --  12. Create the 'manuals' storage bucket (Storage → New bucket),
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   affiliation    text NOT NULL DEFAULT 'External',
   is_admin       boolean NOT NULL DEFAULT false,
   certifications text[] NOT NULL DEFAULT '{}',
+  certified_at   jsonb,   -- { certificationId: 'YYYY-MM-DD' } training dates
   projects       text[] NOT NULL DEFAULT '{}',
   created_at     timestamptz NOT NULL DEFAULT now()
 );
@@ -50,9 +52,10 @@ CREATE TABLE IF NOT EXISTS lab_users (
 CREATE TABLE IF NOT EXISTS locations (
   id       text PRIMARY KEY,
   name     text NOT NULL,
-  building text,
-  floor    text,
-  notes    text
+  building  text,
+  floor     text,
+  room_code text,   -- Polimi room code, e.g. MIA0306005025a
+  notes     text
 );
 
 CREATE TABLE IF NOT EXISTS instruments (
@@ -72,7 +75,8 @@ CREATE TABLE IF NOT EXISTS instruments (
   maintenance_period_months numeric,
   last_maintenance_date     text,
   next_maintenance_date     text,
-  booking_policy            jsonb   -- fixed slots / weekly quota (supabase-2026-09-booking-policy.sql)
+  booking_policy            jsonb,  -- fixed slots / weekly quota (supabase-2026-09-booking-policy.sql)
+  responsible_user_id       text    -- lab_users.id of whoever looks after it
 );
 
 CREATE TABLE IF NOT EXISTS maintenance_logs (
@@ -144,7 +148,10 @@ CREATE TABLE IF NOT EXISTS reagents (
   box_id          text,
   supplier        text,
   catalog_number  text,
-  alert_threshold numeric NOT NULL DEFAULT 0
+  alert_threshold numeric NOT NULL DEFAULT 0,
+  lot             text,
+  owner           text,   -- who bought it (free text: may be an alumnus)
+  notes           text
 );
 
 CREATE TABLE IF NOT EXISTS bookings (

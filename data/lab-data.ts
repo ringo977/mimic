@@ -29,6 +29,12 @@ export interface LabUser {
   trainingMicrofabDate?: string;
   trainingBioDone?: boolean;
   trainingBioDate?: string;
+  /**
+   * When each certification was granted: { certificationId: 'YYYY-MM-DD' }.
+   * `certifications` stays the list that gates the instruments; this only
+   * records the date of the training (the authorisation file has one).
+   */
+  certifiedAt?: Record<string, string>;
 }
 
 export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
@@ -284,6 +290,7 @@ export interface Instrument {
   lastMaintenanceDate?: string;
   nextMaintenanceDate?: string;
   bookingPolicy?: BookingPolicy;
+  responsibleUserId?: string;   // who looks after the instrument
 }
 
 /**
@@ -489,6 +496,7 @@ export interface Location {
   name: string;        // e.g. "Room 101", "Cleanroom"
   building?: string;   // e.g. "Building 3", "DEIB"
   floor?: string;      // e.g. "Ground Floor", "2nd Floor"
+  roomCode?: string;   // Polimi room code, e.g. "MIA0306005025a"
   notes?: string;
 }
 
@@ -579,6 +587,9 @@ export interface Reagent {
   supplier: string;
   catalogNumber: string;
   alertThreshold: number;
+  lot?: string;             // lot / batch number
+  owner?: string;           // whoever bought it (free text: may be an alumnus)
+  notes?: string;           // free text, e.g. "2 aliquots in use"
 }
 
 // Macro-categories group sub-categories for admin panel navigation
