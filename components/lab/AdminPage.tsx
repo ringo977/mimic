@@ -11,7 +11,7 @@ import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
-  ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons,
+  ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette,
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
@@ -936,10 +936,12 @@ function InstrumentsTab() {
   const [showMaintenance, setShowMaintenance] = useState<string | null>(null);
   const [mLogs, setMLogs] = useState<MaintenanceLog[]>([]);
   const [mForm, setMForm] = useState<MaintenanceLog | null>(null);
-  const empty = (): Instrument => ({ id: generateId(), name: '', category: 'Cell Culture', location: '', locationId: undefined, requiresCertification: false, description: '', icon: '🔬' });
+  const empty = (): Instrument => ({ id: generateId(), name: '', category: 'Cell Culture', location: '', locationId: undefined, requiresCertification: false, description: '', icon: '🧫' });
   const emptyLog = (instId: string): MaintenanceLog => ({ id: generateId(), instrumentId: instId, date: todayStr(), type: 'scheduled', description: '', performedBy: user.name });
   const [form, setForm] = useState<Instrument>(empty());
-  const open = (i?: Instrument) => { setForm(i ? { ...i } : empty()); setEditing(i || null); setShowForm(true); };
+  // While the icon has not been picked by hand, follow the name/category
+  const [iconPicked, setIconPicked] = useState(false);
+  const open = (i?: Instrument) => { setForm(i ? { ...i } : empty()); setIconPicked(Boolean(i)); setEditing(i || null); setShowForm(true); };
   const setLocationId = (locId: string) => {
     const loc = locations.find(l => l.id === locId);
     setForm(f => ({ ...f, locationId: locId || undefined, location: loc?.name || f.location }));
@@ -950,16 +952,17 @@ function InstrumentsTab() {
 
   const importSpec: ImportSpec<Instrument> = {
     title: 'Import instruments (CSV)',
-    headers: ['Name', 'Category', 'Location', 'S/N', 'Manufacturer', 'Model', 'Purchase Date', 'Next Maintenance', 'Cert'],
-    aliases: { 'S/N': ['serial', 'serial number'], 'Purchase Date': ['purchase'], 'Next Maintenance': ['maintenance', 'next maintenance date'], 'Cert': ['requires certification', 'certification'] },
+    headers: ['Name', 'Category', 'Location', 'S/N', 'Manufacturer', 'Model', 'Purchase Date', 'Next Maintenance', 'Cert', 'Icon'],
+    aliases: { 'S/N': ['serial', 'serial number'], 'Purchase Date': ['purchase'], 'Next Maintenance': ['maintenance', 'next maintenance date'], 'Cert': ['requires certification', 'certification'], 'Icon': ['emoji'] },
     template: [
-      ['Confocal Microscope', 'Microscopy', 'Room 101', 'SN-12345', 'Leica', 'SP8', '2023-01-15', '2026-12-01', 'Yes'],
-      ['CO₂ Incubator', 'Cell Culture', 'Room 101', '', 'Thermo', 'Heracell', '', '', 'No'],
+      ['Confocal Microscope', 'Microscopy', 'Room 101', 'SN-12345', 'Leica', 'SP8', '2023-01-15', '2026-12-01', 'Yes', ''],
+      ['CO₂ Incubator', 'Cell Culture', 'Room 101', '', 'Thermo', 'Heracell', '', '', 'No', '🌡️'],
     ],
     templateName: 'instruments_template',
     notes: <>
       <p><strong>Category</strong>: e.g. {instrumentCategories.join(', ')} (free text allowed; defaults to Cell Culture).</p>
       <p><strong>Location</strong>: matched to an existing location by name. <strong>Cert</strong>: Yes/No. Dates as YYYY-MM-DD.</p>
+      <p><strong>Icon</strong>: optional emoji; if empty it is guessed from the name (Mamba &rarr; 🐍, PCR &rarr; 🧬, laptop &rarr; 💻…).</p>
     </>,
     onAdd: addInstrument,
     parseRow: (rec, rowNum) => {
@@ -969,7 +972,8 @@ function InstrumentsTab() {
       const item: Instrument = {
         id: generateId(), name: rec['Name'], category: rec['Category'] || 'Cell Culture',
         location: loc?.name || locVal, locationId: loc?.id,
-        requiresCertification: /^(yes|true|1|y)$/i.test(rec['Cert']), description: '', icon: '🔬',
+        requiresCertification: /^(yes|true|1|y)$/i.test(rec['Cert']), description: '',
+        icon: rec['Icon'] || suggestInstrumentIcon(rec['Name'], rec['Category'] || 'Cell Culture'),
         serialNumber: rec['S/N'] || undefined, manufacturer: rec['Manufacturer'] || undefined, model: rec['Model'] || undefined,
         purchaseDate: rec['Purchase Date'] || undefined, nextMaintenanceDate: rec['Next Maintenance'] || undefined,
       };
@@ -1076,11 +1080,11 @@ function InstrumentsTab() {
       {/* Instrument Form */}
       {showForm && <Modal title={editing ? 'Edit Instrument' : 'Add Instrument'} onClose={() => setShowForm(false)}>
         <div className="space-y-3">
-          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} /></Field>
+          <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value, icon: iconPicked ? form.icon : suggestInstrumentIcon(e.target.value, form.category) })} className={inputCls} /></Field>
           <Field label="Icon">
             <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-xl max-h-28 overflow-y-auto">
               {instrumentIcons.map(emoji => (
-                <button key={emoji} type="button" onClick={() => setForm({ ...form, icon: emoji })}
+                <button key={emoji} type="button" onClick={() => { setIconPicked(true); setForm({ ...form, icon: emoji }); }}
                   className={`w-9 h-9 rounded-lg text-lg flex items-center justify-center transition-all ${form.icon === emoji ? 'bg-[#102C53] ring-2 ring-[#4DC9FF] scale-110' : 'bg-gray-50 hover:bg-gray-100'}`}>
                   {emoji}
                 </button>
@@ -1089,7 +1093,7 @@ function InstrumentsTab() {
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Category">
-              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls}>
+              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value, icon: iconPicked ? form.icon : suggestInstrumentIcon(form.name, e.target.value) })} className={inputCls}>
                 {instrumentCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>

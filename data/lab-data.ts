@@ -515,14 +515,50 @@ export function getMacroCategory(category: string): ReagentMacroCategory {
 }
 
 // Known instrument categories (for dropdown)
-export const instrumentCategories = ['Cell Culture', 'Microscopy', 'Microfabrication', 'Analysis', 'Microfluidics'] as const;
+export const instrumentCategories = ['Cell Culture', 'Microscopy', 'Microfabrication', 'Analysis', 'Microfluidics', 'Stimulators', 'Computers'] as const;
 
 // Emoji palette for instrument icons
 export const instrumentIcons = [
   '🔬', '🧫', '🌡️', '🔄', '🔢', '🔍', '💿', '⚡', '🔥', '☀️',
   '📊', '📋', '🧬', '🧪', '💉', '🎛️', '🔧', '⚗️', '🧲', '💡',
   '🖥️', '📷', '🩺', '⚙️', '🏗️', '🛠️', '📐', '🔩', '💎', '🌊',
+  '💻', '💨', '🌀', '♨️', '🧯', '🐍', '📈', '🫧', '⚖️', '🖨️',
 ];
+
+/**
+ * Icon suggested from the instrument name, with the category as fallback.
+ * Used by the CSV import and by the "new instrument" form, which until Sep 2026
+ * gave a microscope to everything. Order matters: the first match wins.
+ */
+const instrumentIconRules: [RegExp, string][] = [
+  [/mamba/i, '🐍'],                    // the Mamba stimulators, by name
+  [/cubic/i, '⚙️'], [/diamond/i, '💎'],
+  [/\bmech\b|stimulator/i, '🌊'],
+  [/laptop|computer|\bpc\b|workstation/i, '💻'],
+  [/confocal/i, '🔬'], [/fluorescence/i, '💡'], [/microscope/i, '🔍'],
+  [/safety cabinet|biosafety|th hood/i, '🧫'],
+  [/laminar/i, '🌀'], [/fume hood/i, '⚗️'], [/hood/i, '💨'],
+  [/hot plate|oven/i, '🔥'], [/autoclave|steriliz/i, '♨️'],
+  [/resin|photoresist/i, '⚗️'], [/spin coater|coater/i, '🌀'],
+  [/plasma|bonder/i, '⚡'],
+  [/syringe pump/i, '💉'], [/compressed air|\btank\b|cylinder/i, '🧯'],
+  [/regulator|controller/i, '🎛️'], [/\bpump\b/i, '💨'],
+  [/\bpcr\b/i, '🧬'], [/plate reader|tecan/i, '📋'],
+  [/cytoflex|cytomet/i, '📊'], [/oscillo|analog discovery/i, '📈'],
+  [/amplifier/i, '⚡'], [/sonicator|ultrasonic/i, '🫧'],
+  [/incubator|freezer|fridge/i, '🌡️'], [/centrifuge/i, '🔄'],
+  [/balance|\bscale\b/i, '⚖️'], [/printer|3d print/i, '🖨️'],
+];
+
+const instrumentCategoryIcons: Record<string, string> = {
+  'Cell Culture': '🧫', 'Microscopy': '🔬', 'Microfabrication': '🏗️',
+  'Analysis': '📊', 'Microfluidics': '🌊', 'Stimulators': '🎛️', 'Computers': '💻',
+};
+
+export function suggestInstrumentIcon(name: string, category?: string): string {
+  const hit = instrumentIconRules.find(([rx]) => rx.test(name));
+  return hit ? hit[1] : (category && instrumentCategoryIcons[category]) || '🔧';
+}
 
 export interface ReagentTransaction {
   id: string;
