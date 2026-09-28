@@ -10,11 +10,15 @@
 --
 --   cells  numeric   absolute number of cells per vial (1.25M → 1250000)
 --
--- Backfill rule: the FIRST "<number> M" or "<number> K" token in the notes
--- (comma or dot decimals, optional space before the unit, unit must end
--- the word so "P5 MPA" or "1 MBA" are not read as counts). Bare numbers
--- without a unit ("hCF AXOL d5 0.647") and flask fractions ("1/2 T75")
--- are left alone — Stefania can fill them from the app.
+-- Backfill rules:
+--  1. the FIRST "<number> M" or "<number> K" token in the notes (comma or
+--     dot decimals, optional space before the unit, unit must end the word
+--     so "P5 MPA" or "1 MBA" are not read as counts);
+--  2. otherwise a lone decimal number without unit ("hCF AXOL d5 0.647",
+--     "HUVEc P6 0.9", "HT-29 P13 0.6") is read as MILLIONS — the lab's
+--     shorthand, confirmed by Marco 28/09. It must be a whole word with a
+--     single dot, so dates "15.12.23" and passages "P6" never match.
+-- Flask fractions ("1/2 T75") are how biologists write it: no count.
 -- ============================================================
 
 ALTER TABLE cryo_vials ADD COLUMN IF NOT EXISTS cells numeric;
@@ -29,10 +33,20 @@ FROM  (SELECT id, regexp_match(notes, '(\d+(?:[.,]\d+)?)\s*([MmKk])\y') AS m
 WHERE  v.id = x.id
   AND  x.m IS NOT NULL;
 
+-- 2. lone decimal without unit → millions (only below 100 M, as a guard)
+UPDATE cryo_vials v
+SET    cells = round(m[1]::numeric * 1000000)
+FROM  (SELECT id, regexp_match(split_part(notes, ' | ', 1), '(?:^|\s)(\d+\.\d+)(?:\s|$)') AS m
+       FROM   cryo_vials
+       WHERE  cells IS NULL) x
+WHERE  v.id = x.id
+  AND  x.m IS NOT NULL
+  AND  x.m[1]::numeric < 100;
+
 -- ------------------------------------------------------------
 -- Check
 -- ------------------------------------------------------------
--- Expected on the 27/09 import: total 698, with_cells 577, range 0.1M – 25M
+-- Expected on the 27/09 import: total 698, with_cells 590 (577 with unit + 13 bare decimals), range 0.1M – 25M
 SELECT count(*)                          AS total,
        count(*) FILTER (WHERE cells IS NOT NULL) AS with_cells,
        min(cells) AS min_cells, max(cells) AS max_cells

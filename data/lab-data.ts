@@ -772,6 +772,9 @@ export function parseCells(raw: string): number | null | undefined {
   m = s.match(/^(\d+(?:\.\d+)?)e(\d+)$/i);
   if (m) return Math.round(Number(m[1]) * Math.pow(10, Number(m[2])));
   if (/^\d+$/.test(s)) return Number(s);
+  // Lab shorthand: a lone decimal ("0.647", "0.9") means millions
+  m = s.match(/^(\d+\.\d+)$/);
+  if (m && Number(m[1]) < 100) return Math.round(Number(m[1]) * 1e6);
   return null;
 }
 
