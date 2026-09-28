@@ -254,6 +254,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     max_stock: number; unit: string; expiry_date: string; location: string;
     storage_unit_id: string | null; box_id: string | null; shelf: number | null; door: string | null; supplier: string; catalog_number: string;
     alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
+    kind: string | null; derived_from_id: string | null; responsible_user_ids: string[] | null;
   }>('reagents', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -264,6 +265,9 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     supplier: r.supplier, catalogNumber: r.catalog_number,
     alertThreshold: r.alert_threshold,
     lot: r.lot ?? undefined, owner: r.owner ?? undefined, notes: r.notes ?? undefined,
+    kind: (r.kind as Reagent['kind']) ?? 'item',
+    derivedFromId: r.derived_from_id ?? undefined,
+    responsibleUserIds: r.responsible_user_ids ?? undefined,
   }));
 }
 
@@ -278,6 +282,8 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     supplier: r.supplier, catalog_number: r.catalogNumber,
     alert_threshold: r.alertThreshold,
     lot: r.lot ?? null, owner: r.owner ?? null, notes: r.notes ?? null,
+    kind: r.kind ?? 'item', derived_from_id: r.derivedFromId ?? null,
+    responsible_user_ids: r.responsibleUserIds ?? [],
   });
 }
 
@@ -298,12 +304,26 @@ export async function adjustReagentStock(
   });
   if (error) return { error: error.message };
   if (data === null || data === undefined) return { error: 'no stock returned' };
-  // v3 returns { stock, applied, log }; the superseded v1/v2 returned a bare number.
+  // v3+ returns { stock, applied, log }; the superseded v1/v2 returned a bare number.
   if (typeof data === 'object' && 'stock' in data) {
     const d = data as { stock: number; log?: LogEntry };
     return { stock: Number(d.stock), log: d.log ?? null };
   }
   return { stock: Number(data), log: null };
+}
+
+// Take from a stock and top up the working solution prepared from it, in
+// one server transaction (scripts/supabase-2026-09-reagent-kind.sql).
+export async function prepareWorkingSolution(
+  stockId: string, stockTaken: number, workingId: string, workingMade: number, notes?: string,
+): Promise<{ stock: number; working: number; log: LogEntry | null } | { error: string }> {
+  const { data, error } = await supabase.rpc('prepare_working_solution', {
+    p_stock_id: stockId, p_stock_taken: stockTaken, p_working_id: workingId, p_working_made: workingMade, p_notes: notes ?? null,
+  });
+  if (error) return { error: error.message };
+  const d = data as { stock: number; working: number; log?: LogEntry } | null;
+  if (!d) return { error: 'no result returned' };
+  return { stock: Number(d.stock), working: Number(d.working), log: d.log ?? null };
 }
 
 // Current stock of one reagent, straight from the server (used to undo an

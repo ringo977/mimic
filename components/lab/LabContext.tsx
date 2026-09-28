@@ -17,7 +17,7 @@ import {
   fetchCertifications, upsertCertification, deleteCertification,
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
-  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock,
+  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
   fetchBookings, upsertBooking, deleteBooking,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
   fetchWishlist, upsertWishlistItem,
@@ -52,6 +52,7 @@ interface LabContextType {
   reagents: Reagent[];
   withdrawReagent: (reagentId: string, amount: number, purpose: string, project: string) => void;
   addReagentStock: (reagentId: string, amount: number) => void;
+  prepareWorkingSolution: (stockId: string, stockTaken: number, workingId: string, workingMade: number, notes?: string) => void;
   cryoVials: CryoVial[];
   addCryoVial: (v: Omit<CryoVial, 'id'>) => void;
   addCryoVials: (list: Omit<CryoVial, 'id'>[]) => void;
@@ -311,6 +312,31 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     changeReagentStock(reagentId, amount, 'Reagent restock');
   }, [changeReagentStock]);
 
+  // Take from a stock and top up the working solution made from it: one
+  // server transaction, one log line (prepare_working_solution RPC).
+  const prepareWorkingSolution = useCallback(async (stockId: string, stockTaken: number, workingId: string, workingMade: number, notes?: string) => {
+    if (stockTaken <= 0 || workingMade <= 0 || stockId === workingId) return;
+    setReagents(prev => prev.map(r =>
+      r.id === stockId ? { ...r, currentStock: Math.max(0, r.currentStock - stockTaken) }
+      : r.id === workingId ? { ...r, currentStock: r.currentStock + workingMade, derivedFromId: r.derivedFromId ?? stockId }
+      : r));
+    const res = await rpcPrepareWorkingSolution(stockId, stockTaken, workingId, workingMade, notes);
+    if ('stock' in res) {
+      setReagents(prev => prev.map(r =>
+        r.id === stockId ? { ...r, currentStock: res.stock }
+        : r.id === workingId ? { ...r, currentStock: res.working }
+        : r));
+      if (res.log) setLog(prev => [res.log as LogEntry, ...prev]);
+      return;
+    }
+    const [st, ws] = await Promise.all([fetchReagentStock(stockId), fetchReagentStock(workingId)]);
+    setReagents(prev => prev.map(r =>
+      r.id === stockId && st !== null ? { ...r, currentStock: st }
+      : r.id === workingId && ws !== null ? { ...r, currentStock: ws }
+      : r));
+    setSyncError(`Prepare working solution: refused by the server (${res.error}). The stocks shown are the server's values.`);
+  }, []);
+
   // ---- Cryo ----
   // One or many vials of the same batch: every row is written, one log line.
   const addCryoVials = useCallback((list: Omit<CryoVial, 'id'>[]) => {
@@ -459,7 +485,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       absences, addAbsence, updateAbsence, removeAbsence,
       absenceSettings, updateAbsenceSettings,
       canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(user.role),
-      reagents, withdrawReagent, addReagentStock,
+      reagents, withdrawReagent, addReagentStock, prepareWorkingSolution,
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus,
       log, addLogEntry,

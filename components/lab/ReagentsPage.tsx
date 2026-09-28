@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, Reagent, StorageUnit, DoorSide } from '@/data/lab-data';
+import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
-  const { user, permissions, reagents, withdrawReagent, addReagentStock, storageUnits, storageBoxes } = useLabContext();
+  const { user, users, permissions, reagents, withdrawReagent, addReagentStock, prepareWorkingSolution, storageUnits, storageBoxes } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedKind, setSelectedKind] = useState<ReagentKind | 'All'>('All');
   const [view, setView] = useState<'list' | 'units'>('list');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [modal, setModal] = useState<{ type: 'withdraw' | 'add'; reagentId: string } | null>(null);
@@ -16,6 +17,46 @@ export default function ReagentsPage() {
   const [purpose, setPurpose] = useState('');
   const [project, setProject] = useState(user.projects[0] || '');
   const amount = amountStr === '' ? 0 : Number(amountStr);
+  // "Prepare working solution": from a stock (or from a working solution, picking its stock)
+  const [prep, setPrep] = useState<{ stockId: string; workingId: string } | null>(null);
+  const [prepTakenStr, setPrepTakenStr] = useState('1');
+  const [prepMadeStr, setPrepMadeStr] = useState('1');
+  const [prepNotes, setPrepNotes] = useState('');
+
+  // Who may take from this reagent (stocks are restricted to their responsibles)
+  const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
+  const canPrepare = permissions.canWithdrawReagents && permissions.canAddReagents;
+  const responsibleNames = (r: Reagent) => (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || '?');
+  const stocks = useMemo(() => reagents.filter(r => r.kind === 'stock').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
+  const workings = useMemo(() => reagents.filter(r => r.kind === 'working').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
+  const kindCounts = useMemo(() => {
+    const c = { stock: 0, working: 0, item: 0 };
+    reagents.forEach(r => { c[r.kind ?? 'item']++; });
+    return c;
+  }, [reagents]);
+
+  const openPrepare = (r: Reagent) => {
+    if (r.kind === 'stock') {
+      const ws = workings.filter(w => w.derivedFromId === r.id);
+      setPrep({ stockId: r.id, workingId: ws[0]?.id || '' });
+    } else {
+      setPrep({ stockId: r.derivedFromId || '', workingId: r.id });
+    }
+    setPrepTakenStr('1'); setPrepMadeStr('1'); setPrepNotes('');
+  };
+  const prepStock = prep ? reagents.find(r => r.id === prep.stockId) : undefined;
+  const prepWorking = prep ? reagents.find(r => r.id === prep.workingId) : undefined;
+  const prepTaken = prepTakenStr === '' ? 0 : Number(prepTakenStr);
+  const prepMade = prepMadeStr === '' ? 0 : Number(prepMadeStr);
+  const prepTakenTooHigh = !!prepStock && prepTaken > prepStock.currentStock;
+  const prepMadeTooHigh = !!prepWorking && prepWorking.maxStock > 0 && prepWorking.currentStock + prepMade > prepWorking.maxStock;
+  const prepStockLocked = !!prepStock && !canAccessStock(user, prepStock);
+  const prepOk = !!prepStock && !!prepWorking && prepTaken > 0 && prepMade > 0 && !prepTakenTooHigh && !prepMadeTooHigh && !prepStockLocked;
+  const handlePrepare = () => {
+    if (!prepOk || !prep) return;
+    prepareWorkingSolution(prep.stockId, prepTaken, prep.workingId, prepMade, prepNotes.trim() || undefined);
+    setPrep(null);
+  };
 
   const categories = useMemo(() => {
     return ['All', ...Array.from(new Set(reagents.map(r => r.category)))];
@@ -24,10 +65,11 @@ export default function ReagentsPage() {
   const filtered = useMemo(() => {
     return reagents.filter(r => {
       const matchCat = selectedCategory === 'All' || r.category === selectedCategory;
+      const matchKind = selectedKind === 'All' || (r.kind ?? 'item') === selectedKind;
       const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase()) || r.catalogNumber.toLowerCase().includes(search.toLowerCase());
-      return matchCat && matchSearch;
+      return matchCat && matchKind && matchSearch;
     });
-  }, [reagents, selectedCategory, search]);
+  }, [reagents, selectedCategory, selectedKind, search]);
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
 
@@ -83,6 +125,7 @@ export default function ReagentsPage() {
           selectedUnitId={selectedUnitId} onSelectUnit={setSelectedUnitId}
           search={search} onSearch={setSearch}
           canWithdraw={permissions.canWithdrawReagents} canAdd={permissions.canAddReagents}
+          canTake={canTake}
           onWithdraw={id => { setModal({ type: 'withdraw', reagentId: id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
           onAdd={id => { setModal({ type: 'add', reagentId: id }); setAmountStr('1'); }}
         />
@@ -116,13 +159,36 @@ export default function ReagentsPage() {
         ))}
       </div>
 
+      {/* Stock / working solution / item */}
+      {(kindCounts.stock > 0 || kindCounts.working > 0) && (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {(['All', 'stock', 'working', 'item'] as const).map(k => (
+            <button
+              key={k}
+              onClick={() => setSelectedKind(k)}
+              className={`px-3 py-1 rounded-full text-[11px] font-medium font-manrope whitespace-nowrap border transition-all ${
+                selectedKind === k ? 'bg-[#4DC9FF]/15 border-[#4DC9FF] text-[#102C53]' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {k === 'All' ? 'All types' : `${reagentKindLabel[k]}s`}{k !== 'All' && <span className="text-gray-400"> {kindCounts[k]}</span>}
+            </button>
+          ))}
+          <span className="ml-auto self-center text-[10px] text-gray-400 font-manrope whitespace-nowrap hidden sm:inline">
+            <Lock size={9} className="inline -mt-0.5" /> stocks: only their responsibles can take from them
+          </span>
+        </div>
+      )}
+
       {/* Reagent Cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filtered.map(r => (
-          <div key={r.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div key={r.id} className={`bg-white rounded-xl p-4 shadow-sm border ${r.kind === 'stock' ? 'border-[#102C53]/30' : 'border-gray-100'}`}>
             <div className="flex items-start justify-between mb-2">
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-gray-900 font-manrope truncate">{r.name}</h3>
+                <h3 className="text-sm font-semibold text-gray-900 font-manrope truncate flex items-center gap-1.5">
+                  <KindBadge kind={r.kind} />
+                  <span className="truncate">{r.name}</span>
+                </h3>
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.supplier} &middot; {r.catalogNumber}</p>
               </div>
               {r.currentStock <= r.alertThreshold && (
@@ -156,18 +222,35 @@ export default function ReagentsPage() {
               {r.lot && <span className="font-mono">lot {r.lot}</span>}
               {r.owner && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{r.owner}</span>}
             </div>
+            {r.kind === 'stock' && (
+              <p className="mt-1.5 text-[10px] font-manrope flex items-center gap-1 text-[#102C53]">
+                <Users size={10} />
+                {responsibleNames(r).length ? <>Responsible: {responsibleNames(r).join(', ')}</> : <span className="text-amber-600">No responsible assigned yet</span>}
+              </p>
+            )}
+            {r.kind === 'working' && (() => {
+              const st = r.derivedFromId ? reagents.find(x => x.id === r.derivedFromId) : undefined;
+              return <p className="mt-1.5 text-[10px] text-gray-500 font-manrope flex items-center gap-1"><FlaskConical size={10} /> {st ? <>From stock: <span className="text-gray-700">{st.name}</span></> : 'Stock not linked yet'}</p>;
+            })()}
             {r.notes && <p className="mt-1.5 text-[10px] text-gray-400 font-manrope italic">{r.notes}</p>}
 
             {/* Actions */}
             <div className="flex gap-2 mt-3">
-              {permissions.canWithdrawReagents && (
+              {permissions.canWithdrawReagents && (canTake(r) ? (
                 <button
                   onClick={() => { setModal({ type: 'withdraw', reagentId: r.id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
                   className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium font-manrope hover:bg-amber-100 transition-colors"
                 >
                   <Minus size={12} /> Withdraw
                 </button>
-              )}
+              ) : (
+                <span
+                  title={`Stock reserved to its responsibles${responsibleNames(r).length ? ': ' + responsibleNames(r).join(', ') : ''}`}
+                  className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-gray-50 text-gray-400 text-xs font-medium font-manrope cursor-not-allowed"
+                >
+                  <Lock size={12} /> Responsibles only
+                </span>
+              ))}
               {permissions.canAddReagents && (
                 <button
                   onClick={() => { setModal({ type: 'add', reagentId: r.id }); setAmountStr('1'); }}
@@ -177,6 +260,14 @@ export default function ReagentsPage() {
                 </button>
               )}
             </div>
+            {canPrepare && (r.kind === 'stock' && canTake(r) || r.kind === 'working') && (
+              <button
+                onClick={() => openPrepare(r)}
+                className="w-full mt-2 flex items-center justify-center gap-1 py-1.5 rounded-lg border border-[#4DC9FF]/60 text-[#102C53] text-[11px] font-medium font-manrope hover:bg-[#4DC9FF]/10 transition-colors"
+              >
+                <FlaskConical size={12} /> Prepare working solution
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -258,14 +349,120 @@ export default function ReagentsPage() {
           </div>
         </div>
       )}
+
+      {/* Prepare working solution */}
+      {prep && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-bold text-gray-900 font-manrope flex items-center gap-2"><FlaskConical size={18} className="text-[#102C53]" /> Prepare working solution</h2>
+              <button onClick={() => setPrep(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-gray-500 font-manrope mb-5">Takes from the stock and tops up the working solution in one movement, with a single log line.</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">From stock</label>
+                <select
+                  value={prep.stockId}
+                  onChange={e => setPrep({ ...prep, stockId: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                >
+                  <option value="">— choose a stock —</option>
+                  {stocks.map(s => <option key={s.id} value={s.id} disabled={!canAccessStock(user, s)}>{s.name} ({s.currentStock} {s.unit}){canAccessStock(user, s) ? '' : ' — responsibles only'}</option>)}
+                </select>
+                {prepStock && (
+                  <p className="text-[11px] mt-1 text-gray-400 font-manrope">
+                    {prepStock.currentStock} {prepStock.unit} available · {reagentPlaceLabel(prepStock, storageUnits, storageBoxes)}
+                    {responsibleNames(prepStock).length ? ` · responsible: ${responsibleNames(prepStock).join(', ')}` : ''}
+                  </p>
+                )}
+                {prepStockLocked && <p className="text-[11px] mt-1 text-red-600 font-manrope">You are not among the responsibles of this stock.</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Amount taken from stock{prepStock ? ` (${prepStock.unit})` : ''}</label>
+                <input
+                  type="number" min={0} step="any"
+                  value={prepTakenStr}
+                  onChange={e => setPrepTakenStr(e.target.value)}
+                  className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${prepTakenTooHigh ? 'border-red-300' : 'border-gray-200'}`}
+                />
+                {prepTakenTooHigh && <p className="text-[11px] mt-1 text-red-600 font-manrope">Only {prepStock?.currentStock} {prepStock?.unit} in stock</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Working solution</label>
+                <select
+                  value={prep.workingId}
+                  onChange={e => setPrep({ ...prep, workingId: e.target.value })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                >
+                  <option value="">— choose a working solution —</option>
+                  {(() => {
+                    const linked = workings.filter(w => prep.stockId && w.derivedFromId === prep.stockId);
+                    const others = workings.filter(w => !linked.includes(w));
+                    return <>
+                      {linked.length > 0 && <optgroup label="Made from this stock">{linked.map(w => <option key={w.id} value={w.id}>{w.name} ({w.currentStock} {w.unit})</option>)}</optgroup>}
+                      <optgroup label={linked.length ? 'Other working solutions' : 'Working solutions'}>{others.map(w => <option key={w.id} value={w.id}>{w.name} ({w.currentStock} {w.unit})</option>)}</optgroup>
+                    </>;
+                  })()}
+                </select>
+                {prepWorking && (
+                  <p className="text-[11px] mt-1 text-gray-400 font-manrope">
+                    Now {prepWorking.currentStock}{prepWorking.maxStock > 0 ? ` / ${prepWorking.maxStock}` : ''} {prepWorking.unit} · {reagentPlaceLabel(prepWorking, storageUnits, storageBoxes)}
+                    {prepStock && prepWorking.derivedFromId && prepWorking.derivedFromId !== prepStock.id ? ' · usually made from another stock' : ''}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Amount produced{prepWorking ? ` (${prepWorking.unit})` : ''}</label>
+                <input
+                  type="number" min={0} step="any"
+                  value={prepMadeStr}
+                  onChange={e => setPrepMadeStr(e.target.value)}
+                  className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${prepMadeTooHigh ? 'border-red-300' : 'border-gray-200'}`}
+                />
+                {prepMadeTooHigh && <p className="text-[11px] mt-1 text-red-600 font-manrope">Exceeds the maximum stock of {prepWorking?.maxStock} {prepWorking?.unit}</p>}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Notes (optional)</label>
+                <input
+                  value={prepNotes}
+                  onChange={e => setPrepNotes(e.target.value)}
+                  placeholder="e.g., 10 µg/mL in PBS, 20 aliquots of 50 µL"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                />
+              </div>
+
+              <button
+                onClick={handlePrepare}
+                disabled={!prepOk}
+                className="w-full py-3 rounded-xl font-semibold text-sm font-manrope text-white bg-[#102C53] hover:bg-[#0c2140] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {prepStock && prepWorking ? `−${prepTaken || ''} ${prepStock.unit} stock → +${prepMade || ''} ${prepWorking.unit} working solution` : 'Prepare'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function KindBadge({ kind }: { kind?: ReagentKind }) {
+  if (!kind || kind === 'item') return null;
+  return kind === 'stock'
+    ? <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-px rounded bg-[#102C53] text-white text-[9px] font-semibold tracking-wide font-manrope" title="Stock — reserved to its responsibles"><Lock size={8} /> STOCK</span>
+    : <span className="shrink-0 px-1.5 py-px rounded bg-[#4DC9FF]/20 text-[#102C53] text-[9px] font-semibold tracking-wide font-manrope" title="Working solution">WS</span>;
 }
 
 // ============================================================
 // By unit: shelves top → bottom, boxes and loose items on each
 // ============================================================
-function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId, onSelectUnit, search, onSearch, canWithdraw, canAdd, onWithdraw, onAdd }: {
+function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId, onSelectUnit, search, onSearch, canWithdraw, canAdd, canTake, onWithdraw, onAdd }: {
   reagents: Reagent[];
   storageUnits: StorageUnit[];
   storageBoxes: ReturnType<typeof boxesOfUnit>;
@@ -275,6 +472,7 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
   onSearch: (s: string) => void;
   canWithdraw: boolean;
   canAdd: boolean;
+  canTake: (r: Reagent) => boolean;
   onWithdraw: (id: string) => void;
   onAdd: (id: string) => void;
 }) {
@@ -307,10 +505,12 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
     const low = r.currentStock <= r.alertThreshold;
     return (
       <div className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0 text-xs font-manrope">
-        <span className={`flex-1 min-w-0 truncate ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}>{r.name}</span>
+        <span className={`flex-1 min-w-0 truncate flex items-center gap-1 ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}><KindBadge kind={r.kind} /><span className="truncate">{r.name}</span></span>
         <span className="text-gray-400 shrink-0 tabular-nums">{r.currentStock}<span className="text-gray-300">/{r.maxStock}</span> {r.unit}</span>
         {low && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
-        {canWithdraw && <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>}
+        {canWithdraw && (canTake(r)
+          ? <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>
+          : <span className="p-1 rounded bg-gray-50 text-gray-400 cursor-not-allowed" title="Stock reserved to its responsibles"><Lock size={11} /></span>)}
         {canAdd && <button onClick={() => onAdd(r.id)} className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Restock"><Plus size={11} /></button>}
       </div>
     );

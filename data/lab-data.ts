@@ -596,6 +596,31 @@ export interface Reagent {
   lot?: string;             // lot / batch number
   owner?: string;           // whoever bought it (free text: may be an alumnus)
   notes?: string;           // free text, e.g. "2 aliquots in use"
+  kind?: ReagentKind;       // stock (concentrated, restricted) / working solution / plain item
+  derivedFromId?: string;   // working solution → the stock it is prepared from
+  responsibleUserIds?: string[];  // stock → lab_users.id of the 1–2 people in charge
+}
+
+/**
+ * Stock vs working solution. A stock is the concentrated / powder form,
+ * often at −80 °C, looked after by one or two people; working solutions are
+ * prepared from it and used by everybody. "item" is everything else
+ * (plasticware, kits, antibodies…).
+ */
+export type ReagentKind = 'stock' | 'working' | 'item';
+export const reagentKinds: ReagentKind[] = ['stock', 'working', 'item'];
+export const reagentKindLabel: Record<ReagentKind, string> = { stock: 'Stock', working: 'Working solution', item: 'Item' };
+export const reagentKindShort: Record<ReagentKind, string> = { stock: 'STOCK', working: 'WS', item: '' };
+
+/**
+ * Whoever may take from a stock: its responsibles, plus the people who can
+ * manage everybody's material (admin / PI / lab manager). Mirrors the check
+ * in adjust_reagent_stock() on the server.
+ */
+export function canAccessStock(user: Pick<LabUser, 'id' | 'role' | 'isAdmin'>, r: Reagent): boolean {
+  if ((r.kind ?? 'item') !== 'stock') return true;
+  if (user.isAdmin || user.role === 'admin' || user.role === 'pi' || user.role === 'lab_manager') return true;
+  return (r.responsibleUserIds ?? []).includes(user.id);
 }
 
 /** Shelf a reagent sits on: its own value, else the shelf of its box. */

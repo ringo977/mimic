@@ -35,6 +35,7 @@
 --      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
 --      then supabase-2026-09-door.sql             (door side, double-door units)
 --      then supabase-2026-09-cryo-cells.sql       (cryo_vials.cells + backfill)
+--      then supabase-2026-09-reagent-kind.sql     (stock / working solution, run AFTER fix-assessment: stock RPC v4)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
@@ -209,8 +210,13 @@ CREATE TABLE IF NOT EXISTS reagents (
   notes            text,
   shelf            integer,   -- 1 = top shelf; NULL → inherits storage_boxes.shelf via box_id
   door             text,      -- 'left' | 'right' in double-door units; NULL → inherits the box's
+  kind             text NOT NULL DEFAULT 'item'::text,   -- stock | working | item (2026-09-reagent-kind.sql)
+  derived_from_id  text,      -- working solution → its stock (FK reagents.id ON DELETE SET NULL)
+  responsible_user_ids text[] NOT NULL DEFAULT '{}'::text[],   -- stock → lab_users.id[]
   CONSTRAINT reagents_door_check
     CHECK (door IN ('left', 'right')),   -- 2026-09-door.sql
+  CONSTRAINT reagents_kind_check
+    CHECK (kind IN ('stock', 'working', 'item')),   -- 2026-09-reagent-kind.sql
   CONSTRAINT reagents_stock_check
     CHECK ((current_stock >= (0)::numeric))   -- 2026-09-tighten.sql
 );

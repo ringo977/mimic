@@ -16,6 +16,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
+  ReagentKind, reagentKinds, reagentKindLabel,
   parseCells, formatCells,
 } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -1711,8 +1712,10 @@ function BoxManager({ unit, onClose }: { unit: StorageUnit; onClose: () => void 
 // Reagents Tab — with macro-category selector
 // ============================================================
 function ReagentsTab() {
-  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits, storageBoxes } = useLabContext();
+  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits, storageBoxes, users } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
+  const activeUsers = useMemo(() => users.filter(u => u.status === 'active' && !isAlumni(u)).sort((a, b) => a.name.localeCompare(b.name)), [users]);
+  const stockOptions = useMemo(() => reagents.filter(r => r.kind === 'stock').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
   const [activeMacro, setActiveMacro] = useState<ReagentMacroCategory>('Reagents');
   const [selectedSubCat, setSelectedSubCat] = useState<string>('All');
   const [editing, setEditing] = useState<Reagent | null>(null);
@@ -1742,7 +1745,7 @@ function ReagentsTab() {
   const switchMacro = (k: ReagentMacroCategory) => { setActiveMacro(k); setSelectedSubCat('All'); };
 
   const defaultCategory = selectedSubCat !== 'All' ? selectedSubCat : macroInfo.subCategories[0];
-  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2 });
+  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2, kind: 'item' });
   const [form, setForm] = useState<Reagent>(empty());
   const formUnit = form.storageUnitId ? storageUnits.find(s => s.id === form.storageUnitId) : undefined;
   const formShelves = formUnit && isShelfBased(formUnit.type) ? (formUnit.numShelves || 0) : 0;
@@ -1756,7 +1759,9 @@ function ReagentsTab() {
     // divide by zero in the stock bar; stock > max broke the percentage).
     const currentStock = Math.max(0, Number(form.currentStock) || 0);
     const maxStock = Math.max(1, Number(form.maxStock) || 0, currentStock);
-    const clean: Reagent = { ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0) };
+    const kind: ReagentKind = form.kind ?? 'item';
+    const clean: Reagent = { ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
+      kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: kind === 'stock' ? (form.responsibleUserIds ?? []) : [] };
     if (editing) {
       // Stock untouched in the form → keep whatever the server has now
       // (someone may have withdrawn in the meantime via the atomic RPC).
@@ -1790,18 +1795,19 @@ function ReagentsTab() {
   };
   const importSpec: ImportSpec<Reagent> = {
     title: 'Import items (CSV)',
-    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Door', 'Shelf', 'Box', 'Expiry', 'Alert', 'Lot', 'Owner', 'Notes'],
-    aliases: { 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Door': ['side', 'anta', 'lato'], 'Shelf': ['ripiano'], 'Box': ['box label', 'scatola'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'], 'Lot': ['batch', 'lot number'], 'Owner': ['bought by', 'responsible'] },
+    headers: ['Name', 'Category', 'Stock', 'Max', 'Unit', 'Supplier', 'Cat#', 'Storage Unit', 'Door', 'Shelf', 'Box', 'Expiry', 'Alert', 'Lot', 'Owner', 'Notes', 'Kind', 'From Stock', 'Responsible'],
+    aliases: { 'Kind': ['type', 'tipo'], 'From Stock': ['stock', 'derived from', 'da stock'], 'Responsible': ['responsibles', 'responsabile', 'responsabili', 'supervisor'], 'Cat#': ['catalog', 'catalog #', 'catalog number', 'cat'], 'Stock': ['current stock'], 'Max': ['max stock'], 'Unit': ['units'], 'Storage Unit': ['storage'], 'Door': ['side', 'anta', 'lato'], 'Shelf': ['ripiano'], 'Box': ['box label', 'scatola'], 'Expiry': ['expiry date'], 'Alert': ['alert at', 'alert threshold'], 'Lot': ['batch', 'lot number'], 'Owner': ['bought by'] },
     template: [
-      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '', '', '', '2026-06-15', 2, '', '', ''],
-      ['Trypsin-EDTA 0.05%', 'Cell Culture', 5, 8, 'bottles', 'Gibco', '25300054', 'Fridge +4 °C MiMic', 'left', 1, '', '2026-09-01', 2, 'H015928', 'SBR', ''],
-      ['DAPI', 'Biochemistry', 1, 3, 'vials', 'Sigma', 'D9542', 'Freezer −20 °C MiMic', '', 2, 'Fluorescence Box', '2027-01-01', 1, '', '', '2 aliquots in use'],
+      ['DMEM High Glucose', 'Cell Culture Media', 10, 12, 'bottles (500mL)', 'Gibco', '11965092', '', '', '', '', '2026-06-15', 2, '', '', '', 'item', '', ''],
+      ['TGF-β1 (powder)', 'Cell Culture', 1, 2, 'vials (10 µg)', 'R&D', '240-B', 'Freezer −80 °C MiMic', '', 1, '', '2027-01-01', 1, 'H015928', 'SBR', '', 'stock', '', 'Stefania Brambilla; Alberto Mantegazza'],
+      ['TGF-β1 aliquots', 'Cell Culture', 8, 20, 'aliquots (50 µL)', 'R&D', '240-B', 'Freezer −20 °C MiMic', '', 2, 'Growth Factors Box', '2026-12-01', 3, '', '', '10 µg/mL', 'working', 'TGF-β1 (powder)', ''],
     ],
     templateName: 'consumables_template',
     notes: <>
       <p><strong>Category</strong>: a sub-category ({macroInfo.subCategories.join(', ')}). If blank, items go to <em>{defaultCategory}</em>.</p>
       <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Door</strong>: left/right (or sx/dx), only for double-door units. <strong>Shelf</strong>: number, 1 = top. <strong>Box</strong>: label of a box already created in that unit (Admin → Storage → Boxes). <strong>Expiry</strong>: YYYY-MM-DD.</p>
       <p><strong>Lot</strong>, <strong>Owner</strong> and <strong>Notes</strong> are free text (owner may be someone who has left).</p>
+      <p><strong>Kind</strong>: <em>stock</em> (concentrated form, reserved to its responsibles), <em>working</em> (solution prepared from a stock) or <em>item</em> (default). <strong>From Stock</strong>: name or catalog # of an existing stock, for working solutions. <strong>Responsible</strong>: lab member names separated by “;”, for stocks.</p>
     </>,
     onAdd: addNewReagent,
     parseRow: (rec, rowNum) => {
@@ -1826,6 +1832,24 @@ function ReagentsTab() {
         lot: rec['Lot'] || undefined, owner: rec['Owner'] || undefined, notes: rec['Notes'] || undefined,
       };
       const notes: string[] = [];
+      const kindRaw = (rec['Kind'] || '').trim().toLowerCase();
+      const kind: ReagentKind = ['stock', 'stocks'].includes(kindRaw) ? 'stock' : ['working', 'working solution', 'ws', 'aliquot', 'aliquots'].includes(kindRaw) ? 'working' : 'item';
+      if (kindRaw && kind === 'item' && !['item', 'items'].includes(kindRaw)) notes.push(`kind "${rec['Kind']}" not recognised — imported as item`);
+      item.kind = kind;
+      const fromRaw = (rec['From Stock'] || '').trim().toLowerCase();
+      if (kind === 'working' && fromRaw) {
+        const st = stockOptions.find(x => x.name.toLowerCase() === fromRaw || (x.catalogNumber && x.catalogNumber.toLowerCase() === fromRaw));
+        if (st) item.derivedFromId = st.id; else notes.push(`stock "${rec['From Stock']}" not found — link it later`);
+      }
+      const respRaw = (rec['Responsible'] || '').split(/[;|]/).map(x => x.trim()).filter(Boolean);
+      if (kind === 'stock' && respRaw.length) {
+        const ids: string[] = [];
+        respRaw.forEach(n => {
+          const u = activeUsers.find(x => x.name.toLowerCase() === n.toLowerCase() || x.abbreviation.toLowerCase() === n.toLowerCase() || x.email.toLowerCase() === n.toLowerCase());
+          if (u) ids.push(u.id); else notes.push(`responsible "${n}" not found among active members`);
+        });
+        item.responsibleUserIds = ids;
+      }
       if (storageVal && !storageUnitId) notes.push(`storage "${storageVal}" not found — imported without a storage unit`);
       if (boxVal && storageUnitId && !box) notes.push(`box "${boxVal}" not found in that unit — imported without a box`);
       return notes.length ? { item, note: `Row ${rowNum} (${item.name}): ${notes.join('; ')}` } : { item };
@@ -1868,7 +1892,7 @@ function ReagentsTab() {
         <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Door','Shelf','Box','Expiry','Alert','Lot','Owner','Notes'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), reagentDoor(r, storageBoxes) ?? '', reagentShelf(r, storageBoxes) ?? '', storageBoxes.find(b => b.id === r.boxId)?.label || '', r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '']), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
+          <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Door','Shelf','Box','Expiry','Alert','Lot','Owner','Notes','Kind','From Stock','Responsible'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), reagentDoor(r, storageBoxes) ?? '', reagentShelf(r, storageBoxes) ?? '', storageBoxes.find(b => b.id === r.boxId)?.label || '', r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '', r.kind ?? 'item', reagents.find(x => x.id === r.derivedFromId)?.name || '', (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || '').filter(Boolean).join('; ')]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
@@ -1885,7 +1909,11 @@ function ReagentsTab() {
         </tr></thead><tbody className="divide-y divide-gray-100">
           {sortedReagents.map(r => (
             <tr key={r.id} className="hover:bg-gray-50">
-              <td className="px-3 py-2 font-medium text-gray-900">{r.name}</td>
+              <td className="px-3 py-2 font-medium text-gray-900">
+                {r.kind === 'stock' && <span className="mr-1.5 px-1.5 py-px rounded bg-[#102C53] text-white text-[9px] font-semibold" title={(r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', ') || 'no responsible yet'}>STOCK</span>}
+                {r.kind === 'working' && <span className="mr-1.5 px-1.5 py-px rounded bg-[#4DC9FF]/20 text-[#102C53] text-[9px] font-semibold" title={r.derivedFromId ? `from ${reagents.find(x => x.id === r.derivedFromId)?.name || '?'}` : 'stock not linked'}>WS</span>}
+                {r.name}
+              </td>
               {availableSubCategories.length > 1 && <td className="px-3 py-2 text-gray-500">{r.category}</td>}
               <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}/{r.maxStock} {r.unit}</span></td>
               <td className="px-3 py-2 text-gray-500">{r.supplier}</td><td className="px-3 py-2 text-gray-500 font-mono">{r.catalogNumber}</td>
@@ -1970,6 +1998,42 @@ function ReagentsTab() {
             </Field>
           </div>
           <Field label="Notes"><input value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value || undefined })} placeholder="e.g., 2 aliquots in use" className={inputCls} /></Field>
+
+          <div className="rounded-xl border border-gray-200 p-3 space-y-3">
+            <Field label="Kind">
+              <select value={form.kind ?? 'item'} onChange={e => setForm({ ...form, kind: e.target.value as ReagentKind })} className={inputCls}>
+                {reagentKinds.map(k => <option key={k} value={k}>{reagentKindLabel[k]}</option>)}
+              </select>
+              <p className="text-[10px] text-gray-400 font-manrope mt-1">
+                {form.kind === 'stock' ? 'Concentrated / powder form. Only the responsibles below (plus admin, PI, lab manager) can take from it.'
+                 : form.kind === 'working' ? 'Prepared from a stock and used by everybody. Linking the stock enables “Prepare working solution”.'
+                 : 'Plain consumable (kits, plasticware, antibodies…). No access restriction.'}
+              </p>
+            </Field>
+            {form.kind === 'stock' && (
+              <Field label="Responsible (1–2 people)">
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {(form.responsibleUserIds ?? []).map(id => {
+                    const u = users.find(x => x.id === id);
+                    return <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#102C53] text-white text-[11px] font-manrope">{u?.name || id}<button type="button" onClick={() => setForm({ ...form, responsibleUserIds: (form.responsibleUserIds ?? []).filter(x => x !== id) })} className="hover:text-red-200" aria-label="Remove"><X size={11} /></button></span>;
+                  })}
+                  {!(form.responsibleUserIds ?? []).length && <span className="text-[11px] text-amber-600 font-manrope">Nobody yet — only admin/PI/lab manager will be able to take from this stock.</span>}
+                </div>
+                <select value="" onChange={e => { const id = e.target.value; if (id && !(form.responsibleUserIds ?? []).includes(id)) setForm({ ...form, responsibleUserIds: [...(form.responsibleUserIds ?? []), id] }); }} className={inputCls}>
+                  <option value="">+ add a responsible…</option>
+                  {activeUsers.filter(u => !(form.responsibleUserIds ?? []).includes(u.id)).map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
+                </select>
+              </Field>
+            )}
+            {form.kind === 'working' && (
+              <Field label="Prepared from stock">
+                <select value={form.derivedFromId || ''} onChange={e => setForm({ ...form, derivedFromId: e.target.value || undefined })} className={inputCls}>
+                  <option value="">— not linked —</option>
+                  {stockOptions.filter(x => x.id !== form.id).map(x => <option key={x.id} value={x.id}>{x.name}{x.catalogNumber ? ` · ${x.catalogNumber}` : ''}</option>)}
+                </select>
+              </Field>
+            )}
+          </div>
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Item'}</button>
         </div>
       </Modal>}
