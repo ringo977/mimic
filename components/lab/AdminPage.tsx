@@ -13,7 +13,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
-  StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
+  StorageBox, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
   ReagentKind, reagentKinds, reagentKindLabel,
@@ -2047,7 +2047,9 @@ function ReagentsTab() {
 // Cryo Vials Tab
 // ============================================================
 function CryoTab() {
-  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes } = useLabContext();
+  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes: allBoxes } = useLabContext();
+  // 1×1 boxes are reagent containers: vials only go into boxes with a grid
+  const storageBoxes = useMemo(() => allBoxes.filter(isCryoBox), [allBoxes]);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showForm, setShowForm] = useState(false);
   // Only units that have boxes can hold vials

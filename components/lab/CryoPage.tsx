@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, boxPositionLabel, parseCells, formatCells, StorageBox } from '@/data/lab-data';
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -24,11 +24,15 @@ function getCellLineColor(cellLine: string): string {
 }
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes } = useLabContext();
+  const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
 
-  // Units that hold boxes — any type: a dewar with racks, a −80 freezer with
-  // loose boxes on shelves, a fridge with an antibody box.
+  // Only boxes with a vial grid belong here; 1×1 boxes are reagent
+  // containers ("Supplements Box") and live in the Reagents page.
+  const storageBoxes = useMemo(() => allBoxes.filter(isCryoBox), [allBoxes]);
+
+  // Units that hold cryoboxes — any type: a dewar with racks, a −80 freezer
+  // with loose boxes on shelves, a fridge with a 9×9 box.
   const boxUnits = useMemo(
     () => storageUnits.filter(s => storageBoxes.some(b => b.storageUnitId === s.id)),
     [storageUnits, storageBoxes]);

@@ -481,6 +481,12 @@ export function boxCapacity(b: StorageBox): number {
   return Math.max(0, b.gridRows) * Math.max(0, b.gridCols);
 }
 
+/**
+ * A cryobox has a grid of vial positions. A 1×1 box is a plain container
+ * (reagent box such as "Supplements Box"): it never shows up in Cryo.
+ */
+export function isCryoBox(b: StorageBox): boolean { return boxCapacity(b) > 1; }
+
 /** Position label such as "Blue · Box 2 · C3" (rack colour is resolved by the caller) */
 export function boxPositionLabel(b: StorageBox | undefined, row: number, col: number): string {
   if (!b) return `${String.fromCharCode(65 + row)}${col + 1}`;
