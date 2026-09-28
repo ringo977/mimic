@@ -262,7 +262,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   const updateAbsence = useCallback((a: Absence) => {
     setAbsences(prev => prev.map(x => x.id === a.id ? a : x));
-    track(upsertAbsence(a), 'Absence update');
+    track(upsertAbsence(a, 'update'), 'Absence update');
     addLogEntry({ userId: user.id, userName: user.name, action: `${a.status === 'approved' ? 'Approved' : a.status === 'rejected' ? 'Rejected' : a.status === 'cancelled' ? 'Cancelled' : 'Updated'} absence of ${a.userName}`, category: 'absence', details: `${absenceTypeMeta[a.type].label} ${a.startDate}${a.endDate !== a.startDate ? ` → ${a.endDate}` : ''}` });
   }, [user, addLogEntry, track]);
 
@@ -358,7 +358,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const removeCryoVial = useCallback((id: string) => {
     setCryoVials(prev => {
       const vl = prev.find(v => v.id === id);
-      if (vl) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vl.cellLine}`, category: 'cryo', details: `${vl.storageUnitId} R${vl.rack} B${vl.box}, P${vl.passage}` });
+      if (vl) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vl.cellLine}`, category: 'cryo', details: `P${vl.passage}${vl.cells ? `, ${formatCells(vl.cells)} cells` : ''} — R${vl.rack} B${vl.box} (${String.fromCharCode(65 + vl.row)}${vl.col + 1})${vl.userId !== user.id ? ` — frozen by ${vl.userName}` : ''}` });
       return prev.filter(v => v.id !== id);
     });
     track(deleteCryoVial(id), 'Cryo vial removal');
@@ -380,7 +380,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         ...(extra || {}),
       } : w);
       const w = updated.find(x => x.id === id);
-      if (w) track(upsertWishlistItem(w), 'Wishlist update');
+      if (w) track(upsertWishlistItem(w, 'update'), 'Wishlist update');
       return updated;
     });
     const it = wishlist.find(w => w.id === id);

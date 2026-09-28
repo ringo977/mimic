@@ -308,6 +308,16 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
               >
                 <option value="">Select an instrument…</option>
                 {bookableInstruments.map(i => <option key={i.id} value={i.id}>{i.icon} {i.name}</option>)}
+                {(() => {
+                  // Instruments the user is not certified for: listed but
+                  // not selectable, so nobody wonders where they went.
+                  const locked = instruments.filter(i => !bookableInstruments.includes(i));
+                  return locked.length > 0 && (
+                    <optgroup label="Training required — ask the responsible">
+                      {locked.map(i => <option key={i.id} value={i.id} disabled>🔒 {i.name}</option>)}
+                    </optgroup>
+                  );
+                })()}
               </select>
             )}
           </div>
@@ -894,7 +904,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 font-manrope truncate">{r.name}</p>
-                    <p className="text-xs text-amber-600 font-manrope">Low stock: {r.currentStock}/{r.maxStock} {r.unit}</p>
+                    <p className="text-xs text-amber-600 font-manrope">Low stock: {r.currentStock}{r.maxStock > 0 ? `/${r.maxStock}` : ''} {r.unit}</p>
                   </div>
                 </div>
               ))}

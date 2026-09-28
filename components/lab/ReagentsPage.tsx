@@ -25,7 +25,8 @@ export default function ReagentsPage() {
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
-  const canPrepare = permissions.canWithdrawReagents && permissions.canAddReagents;
+  const accessibleStocks = useMemo(() => reagents.filter(r => r.kind === 'stock' && canAccessStock(user, r)), [reagents, user]);
+  const canPrepare = permissions.canWithdrawReagents && permissions.canAddReagents && accessibleStocks.length > 0;
   const responsibleNames = (r: Reagent) => (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || '?');
   const stocks = useMemo(() => reagents.filter(r => r.kind === 'stock').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
   const workings = useMemo(() => reagents.filter(r => r.kind === 'working').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
@@ -174,7 +175,9 @@ export default function ReagentsPage() {
             </button>
           ))}
           <span className="ml-auto self-center text-[10px] text-gray-400 font-manrope whitespace-nowrap hidden sm:inline">
-            <Lock size={9} className="inline -mt-0.5" /> stocks: only their responsibles can take from them
+            <Lock size={9} className="inline -mt-0.5" /> {accessibleStocks.length > 0 || !permissions.canWithdrawReagents
+              ? 'stocks: only their responsibles can take from them'
+              : 'stocks: you are not responsible for any yet — ask the lab manager'}
           </span>
         </div>
       )}
@@ -196,17 +199,27 @@ export default function ReagentsPage() {
               )}
             </div>
 
-            {/* Stock bar */}
+            {/* Stock: bar against the maximum when one is set, otherwise
+                just the quantity (red when at/below the alert threshold) */}
             <div className="mt-3">
-              <div className="flex justify-between text-xs font-manrope mb-1">
-                <span className="text-gray-500">{r.currentStock} / {r.maxStock} {r.unit}</span>
-                <span className={`font-semibold ${stockPercent(r) <= 20 ? 'text-red-500' : stockPercent(r) <= 40 ? 'text-amber-500' : 'text-emerald-600'}`}>
-                  {stockPercent(r)}%
-                </span>
-              </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${stockColor(r)}`} style={{ width: `${stockPercent(r)}%` }} />
-              </div>
+              {r.maxStock > 0 ? (
+                <>
+                  <div className="flex justify-between text-xs font-manrope mb-1">
+                    <span className="text-gray-500">{r.currentStock} / {r.maxStock} {r.unit}</span>
+                    <span className={`font-semibold ${stockPercent(r) <= 20 ? 'text-red-500' : stockPercent(r) <= 40 ? 'text-amber-500' : 'text-emerald-600'}`}>
+                      {stockPercent(r)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${stockColor(r)}`} style={{ width: `${stockPercent(r)}%` }} />
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between items-baseline text-xs font-manrope">
+                  <span className={`font-semibold ${r.currentStock <= r.alertThreshold ? 'text-red-600' : 'text-gray-900'}`}>{r.currentStock} <span className="font-normal text-gray-500">{r.unit}</span></span>
+                  {r.alertThreshold > 0 && <span className="text-[10px] text-gray-400">alert at {r.alertThreshold}</span>}
+                </div>
+              )}
             </div>
 
             {/* Info */}
@@ -506,7 +519,7 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
     return (
       <div className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0 text-xs font-manrope">
         <span className={`flex-1 min-w-0 truncate flex items-center gap-1 ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}><KindBadge kind={r.kind} /><span className="truncate">{r.name}</span></span>
-        <span className="text-gray-400 shrink-0 tabular-nums">{r.currentStock}<span className="text-gray-300">/{r.maxStock}</span> {r.unit}</span>
+        <span className="text-gray-400 shrink-0 tabular-nums">{r.currentStock}{r.maxStock > 0 && <span className="text-gray-300">/{r.maxStock}</span>} {r.unit}</span>
         {low && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
         {canWithdraw && (canTake(r)
           ? <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>

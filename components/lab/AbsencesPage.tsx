@@ -264,6 +264,7 @@ function RequestModal({ onClose }: { onClose: () => void }) {
     if (type !== 'sick' && startDate < today) { setError('Only sick leave can be recorded retroactively.'); return; }
     if (!singleDay && effEnd < startDate) { setError('End date must be on or after the start date.'); return; }
     if (singleDay && endHour <= startHour) { setError('End time must be after start time.'); return; }
+    if (type === 'vacation' && days < 3) { setError('"Vacation" is for absences of 3 working days or more — for 1–2 days use "Day off".'); return; }
     if (needsHandover && !handover.trim()) { setError('Absences longer than 2 days require a handover (who covers cultures, bookings, deadlines).'); return; }
     addAbsence({
       userId: user.id, userName: user.name, type,

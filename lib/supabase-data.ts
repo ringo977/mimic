@@ -43,6 +43,18 @@ async function upsertRow<T>(table: string, row: T): Promise<T | null> {
   return data;
 }
 
+// Plain UPDATE for tables that have a protective BEFORE INSERT trigger
+// (absences, wishlist_items): an upsert fires that trigger with the new
+// row *before* Postgres notices the conflict, so e.g. a member cancelling
+// their own absence was rejected as "creating a cancelled absence".
+// .select() makes RLS denials visible (0 rows → null).
+async function updateRow<T extends { id: string }>(table: string, row: T): Promise<T | null> {
+  const { id, ...rest } = row;
+  const { data, error } = await supabase.from(table).update(rest).eq('id', id).select().maybeSingle();
+  if (error) { console.error(`Failed to update ${table}:`, error.message); return null; }
+  return (data as T | null) ?? null;
+}
+
 async function deleteRow(table: string, id: string): Promise<boolean> {
   // .select('id') makes the delete verifiable: RLS denials don't error,
   // they just delete 0 rows — without this check the UI removes the item
@@ -394,8 +406,8 @@ export async function fetchAbsences(): Promise<Absence[] | null> {
   return rows.map(toAbsence);
 }
 
-export async function upsertAbsence(a: Absence) {
-  return upsertRow('absences', {
+export async function upsertAbsence(a: Absence, mode: 'insert' | 'update' = 'insert') {
+  return (mode === 'update' ? updateRow : upsertRow)('absences', {
     id: a.id, user_id: a.userId, user_name: a.userName, type: a.type,
     start_date: a.startDate, end_date: a.endDate,
     start_hour: a.startHour ?? null, end_hour: a.endHour ?? null,
@@ -500,8 +512,8 @@ export async function fetchWishlist(): Promise<WishlistItem[] | null> {
   }));
 }
 
-export async function upsertWishlistItem(w: WishlistItem) {
-  return upsertRow('wishlist_items', {
+export async function upsertWishlistItem(w: WishlistItem, mode: 'insert' | 'update' = 'insert') {
+  return (mode === 'update' ? updateRow : upsertRow)('wishlist_items', {
     id: w.id, name: w.name, type: w.type, catalog_number: w.catalogNumber,
     supplier: w.supplier, estimated_cost: w.estimatedCost, quantity: w.quantity,
     urgency: w.urgency, requested_by: w.requestedBy,

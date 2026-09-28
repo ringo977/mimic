@@ -902,7 +902,8 @@ export default function LabApp() {
 
   if (step === 'enroll_mfa') {
     // Admins and PIs must set up 2FA — no skip allowed
-    const mfaRequired = user?.role === 'admin' || user?.role === 'pi' || user?.role === 'lab_manager' || user?.isAdmin;
+    // Whoever approves or manages other people's data must have 2FA
+    const mfaRequired = user?.role === 'admin' || user?.role === 'pi' || user?.role === 'lab_manager' || user?.role === 'project_manager' || user?.isAdmin;
     return (
       <EnrollMFAScreen
         onEnrolled={() => updateStep('ready')}

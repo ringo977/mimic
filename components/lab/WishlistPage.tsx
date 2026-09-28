@@ -87,7 +87,7 @@ export default function WishlistPage() {
     setSName(item.name);
     // Must be an existing sub-category (see reagentMacroCategories), otherwise
     // the new reagent is invisible in the admin tabs.
-    setSCategory(item.type === 'antibody' ? 'Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Cell Culture');
+    setSCategory(item.type === 'antibody' ? 'Primary Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Cell Culture');
     setSSupplier(item.supplier);
     setSCatalog(item.catalogNumber);
     setSUnit('units');

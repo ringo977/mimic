@@ -1745,7 +1745,7 @@ function ReagentsTab() {
   const switchMacro = (k: ReagentMacroCategory) => { setActiveMacro(k); setSelectedSubCat('All'); };
 
   const defaultCategory = selectedSubCat !== 'All' ? selectedSubCat : macroInfo.subCategories[0];
-  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 10, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2, kind: 'item' });
+  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 0, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2, kind: 'item' });
   const [form, setForm] = useState<Reagent>(empty());
   const formUnit = form.storageUnitId ? storageUnits.find(s => s.id === form.storageUnitId) : undefined;
   const formShelves = formUnit && isShelfBased(formUnit.type) ? (formUnit.numShelves || 0) : 0;
@@ -1755,10 +1755,11 @@ function ReagentsTab() {
   const open = (r?: Reagent) => { setForm(r ? { ...r } : empty()); setEditing(r || null); setShowForm(true); };
   const save = () => {
     if (!form.name) return;
-    // Sanitise numbers: no negatives, max ≥ 1 and ≥ stock (maxStock 0 used to
-    // divide by zero in the stock bar; stock > max broke the percentage).
+    // Sanitise numbers: no negatives; max 0 = no limit, otherwise ≥ stock
+    // (the server rejects restocks above the maximum).
     const currentStock = Math.max(0, Number(form.currentStock) || 0);
-    const maxStock = Math.max(1, Number(form.maxStock) || 0, currentStock);
+    const rawMax = Math.max(0, Number(form.maxStock) || 0);
+    const maxStock = rawMax > 0 ? Math.max(rawMax, currentStock) : 0;
     const kind: ReagentKind = form.kind ?? 'item';
     const clean: Reagent = { ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
       kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: kind === 'stock' ? (form.responsibleUserIds ?? []) : [] };
@@ -1825,7 +1826,7 @@ function ReagentsTab() {
       const doorVal: DoorSide | undefined = ['left', 'l', 'sx', 'sinistra'].includes(doorRaw) ? 'left' : ['right', 'r', 'dx', 'destra'].includes(doorRaw) ? 'right' : undefined;
       const item: Reagent = {
         id: generateId(), name: rec['Name'], category: rec['Category'] || defaultCategory,
-        currentStock, maxStock: num(rec['Max'], Math.max(currentStock, 1)), unit: rec['Unit'] || 'units',
+        currentStock, maxStock: num(rec['Max'], 0), unit: rec['Unit'] || 'units',
         expiryDate: rec['Expiry'], location: storageUnitId ? (storageUnits.find(s => s.id === storageUnitId)?.name || '') : '',
         storageUnitId, boxId: box?.id, shelf: shelfVal ?? box?.shelf, door: doorVal ?? box?.door,
         supplier: rec['Supplier'], catalogNumber: rec['Cat#'], alertThreshold: num(rec['Alert'], 0),
@@ -1915,7 +1916,7 @@ function ReagentsTab() {
                 {r.name}
               </td>
               {availableSubCategories.length > 1 && <td className="px-3 py-2 text-gray-500">{r.category}</td>}
-              <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}/{r.maxStock} {r.unit}</span></td>
+              <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}{r.maxStock > 0 ? `/${r.maxStock}` : ''} {r.unit}</span></td>
               <td className="px-3 py-2 text-gray-500">{r.supplier}</td><td className="px-3 py-2 text-gray-500 font-mono">{r.catalogNumber}</td>
               <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={reagentPlaceLabel(r, storageUnits, storageBoxes)}>{reagentPlaceLabel(r, storageUnits, storageBoxes) || '—'}</td>
               <td className="px-3 py-2 text-gray-500">{r.expiryDate}</td>
@@ -1940,7 +1941,7 @@ function ReagentsTab() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Stock"><input type="number" min={0} value={form.currentStock || ''} onChange={e => setForm({ ...form, currentStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Max"><input type="number" min={1} value={form.maxStock || ''} onChange={e => setForm({ ...form, maxStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
+            <Field label="Max (blank = no limit)"><input type="number" min={0} placeholder="no limit" value={form.maxStock || ''} onChange={e => setForm({ ...form, maxStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
             <Field label="Alert At"><input type="number" min={0} value={form.alertThreshold || ''} onChange={e => setForm({ ...form, alertThreshold: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

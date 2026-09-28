@@ -36,6 +36,8 @@
 --      then supabase-2026-09-door.sql             (door side, double-door units)
 --      then supabase-2026-09-cryo-cells.sql       (cryo_vials.cells + backfill)
 --      then supabase-2026-09-reagent-kind.sql     (stock / working solution, run AFTER fix-assessment: stock RPC v4)
+--      then supabase-2026-09-review-stefania.sql  (reagent boxes, shelves, cryo owners — data only)
+--      then supabase-2026-09-beta-round1.sql      (no max on imported stock, antibodies, cryo thaw policy, approve_orders PI/admin; redefines lab_can)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,

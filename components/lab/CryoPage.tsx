@@ -61,8 +61,8 @@ export default function CryoPage() {
 
   // Form state
   const [newCellLine, setNewCellLine] = useState('');
-  const [newPassageStr, setNewPassageStr] = useState('0');
-  const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
+  const [newPassageStr, setNewPassageStr] = useState('');
+  const newPassage = newPassageStr === '' ? NaN : Number(newPassageStr);   // required
   const [newCellsStr, setNewCellsStr] = useState('');
   const newCells = parseCells(newCellsStr);          // undefined = empty, null = unreadable
   const [newDate, setNewDate] = useState(todayStr());
@@ -151,7 +151,7 @@ export default function CryoPage() {
       : addPosition ? [addPosition] : [];
 
   const handleAddVial = () => {
-    if (targetPositions.length === 0 || !newCellLine || !box || newCells === null) return;
+    if (targetPositions.length === 0 || !newCellLine || !box || !newCells || !Number.isFinite(newPassage) || newPassage < 0) return;
     addCryoVials(targetPositions.map(pos => ({
       cellLine: newCellLine,
       passage: newPassage,
@@ -544,14 +544,15 @@ export default function CryoPage() {
             ))}
           </div>
 
-          {/* Cell Line Legend */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {usedCellLines.map(cl => (
-              <span key={cl} className="inline-flex items-center gap-1 text-[9px] font-manrope text-gray-600">
-                <span className={`w-2 h-2 rounded-full ${getCellLineColor(cl)}`} />
-                {cl}
+          {/* Cell line legend — only what is in this box */}
+          <div className="mt-3 flex flex-wrap gap-x-2.5 gap-y-1">
+            {Array.from(new Set(boxVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)).map(cl => (
+              <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600">
+                <span className={`w-2.5 h-2.5 rounded-full ${getCellLineColor(cl)}`} />
+                {cl} <span className="text-gray-400">{boxVials.filter(v => v.cellLine === cl).length}</span>
               </span>
             ))}
+            {boxVials.length === 0 && <span className="text-[10px] text-gray-400 font-manrope">Empty box</span>}
           </div>
         </div>
 
@@ -607,9 +608,9 @@ export default function CryoPage() {
                 )}
               </div>
 
-              {/* RLS only allows delete by owner or admin: hide the button
-                  from everyone else (it used to fail silently). */}
-              {permissions.canManageCryo && (selectedVialData.userId === user.id || user.isAdmin || user.role === 'admin' || user.role === 'pi') && (
+              {/* Thawing is allowed to anyone with manage_cryo (the log
+                  records who did it); mirrors the cryo_vials_delete policy */}
+              {permissions.canManageCryo && (
                 <button
                   onClick={() => confirmDelete('Withdraw Vial?', `${selectedVialData.cellLine} P${selectedVialData.passage} will be removed from storage.`, () => { removeCryoVial(selectedVialData.id); setSelectedVial(null); })}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors mt-4"
@@ -665,7 +666,7 @@ export default function CryoPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Cells per vial</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Cells per vial <span className="text-red-500">*</span></label>
                   <input
                     value={newCellsStr}
                     onChange={e => setNewCellsStr(e.target.value)}
@@ -673,15 +674,16 @@ export default function CryoPage() {
                     className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${newCells === null ? 'border-red-300' : 'border-gray-200'}`}
                   />
                   <p className={`text-[10px] mt-1 font-manrope ${newCells === null ? 'text-red-600' : 'text-gray-400'}`}>
-                    {newCells === null ? 'Not a number I can read' : newCells ? `= ${newCells.toLocaleString('en-US')} cells` : 'e.g. 1.25M · 950K · 2x10^6'}
+                    {newCells === null ? 'Not a number I can read' : newCells ? `= ${newCells.toLocaleString('en-US')} cells` : 'required — e.g. 1.25M · 950K · 0.6'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Passage</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Passage <span className="text-red-500">*</span></label>
                   <input
                     type="number"
                     min={0}
                     value={newPassageStr}
+                    placeholder="e.g. 5"
                     onChange={e => setNewPassageStr(e.target.value)}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
                   />
@@ -717,7 +719,7 @@ export default function CryoPage() {
 
               <button
                 onClick={handleAddVial}
-                disabled={!newCellLine || newCells === null}
+                disabled={!newCellLine || !newCells || !Number.isFinite(newPassage) || newPassage < 0}
                 className="w-full py-3 bg-cyan-500 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-cyan-600 transition-colors disabled:opacity-40"
               >
                 {targetPositions.length === 1 ? 'Store Vial' : `Store ${targetPositions.length} Vials`}
@@ -739,10 +741,10 @@ type VialSortKey = 'cellLine' | 'passage' | 'cells' | 'storage' | 'position' | '
 function VialInventory() {
   const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
-  // Mirror of the cryo_vials_delete RLS policy (owner or admin): don't show
-  // withdraw buttons that the server would reject.
+  // Mirror of the cryo_vials_delete RLS policy: anyone with manage_cryo
+  // may thaw a vial (the log says who did it).
+  const canWithdraw = (_v: { userId: string }) => permissions.canManageCryo;
   const isAdminUser = user.isAdmin || user.role === 'admin' || user.role === 'pi';
-  const canWithdraw = (v: { userId: string }) => isAdminUser || v.userId === user.id;
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<VialSortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
