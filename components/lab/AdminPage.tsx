@@ -10,6 +10,7 @@ import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
 import ReagentFormModal from './ReagentFormModal';
+import HistoryPanel from './HistoryPanel';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
@@ -2715,6 +2716,9 @@ function BackupTab() {
           </button>
         </div>
       </div>
+
+      {/* Row history, recently deleted, point in time, daily snapshots */}
+      <HistoryPanel />
 
       {/* PDFs */}
       <div className={cardCls}>

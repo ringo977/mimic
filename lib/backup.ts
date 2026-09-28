@@ -5,7 +5,7 @@ import JSZip from 'jszip';
 // Import order: lab_users LAST — if anything goes wrong midway, the row
 // that makes the caller an admin (and every RLS check with it) is still
 // intact for all preceding tables.
-const TABLES = [
+export const TABLES = [
   'instruments', 'maintenance_logs', 'locations', 'projects', 'certifications',
   'storage_units', 'storage_boxes', 'reagents', 'bookings', 'cryo_vials',
   'wishlist_items', 'log_entries', 'manuals', 'absences', 'app_settings',
@@ -14,7 +14,7 @@ const TABLES = [
 
 // Primary key per table (used for upsert and validation)
 const TABLE_PK: Record<string, string> = { app_settings: 'key' };
-const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 2;
 const pkOf = (table: string) => TABLE_PK[table] ?? 'id';
 
 // Tables where rows missing from the backup are deleted on restore.

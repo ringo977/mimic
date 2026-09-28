@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History } from 'lucide-react';
+import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
 import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
@@ -25,6 +26,7 @@ export default function ReagentsPage() {
   const [prepNotes, setPrepNotes] = useState('');
   // Add a new reagent / edit an existing one (anyone with add_reagents)
   const [editForm, setEditForm] = useState<{ reagent: Reagent | null } | null>(null);
+  const [historyOf, setHistoryOf] = useState<Reagent | null>(null);
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
@@ -211,6 +213,9 @@ export default function ReagentsPage() {
                     <Pencil size={13} />
                   </button>
                 )}
+                <button onClick={() => setHistoryOf(r)} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="History of changes" aria-label="History of this reagent">
+                  <History size={13} />
+                </button>
               </div>
             </div>
 
@@ -312,6 +317,7 @@ export default function ReagentsPage() {
           onClose={() => setEditForm(null)}
         />
       )}
+      {historyOf && <RowHistoryModal table="reagents" rowId={historyOf.id} label={historyOf.name} onClose={() => setHistoryOf(null)} />}
 
       {/* Modal */}
       {modal && modalReagent && (

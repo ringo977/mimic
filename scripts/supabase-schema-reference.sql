@@ -57,6 +57,8 @@
 --      then supabase-2026-09-beta-round2.sql      (wishlist_items_delete own pending,
 --        protect_reagent_fields v3: INSERT + current_stock guard, stock RPC v5 /
 --        prepare v2 with transaction flag, app_settings 'cell_types')
+--      then supabase-2026-09-history.sql          (row_history + trigger on 15 tables,
+--        restore RPCs, db_snapshots + pg_cron nightly job; needs pg_cron enabled)
 --      Running 11 after any of these would silently restore the older
 --      enforce_booking_policy (no capacity check, while the EXCLUDE
 --      constraint is already gone), lab_can v1 and stock RPC v3.

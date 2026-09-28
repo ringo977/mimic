@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes } from 'lucide-react';
+import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes, History } from 'lucide-react';
+import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, matchCellType, viewCellLineColors } from '@/data/lab-data';
@@ -24,6 +25,7 @@ export default function CryoPage() {
   const [selectedRack, setSelectedRack] = useState<number | undefined>(undefined);
   const [selectedBoxId, setSelectedBoxId] = useState('');
   const [selectedVial, setSelectedVial] = useState<string | null>(null);
+  const [historyVial, setHistoryVial] = useState<{ id: string; label: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPosition, setAddPosition] = useState<{ row: number; col: number } | null>(null);
 
@@ -607,6 +609,10 @@ export default function CryoPage() {
                   <Trash2 size={14} /> Withdraw Vial
                 </button>
               )}
+              <button onClick={() => setHistoryVial({ id: selectedVialData.id, label: `${selectedVialData.cellLine} P${selectedVialData.passage}` })}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-gray-500 text-xs font-manrope hover:bg-gray-100 transition-colors mt-2">
+                <History size={13} /> History of this vial
+              </button>
             </div>
           ) : (
             <div className="text-center py-12 text-gray-400 font-manrope text-sm">
@@ -718,6 +724,7 @@ export default function CryoPage() {
         </div>
       )}
       <ConfirmDialog />
+      {historyVial && <RowHistoryModal table="cryo_vials" rowId={historyVial.id} label={historyVial.label} onClose={() => setHistoryVial(null)} />}
     </div>
   );
 }

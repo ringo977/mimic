@@ -382,8 +382,8 @@ I prelievi/ricariche di stock passano dalla RPC `adjust_reagent_stock` (`scripts
 - **Smartphone** (≤640px): vista **3 giorni** a partire da oggi, tutto **a tap** (tap su spazio vuoto = nuova prenotazione, tap su un blocco = dettagli); il drag è disattivato perché confligge con lo scroll touch. Le prenotazioni **in corso** si possono allungare/accorciare anche dal popup (menu "Update end"), non solo trascinando il bordo.
 - **Google Calendar:** nel popup dei dettagli c'è il pulsante **"Add to Google Calendar"** che apre un evento precompilato (titolo, orario, note). Non è una sincronizzazione automatica: per quella servirebbe un feed ICS servito da un backend (es. Supabase Edge Function), oggi assente perché il sito è statico.
 
-### Backup
-`lib/backup.ts` consente backup/restore del database del lab (usa `jszip` per esportare). Per un **disaster recovery completo** (progetto Supabase perso): `scripts/supabase-schema-reference.sql` ricrea tutte le tabelle e nel suo header elenca la procedura passo-passo (schema → RLS → hardening → bucket → restore JSON/PDF → utenti auth).
+### Backup, storico e undo
+`lib/backup.ts` consente backup/restore del database del lab (usa `jszip` per esportare). Da settembre 2026 (`scripts/supabase-2026-09-history.sql`, `lib/history.ts`, `components/lab/HistoryPanel.tsx`) il database tiene anche uno **storico per riga**: ogni UPDATE/DELETE sulle tabelle del lab salva la riga precedente con chi e quando (`row_history`, 400 giorni), e ogni notte `pg_cron` copia tutte le tabelle in `db_snapshots` (30 giorni). In Admin → Backup → *History & Recovery* si ripristina una riga cancellata, si torna a una versione precedente, si rimette una tabella com'era a un certo istante, e si scarica uno snapshot nel formato del backup JSON; le pagine Cryo e Reagents mostrano la History del singolo elemento. Tutto vive nello stesso database: **una copia esterna (Export JSON) settimanale resta necessaria** contro la perdita del progetto Supabase (piano Free, nessun backup lato Supabase). Per un **disaster recovery completo** (progetto Supabase perso): `scripts/supabase-schema-reference.sql` ricrea tutte le tabelle e nel suo header elenca la procedura passo-passo (schema → RLS → hardening → bucket → restore JSON/PDF → utenti auth).
 
 > **Regola operativa:** non modificare il Lab Manager se non espressamente richiesto. È indipendente dal contenuto pubblico e ha la sua logica di sicurezza.
 
@@ -609,7 +609,7 @@ rm -rf .gitlab-clone && bash scripts/sync-gitlab.sh "messaggio"   # reset clone
 
 **Lab Manager / Supabase**
 - Valutare il **passaggio a un piano Supabase a pagamento** (o un piccolo Postgres gestito) per eliminare il problema della pausa e dei backup.
-- **Backup automatici** schedulati del database lab (oggi il backup è manuale via `lib/backup.ts`).
+- ✅ *Fatto (settembre 2026):* storico per riga con undo e snapshot notturno in-DB (vedi sez. "Backup, storico e undo"). Resta da automatizzare la **copia esterna** (oggi Export JSON manuale, consigliato settimanale).
 - **Health-check** del lab login (oltre al ping REST) con notifica se va giù.
 
 **SEO / accessibilità**
