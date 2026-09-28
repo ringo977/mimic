@@ -6,7 +6,7 @@ import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { useConfirm } from './ConfirmDialog';
 import {
   HistoryLine, AsOfRow, SnapshotRun, HISTORY_TABLES, HISTORY_TABLE_LABELS, historyRowLabel, describeChange,
-  fetchHistory, fetchRecentlyDeleted, restoreHistoryVersion, fetchTableAsOf, restoreTableAsOf,
+  fetchHistory, fetchRecentlyDeleted, restoreHistoryVersion, fetchTableAsOf, restoreTableAsOf, fetchHistorySince,
   fetchSnapshotRuns, takeSnapshotNow, snapshotAsBackupJSON,
 } from '@/lib/history';
 
@@ -24,10 +24,13 @@ type Status = { type: 'idle' | 'loading' | 'success' | 'error'; message: string 
 export default function HistoryPanel() {
   const [tab, setTab] = useState<'deleted' | 'history' | 'pit' | 'snapshots'>('deleted');
   const [status, setStatus] = useState<Status>({ type: 'idle', message: '' });
-  const show = (type: Status['type'], message: string) => {
+  // Stable identity: `show` is a dependency of the tabs' load callbacks. A
+  // fresh function on every render made an error re-trigger the load, which
+  // failed again, forever (reviewer finding, 28/09).
+  const show = useCallback((type: Status['type'], message: string) => {
     setStatus({ type, message });
     if (type === 'success') setTimeout(() => setStatus({ type: 'idle', message: '' }), 6000);
-  };
+  }, []);
 
   const cardCls = 'bg-white rounded-xl p-5 shadow-sm border border-gray-100';
   const tabs = [
@@ -237,10 +240,22 @@ function PointInTime({ show }: { show: (t: Status['type'], m: string) => void })
   });
   const [rows, setRows] = useState<AsOfRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [since, setSince] = useState<Date | null>(null);   // history activation: the earliest instant allowed
   const [ConfirmDialog, confirm] = useConfirm();
 
+  useEffect(() => {
+    let alive = true;
+    fetchHistorySince().then(r => { if (alive && r.since) setSince(new Date(r.since)); });
+    return () => { alive = false; };
+  }, []);
+  const toLocalInput = (d: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const tooEarly = !!(since && when && new Date(when) < since);
+
   const preview = async () => {
-    if (!when) return;
+    if (!when || tooEarly) return;
     setLoading(true); setRows(null);
     const r = await fetchTableAsOf(table, new Date(when).toISOString());
     setLoading(false);
@@ -273,10 +288,17 @@ function PointInTime({ show }: { show: (t: Status['type'], m: string) => void })
       <p className="text-xs text-gray-500 font-manrope mb-3">See a table as it was at a given moment and, if needed, put it back that way. People (<em>lab_users</em>) can only be restored one row at a time from the history.</p>
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <TableSelect value={table} onChange={t => { setTable(t); setRows(null); }} />
-        <input type="datetime-local" value={when} onChange={e => { setWhen(e.target.value); setRows(null); }} className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg font-manrope" />
-        <button onClick={preview} disabled={loading || !when} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#102C53] text-white text-xs font-manrope hover:bg-[#102C53]/90 disabled:opacity-50">
+        <input type="datetime-local" value={when} min={since ? toLocalInput(since) : undefined} max={toLocalInput(new Date())}
+          onChange={e => { setWhen(e.target.value); setRows(null); }}
+          className={`px-2.5 py-1.5 text-xs border rounded-lg font-manrope ${tooEarly ? 'border-red-300 bg-red-50' : 'border-gray-200'}`} />
+        <button onClick={preview} disabled={loading || !when || tooEarly} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#102C53] text-white text-xs font-manrope hover:bg-[#102C53]/90 disabled:opacity-50">
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />} Preview
         </button>
+        {since && (
+          <span className={`text-[11px] font-manrope ${tooEarly ? 'text-red-600' : 'text-gray-400'}`}>
+            {tooEarly ? 'Before the history started: ' : 'History starts '}{fmtWhen(since.toISOString())}
+          </span>
+        )}
       </div>
       {rows && (
         <>

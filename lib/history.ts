@@ -81,7 +81,9 @@ const mapLine = (r: Row): HistoryLine => ({
 export async function fetchHistory(opts: {
   table?: string; rowId?: string; op?: HistoryOp; days?: number; limit?: number; search?: string;
 } = {}): Promise<{ lines: HistoryLine[]; error?: string }> {
-  let q = supabase.from('row_history').select('*').order('changed_at', { ascending: false }).limit(opts.limit ?? 200);
+  // Events of one transaction share changed_at (now()): id keeps their real order.
+  let q = supabase.from('row_history').select('*')
+    .order('changed_at', { ascending: false }).order('id', { ascending: false }).limit(opts.limit ?? 200);
   if (opts.table) q = q.eq('table_name', opts.table);
   if (opts.rowId) q = q.eq('row_id', opts.rowId);
   if (opts.op) q = q.eq('op', opts.op);
@@ -101,7 +103,7 @@ export async function fetchHistory(opts: {
 export async function fetchRecentlyDeleted(days = 30, table?: string): Promise<{ lines: HistoryLine[]; error?: string }> {
   let q = supabase.from('row_history').select('*').eq('op', 'DELETE').is('restored_at', null)
     .gte('changed_at', new Date(Date.now() - days * 86400000).toISOString())
-    .order('changed_at', { ascending: false }).limit(500);
+    .order('changed_at', { ascending: false }).order('id', { ascending: false }).limit(500);
   if (table) q = q.eq('table_name', table);
   const { data, error } = await q;
   if (error) return { lines: [], error: error.message };
@@ -112,6 +114,13 @@ export async function restoreHistoryVersion(historyId: number): Promise<{ ok: bo
   const { data, error } = await supabase.rpc('history_restore_version', { p_history_id: historyId });
   if (error) return { ok: false, error: error.message };
   return { ok: true, result: (data as { result?: string })?.result };
+}
+
+/** Earliest instant the point-in-time view can reconstruct (history activation, capped by retention). */
+export async function fetchHistorySince(): Promise<{ since: string | null; error?: string }> {
+  const { data, error } = await supabase.rpc('history_since');
+  if (error) return { since: null, error: error.message };
+  return { since: typeof data === 'string' ? data : null };
 }
 
 export async function fetchTableAsOf(table: string, ts: string): Promise<{ rows: AsOfRow[]; error?: string }> {

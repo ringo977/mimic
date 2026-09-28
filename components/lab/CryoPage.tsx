@@ -102,7 +102,13 @@ export default function CryoPage() {
     setSelectedVial(v.id);
   };
 
-  const boxVials = box ? vialsInBox(box) : [];
+  const boxVials = useMemo(
+    () => box
+      ? cryoVials.filter(v => v.boxId
+          ? v.boxId === box.id
+          : v.storageUnitId === box.storageUnitId && v.rack === (box.rack || 0) && v.box === box.number)
+      : [],
+    [box, cryoVials]);
   // Colours are per box: cell types keep their fixed colour, every other
   // name gets a distinct colour within this box (≤ 25 or 81 names).
   const boxColors = useMemo(() => viewCellLineColors(boxVials.map(v => v.cellLine), cellTypes), [boxVials, cellTypes]);

@@ -16,7 +16,12 @@
 --   keep exporting the JSON backup outside Supabase.
 --
 -- Run AFTER supabase-2026-09-beta-round2.sql. Idempotent.
--- Re-running keeps the existing history and snapshots.
+-- Re-running keeps the existing history and snapshots (it does take one
+-- extra snapshot).
+-- v2 (28/09, after the external review): point-in-time existence rebuilt
+-- from the event sequence (not "any INSERT ever"), history id as tiebreaker
+-- for events sharing changed_at, history_meta/history_since() and a floor on
+-- the instant that can be requested. RE-RUN this file if v1 was applied.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -229,13 +234,45 @@ $$;
 REVOKE ALL ON FUNCTION history_restore_version(bigint) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION history_restore_version(bigint) TO authenticated;
 
+-- When the history started (set once, the first time this file runs) and
+-- the earliest instant that can still be reconstructed: nothing before the
+-- triggers existed, nothing older than the retention of row_history.
+CREATE TABLE IF NOT EXISTS history_meta (
+  key   text PRIMARY KEY,
+  value text NOT NULL
+);
+ALTER TABLE history_meta ENABLE ROW LEVEL SECURITY;      -- no policies: not readable via the API
+REVOKE ALL ON history_meta FROM anon, authenticated;
+INSERT INTO history_meta (key, value) VALUES ('since', now()::text) ON CONFLICT (key) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION history_since()
+RETURNS timestamptz
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT greatest((SELECT value::timestamptz FROM history_meta WHERE key = 'since'),
+                  now() - interval '400 days');
+$$;
+REVOKE ALL ON FUNCTION history_since() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION history_since() TO authenticated;
+
 -- A whole table as it was at an instant, compared with now.
 --   status: 'unchanged' | 'changed' | 'deleted' (existed then, not now)
 --           | 'added' (exists now, did not exist then)
--- Existence at p_ts: the last event at or before p_ts decides (DELETE → no);
--- with no event before p_ts the row existed unless its INSERT is recorded
--- (i.e. it was created later). State at p_ts: the old_row of the first
--- UPDATE/DELETE after p_ts, else the current row.
+-- Existence at p_ts is rebuilt from the SEQUENCE of events of each row:
+--   * if there is an event at or before p_ts, the last one decides
+--     (DELETE → did not exist; INSERT/UPDATE → existed);
+--   * otherwise the first event after p_ts decides (INSERT → did not exist
+--     yet; UPDATE/DELETE → existed, the row predates the history);
+--   * a row with no events at all existed iff it exists now.
+--   (v1 looked for "any INSERT ever" instead, so a pre-history row that was
+--   deleted and then restored was reported as 'added' and would have been
+--   removed by the table restore — reviewer finding, 28/09.)
+-- State at p_ts: the old_row of the first UPDATE/DELETE after p_ts, else the
+-- current row. Events in one transaction share changed_at (now()), so the
+-- history id is the tiebreaker everywhere.
 CREATE OR REPLACE FUNCTION history_table_as_of(p_table text, p_ts timestamptz)
 RETURNS TABLE (row_id text, at_ts jsonb, now_row jsonb, status text)
 LANGUAGE plpgsql
@@ -252,35 +289,44 @@ BEGIN
   IF NOT (p_table = ANY (history_tables())) THEN
     RAISE EXCEPTION 'Table % is not covered by the history', p_table;
   END IF;
+  IF p_ts < history_since() THEN
+    RAISE EXCEPTION 'The history starts on %: earlier instants cannot be reconstructed',
+      to_char(history_since(), 'YYYY-MM-DD HH24:MI TZ');
+  END IF;
+  IF p_ts > now() THEN
+    RAISE EXCEPTION 'That instant is in the future';
+  END IF;
 
   RETURN QUERY EXECUTE format($q$
     WITH cur AS (
       SELECT (t.%I)::text AS rid, to_jsonb(t) AS r FROM %I t
     ), ev AS (
-      SELECT h.row_id AS rid, h.op, h.old_row, h.changed_at
+      SELECT h.id, h.row_id AS rid, h.op, h.old_row, h.changed_at
         FROM row_history h WHERE h.table_name = $1
     ), ids AS (
       SELECT rid FROM cur UNION SELECT rid FROM ev
     ), last_before AS (
       SELECT DISTINCT ON (rid) rid, op FROM ev WHERE changed_at <= $2
-       ORDER BY rid, changed_at DESC, op
+       ORDER BY rid, changed_at DESC, id DESC
     ), first_after AS (
+      SELECT DISTINCT ON (rid) rid, op FROM ev WHERE changed_at > $2
+       ORDER BY rid, changed_at ASC, id ASC
+    ), first_state_after AS (
       SELECT DISTINCT ON (rid) rid, old_row FROM ev
        WHERE changed_at > $2 AND op <> 'INSERT'
-       ORDER BY rid, changed_at ASC
-    ), has_insert AS (
-      SELECT DISTINCT rid FROM ev WHERE op = 'INSERT'
+       ORDER BY rid, changed_at ASC, id ASC
     ), x AS (
       SELECT i.rid,
              CASE WHEN lb.op IS NOT NULL THEN lb.op <> 'DELETE'
-                  ELSE hi.rid IS NULL END                       AS existed,
-             coalesce(fa.old_row, c.r)                          AS then_row,
+                  WHEN fa.op IS NOT NULL THEN fa.op <> 'INSERT'
+                  ELSE c.r IS NOT NULL END                      AS existed,
+             coalesce(fs.old_row, c.r)                          AS then_row,
              c.r                                                AS now_r
         FROM ids i
-        LEFT JOIN cur c          ON c.rid  = i.rid
-        LEFT JOIN last_before lb ON lb.rid = i.rid
-        LEFT JOIN first_after fa ON fa.rid = i.rid
-        LEFT JOIN has_insert hi  ON hi.rid = i.rid
+        LEFT JOIN cur c                ON c.rid  = i.rid
+        LEFT JOIN last_before lb       ON lb.rid = i.rid
+        LEFT JOIN first_after fa       ON fa.rid = i.rid
+        LEFT JOIN first_state_after fs ON fs.rid = i.rid
     )
     SELECT rid,
            CASE WHEN existed THEN then_row END,
@@ -427,3 +473,6 @@ SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') AS pg_cron_
 -- 6d. Policies (expect select-only on both tables)
 SELECT tablename, policyname, cmd FROM pg_policies
  WHERE tablename IN ('row_history', 'db_snapshots') ORDER BY tablename, policyname;
+
+-- 6e. Earliest instant "Point in time" accepts (= when this file first ran)
+SELECT history_since();
