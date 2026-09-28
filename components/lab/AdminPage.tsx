@@ -9,6 +9,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
+import ReagentFormModal from './ReagentFormModal';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
@@ -17,6 +18,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
   ReagentKind, reagentKinds, reagentKindLabel, UserGroup,
+  CellType, cellTypePalette, matchCellType, cellLineColor,
   parseCells, formatCells,
 } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -1765,8 +1767,9 @@ function BoxManager({ unit, onClose }: { unit: StorageUnit; onClose: () => void 
 // Reagents Tab — with macro-category selector
 // ============================================================
 function ReagentsTab() {
-  const { reagents, addNewReagent, updateReagent, removeReagent, storageUnits, storageBoxes, users } = useLabContext();
+  const { reagents, addNewReagent, removeReagent, storageUnits, storageBoxes, users } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
+  // Used by the CSV import to resolve "Responsible" names and "From Stock" links
   const activeUsers = useMemo(() => users.filter(u => u.status === 'active' && !isAlumni(u)).sort((a, b) => a.name.localeCompare(b.name)), [users]);
   const stockOptions = useMemo(() => reagents.filter(r => r.kind === 'stock').sort((a, b) => a.name.localeCompare(b.name)), [reagents]);
   const [activeMacro, setActiveMacro] = useState<ReagentMacroCategory>('Reagents');
@@ -1798,33 +1801,7 @@ function ReagentsTab() {
   const switchMacro = (k: ReagentMacroCategory) => { setActiveMacro(k); setSelectedSubCat('All'); };
 
   const defaultCategory = selectedSubCat !== 'All' ? selectedSubCat : macroInfo.subCategories[0];
-  const empty = (): Reagent => ({ id: generateId(), name: '', category: defaultCategory, currentStock: 0, maxStock: 0, unit: 'units', expiryDate: '', location: '', storageUnitId: undefined, supplier: '', catalogNumber: '', alertThreshold: 2, kind: 'item' });
-  const [form, setForm] = useState<Reagent>(empty());
-  const formUnit = form.storageUnitId ? storageUnits.find(s => s.id === form.storageUnitId) : undefined;
-  const formShelves = formUnit && isShelfBased(formUnit.type) ? (formUnit.numShelves || 0) : 0;
-  const formBoxes = formUnit ? boxesOfUnit(storageBoxes, formUnit.id) : [];
-  const formDoors = formUnit && isShelfBased(formUnit.type) ? (formUnit.numDoors || 1) : 1;
-
-  const open = (r?: Reagent) => { setForm(r ? { ...r } : empty()); setEditing(r || null); setShowForm(true); };
-  const save = () => {
-    if (!form.name) return;
-    // Sanitise numbers: no negatives; max 0 = no limit, otherwise ≥ stock
-    // (the server rejects restocks above the maximum).
-    const currentStock = Math.max(0, Number(form.currentStock) || 0);
-    const rawMax = Math.max(0, Number(form.maxStock) || 0);
-    const maxStock = rawMax > 0 ? Math.max(rawMax, currentStock) : 0;
-    const kind: ReagentKind = form.kind ?? 'item';
-    const clean: Reagent = { ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
-      kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: kind === 'stock' ? (form.responsibleUserIds ?? []) : [] };
-    if (editing) {
-      // Stock untouched in the form → keep whatever the server has now
-      // (someone may have withdrawn in the meantime via the atomic RPC).
-      updateReagent(clean, { keepServerStock: clean.currentStock === editing.currentStock });
-    } else {
-      addNewReagent(clean);
-    }
-    setShowForm(false);
-  };
+  const open = (r?: Reagent) => { setEditing(r || null); setShowForm(true); };
 
   const getUnitName = useCallback((id?: string) => { if (!id) return '—'; const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
 
@@ -1982,115 +1959,15 @@ function ReagentsTab() {
           {filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No items in this category</td></tr>}
         </tbody></table>
       </div></div>
-      {showForm && <Modal title={editing ? `Edit ${macroInfo.label} Item` : `Add ${macroInfo.label} Item`} onClose={() => setShowForm(false)}>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Name"><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className={inputCls} /></Field>
-            <Field label="Category">
-              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className={inputCls}>
-                {availableSubCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Stock"><input type="number" min={0} value={form.currentStock || ''} onChange={e => setForm({ ...form, currentStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Max (blank = no limit)"><input type="number" min={0} placeholder="no limit" value={form.maxStock || ''} onChange={e => setForm({ ...form, maxStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Alert At"><input type="number" min={0} value={form.alertThreshold || ''} onChange={e => setForm({ ...form, alertThreshold: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Unit"><input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className={inputCls} /></Field>
-            <Field label="Storage Unit">
-              <select value={form.storageUnitId || ''} onChange={e => setForm({ ...form, storageUnitId: e.target.value || undefined, boxId: undefined, shelf: undefined, door: undefined, location: storageUnits.find(s => s.id === e.target.value)?.name || form.location })} className={inputCls}>
-                <option value="">— Not assigned</option>
-                {storageUnits.map(s => <option key={s.id} value={s.id}>{storageUnitTypes[s.type]?.icon} {s.name} ({s.temperature})</option>)}
-              </select>
-            </Field>
-          </div>
-          {formUnit && (formShelves > 0 || formBoxes.length > 0 || formDoors > 1) && (
-            <div className={`grid gap-3 ${[formDoors > 1, formShelves > 0, formBoxes.length > 0].filter(Boolean).length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-              {formDoors > 1 && (
-                <Field label="Door">
-                  <select value={form.door || ''} onChange={e => setForm({ ...form, door: (e.target.value || undefined) as DoorSide | undefined })} className={inputCls}>
-                    <option value="">— Not specified</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
-                </Field>
-              )}
-              {formShelves > 0 && (
-                <Field label="Shelf (1 = top)">
-                  <select value={form.shelf ?? ''} onChange={e => setForm({ ...form, shelf: e.target.value === '' ? undefined : Number(e.target.value) })} className={inputCls}>
-                    <option value="">— Not specified</option>
-                    {Array.from({ length: formShelves }, (_, i) => i + 1).map(n => (
-                      <option key={n} value={n}>Shelf {n}{n === 1 ? ' (top)' : n === formShelves ? ' (bottom)' : ''}</option>
-                    ))}
-                  </select>
-                </Field>
-              )}
-              {formBoxes.length > 0 && (
-                <Field label="Box (optional)">
-                  <select value={form.boxId || ''} onChange={e => {
-                    const b = formBoxes.find(x => x.id === e.target.value);
-                    setForm({ ...form, boxId: b?.id, shelf: b?.shelf ?? form.shelf, door: b?.door ?? form.door });
-                  }} className={inputCls}>
-                    <option value="">— No box (loose on the shelf)</option>
-                    {formBoxes.map(b => <option key={b.id} value={b.id}>{b.label}{[b.door ? doorSideLabel[b.door] : '', b.shelf != null ? `shelf ${b.shelf}` : ''].filter(Boolean).length ? ` (${[b.door ? doorSideLabel[b.door].toLowerCase() : '', b.shelf != null ? `shelf ${b.shelf}` : ''].filter(Boolean).join(', ')})` : ''}</option>)}
-                  </select>
-                </Field>
-              )}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Supplier"><input value={form.supplier} onChange={e => setForm({ ...form, supplier: e.target.value })} className={inputCls} /></Field>
-            <Field label="Catalog #"><input value={form.catalogNumber} onChange={e => setForm({ ...form, catalogNumber: e.target.value })} className={inputCls} /></Field>
-          </div>
-          <Field label="Expiry Date"><input type="date" value={form.expiryDate} onChange={e => setForm({ ...form, expiryDate: e.target.value })} className={inputCls} /></Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Lot / batch"><input value={form.lot || ''} onChange={e => setForm({ ...form, lot: e.target.value || undefined })} placeholder="e.g., H015928" className={inputCls} /></Field>
-            <Field label="Owner"><input value={form.owner || ''} onChange={e => setForm({ ...form, owner: e.target.value || undefined })} placeholder="who bought it" list="reagent-owners" className={inputCls} />
-              <datalist id="reagent-owners">{Array.from(new Set(reagents.map(r => r.owner).filter(Boolean))).map(o => <option key={o} value={o} />)}</datalist>
-            </Field>
-          </div>
-          <Field label="Notes"><input value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value || undefined })} placeholder="e.g., 2 aliquots in use" className={inputCls} /></Field>
-
-          <div className="rounded-xl border border-gray-200 p-3 space-y-3">
-            <Field label="Kind">
-              <select value={form.kind ?? 'item'} onChange={e => setForm({ ...form, kind: e.target.value as ReagentKind })} className={inputCls}>
-                {reagentKinds.map(k => <option key={k} value={k}>{reagentKindLabel[k]}</option>)}
-              </select>
-              <p className="text-[10px] text-gray-400 font-manrope mt-1">
-                {form.kind === 'stock' ? 'Concentrated / powder form. Only the responsibles below (plus admin, PI, lab manager) can take from it.'
-                 : form.kind === 'working' ? 'Prepared from a stock and used by everybody. Linking the stock enables “Prepare working solution”.'
-                 : 'Plain consumable (kits, plasticware, antibodies…). No access restriction.'}
-              </p>
-            </Field>
-            {form.kind === 'stock' && (
-              <Field label="Responsible (1–2 people)">
-                <div className="flex flex-wrap gap-1.5 mb-1.5">
-                  {(form.responsibleUserIds ?? []).map(id => {
-                    const u = users.find(x => x.id === id);
-                    return <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#102C53] text-white text-[11px] font-manrope">{u?.name || id}<button type="button" onClick={() => setForm({ ...form, responsibleUserIds: (form.responsibleUserIds ?? []).filter(x => x !== id) })} className="hover:text-red-200" aria-label="Remove"><X size={11} /></button></span>;
-                  })}
-                  {!(form.responsibleUserIds ?? []).length && <span className="text-[11px] text-amber-600 font-manrope">Nobody yet — only admin/PI/lab manager will be able to take from this stock.</span>}
-                </div>
-                <select value="" onChange={e => { const id = e.target.value; if (id && !(form.responsibleUserIds ?? []).includes(id)) setForm({ ...form, responsibleUserIds: [...(form.responsibleUserIds ?? []), id] }); }} className={inputCls}>
-                  <option value="">+ add a responsible…</option>
-                  {activeUsers.filter(u => !(form.responsibleUserIds ?? []).includes(u.id)).map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
-                </select>
-              </Field>
-            )}
-            {form.kind === 'working' && (
-              <Field label="Prepared from stock">
-                <select value={form.derivedFromId || ''} onChange={e => setForm({ ...form, derivedFromId: e.target.value || undefined })} className={inputCls}>
-                  <option value="">— not linked —</option>
-                  {stockOptions.filter(x => x.id !== form.id).map(x => <option key={x.id} value={x.id}>{x.name}{x.catalogNumber ? ` · ${x.catalogNumber}` : ''}</option>)}
-                </select>
-              </Field>
-            )}
-          </div>
-          <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add Item'}</button>
-        </div>
-      </Modal>}
+      {showForm && (
+        <ReagentFormModal
+          initial={editing}
+          defaultCategory={defaultCategory}
+          categories={availableSubCategories}
+          title={editing ? `Edit ${macroInfo.label} Item` : `Add ${macroInfo.label} Item`}
+          onClose={() => setShowForm(false)}
+        />
+      )}
 
       <ConfirmDialog />
     </>
@@ -2100,8 +1977,79 @@ function ReagentsTab() {
 // ============================================================
 // Cryo Vials Tab
 // ============================================================
+// ------------------------------------------------------------
+// Cell types → vial colours. Stored in app_settings ('cell_types').
+// ------------------------------------------------------------
+function CellTypesEditor() {
+  const { cellTypes, updateCellTypes, cryoVials } = useLabContext();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<CellType[] | null>(null);
+  const list = draft ?? cellTypes;
+  const dirty = draft !== null;
+  const cellLines = useMemo(() => Array.from(new Set(cryoVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)), [cryoVials]);
+  const unmatched = cellLines.filter(cl => !matchCellType(cl, list));
+  const countFor = (t: CellType) => cryoVials.filter(v => matchCellType(v.cellLine, list)?.id === t.id).length;
+  const edit = (id: string, patch: Partial<CellType>) => setDraft(list.map(t => t.id === id ? { ...t, ...patch } : t));
+  const add = (name = '') => setDraft([...list, { id: generateId(), name, color: cellTypePalette[list.length % cellTypePalette.length], aliases: [] }]);
+  const remove = (id: string) => setDraft(list.filter(t => t.id !== id));
+  const save = () => { updateCellTypes(list); setDraft(null); };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+        <div>
+          <p className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2">
+            <span className="flex -space-x-1">{(cellTypes.length ? cellTypes : []).slice(0, 6).map(t => <span key={t.id} className="w-3 h-3 rounded-full border border-white" style={{ backgroundColor: t.color }} />)}{cellTypes.length === 0 && <span className="w-3 h-3 rounded-full bg-gray-300" />}</span>
+            Cell types &amp; vial colours
+          </p>
+          <p className="text-[11px] text-gray-500 font-manrope mt-0.5">
+            {cellTypes.length} type{cellTypes.length === 1 ? '' : 's'} · {unmatched.length > 0 ? <span className="text-amber-600">{unmatched.length} cell line name{unmatched.length === 1 ? '' : 's'} without a type (grey vials)</span> : 'every stored cell line has a colour'}
+          </p>
+        </div>
+        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
+          <p className="text-[11px] text-gray-500 font-manrope">A vial takes the colour of the type whose name or alias appears in its cell line name (whole word, case-insensitive; longest match wins). E.g. type <strong>Chondrocytes</strong> with aliases <em>CH, chondro</em> colours &ldquo;CH&rdquo;, &ldquo;Chondrocytes Ch592&rdquo; and &ldquo;chondro P3&rdquo; alike. Use one type per supplier/donor if you want to tell them apart.</p>
+          <div className="space-y-1.5">
+            {list.map(t => (
+              <div key={t.id} className="flex flex-wrap items-center gap-2">
+                <input type="color" value={t.color} onChange={e => edit(t.id, { color: e.target.value })} className="w-8 h-8 rounded-lg border border-gray-200 p-0.5 cursor-pointer" title="Colour" />
+                <input value={t.name} onChange={e => edit(t.id, { name: e.target.value })} placeholder="Type name (e.g. Chondrocytes)" className="flex-1 min-w-[140px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope" />
+                <input value={t.aliases.join(', ')} onChange={e => edit(t.id, { aliases: e.target.value.split(',').map(a => a.trim()).filter(Boolean) })} placeholder="aliases, comma-separated (e.g. CH, chondro)" className="flex-[2] min-w-[180px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope" />
+                <span className="text-[10px] text-gray-400 font-manrope w-14 text-right">{countFor(t)} vial{countFor(t) === 1 ? '' : 's'}</span>
+                <button onClick={() => remove(t.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title="Remove type"><Trash2 size={13} /></button>
+              </div>
+            ))}
+            {list.length === 0 && <p className="text-xs text-gray-400 font-manrope">No cell types yet — all vials are grey.</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => add()} className="text-[11px] text-[#102C53] font-medium font-manrope hover:underline">+ add type</button>
+            {dirty && <>
+              <button onClick={save} className="ml-auto flex items-center gap-1 px-3 py-1.5 bg-[#102C53] text-white text-xs font-medium font-manrope rounded-lg hover:bg-[#1a3d6e]"><Save size={12} /> Save colours</button>
+              <button onClick={() => setDraft(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-manrope">Discard</button>
+            </>}
+          </div>
+          {unmatched.length > 0 && (
+            <div className="bg-amber-50 rounded-xl p-3">
+              <p className="text-[11px] font-semibold text-amber-800 font-manrope mb-1.5">Cell line names without a type (shown grey) — click one to create a type from it:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {unmatched.map(cl => (
+                  <button key={cl} onClick={() => add(cl)} className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] text-amber-900 font-manrope hover:bg-amber-100" title="Create a type with this name (then add aliases and pick a colour)">
+                    {cl} <span className="text-amber-500">{cryoVials.filter(v => v.cellLine === cl).length}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CryoTab() {
-  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes: allBoxes } = useLabContext();
+  const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
   // 1×1 boxes are reagent containers: vials only go into boxes with a grid
   const storageBoxes = useMemo(() => allBoxes.filter(isCryoBox), [allBoxes]);
   const [ConfirmDialog, confirmDelete] = useConfirm();
@@ -2198,6 +2146,9 @@ function CryoTab() {
           <button onClick={() => { setForm(empty()); setShowForm(true); }} className={btnAdd}><Plus size={14} /> Add Vial</button>
         </div>
       </div>
+
+      <CellTypesEditor />
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
           <SortTh label="Cell Line" k="cellLine" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
@@ -2214,7 +2165,7 @@ function CryoTab() {
             const su = storageUnits.find(s => s.id === v.storageUnitId);
             return (
               <tr key={v.id} className="hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium text-gray-900">{v.cellLine}</td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
+                <td className="px-3 py-2 font-medium text-gray-900"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cellLineColor(v.cellLine, cellTypes) }} />{v.cellLine}</span></td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
                 <td className="px-3 py-2 text-gray-700 font-mono">{v.cells ? formatCells(v.cells) : '—'}</td>
                 <td className="px-3 py-2 text-gray-500">{su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : v.storageUnitId}</td>
                 <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>

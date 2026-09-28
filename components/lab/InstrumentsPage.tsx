@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
@@ -35,6 +35,9 @@ export default function InstrumentsPage() {
   const [bookError, setBookError] = useState('');
   const [booking, setBooking] = useState(false);
   const [search, setSearch] = useState('');
+  // Month overview of the selected instrument (find a free day quickly)
+  const [showMonth, setShowMonth] = useState(false);
+  const [monthCursor, setMonthCursor] = useState(() => new Date().toLocaleDateString('en-CA').slice(0, 7)); // YYYY-MM
 
   const step = bookingSettings.slotMinutes / 60;
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
@@ -298,13 +301,49 @@ export default function InstrumentsPage() {
           <p className="text-sm font-semibold text-gray-900 font-manrope">{dateLabel}{isToday && <span className="ml-2 text-[10px] text-blue-600">Today</span>}</p>
           <p className="text-xs text-gray-400 font-manrope mt-0.5">{dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}{isPastDate && ' · past date (read-only)'}</p>
         </div>
-        <button onClick={() => changeDate(1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
-          <ChevronRight size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { setShowMonth(v => !v); setMonthCursor(selectedDate.slice(0, 7)); }}
+            className={`p-2 rounded-lg transition-colors ${showMonth ? 'bg-[#102C53] text-white' : 'hover:bg-gray-100 text-gray-600'}`}
+            title={showMonth ? 'Hide month overview' : 'Month overview'}
+            aria-pressed={showMonth}
+          >
+            <CalendarDays size={18} />
+          </button>
+          <button onClick={() => changeDate(1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+            <ChevronRight size={18} />
+          </button>
+        </div>
       </div>
 
+      {showMonth && instrument && (
+        <MonthOverview
+          month={monthCursor}
+          onMonth={setMonthCursor}
+          selectedDate={selectedDate}
+          onSelect={ds => setSelectedDate(ds)}
+          todayStr={todayStr}
+          lastBookableDate={lastBookableDate}
+          dayInfo={ds => {
+            const list = bookings.filter(b => b.instrumentId === instrument.id && b.date === ds);
+            const mine = list.some(b => b.userId === user.id);
+            // Occupancy: fixed slots → seats taken over seats available;
+            // free timeline → hours booked over open hours × seats.
+            let total: number, taken: number;
+            if (fixedSlots) {
+              total = fixedSlots.length * capacity;
+              taken = fixedSlots.reduce((n, sl) => n + Math.min(capacity, seatsTaken(list, instrument.id, ds, sl.start, sl.end).length), 0);
+            } else {
+              total = (bookingSettings.openEndHour - bookingSettings.openStartHour) * capacity;
+              taken = list.reduce((n, b) => n + (b.endHour - b.startHour), 0);
+            }
+            return { count: list.length, mine, ratio: total > 0 ? Math.min(1, taken / total) : 0, pending: list.some(b => b.status === 'pending') };
+          }}
+        />
+      )}
+
       {/* Week Quick Nav */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      {!showMonth && <div className="flex gap-1.5 overflow-x-auto pb-1">
         {Array.from({ length: 7 }, (_, i) => {
           const base = new Date(selectedDate + 'T12:00:00');
           const d = new Date(base);
@@ -327,7 +366,7 @@ export default function InstrumentsPage() {
             </button>
           );
         })}
-      </div>
+      </div>}
 
       {/* Hourly Timeline */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -573,6 +612,85 @@ export default function InstrumentsPage() {
         </div>
       )}
       <ConfirmDialog />
+    </div>
+  );
+}
+
+
+/**
+ * Month grid for one instrument: each day shows how full it is (green → red),
+ * a dot when the user has a booking there, and greys out past days and days
+ * beyond the user's booking horizon. Clicking a day selects it in the timeline.
+ */
+function MonthOverview({ month, onMonth, selectedDate, onSelect, todayStr, lastBookableDate, dayInfo }: {
+  month: string; onMonth: (m: string) => void;
+  selectedDate: string; onSelect: (ds: string) => void;
+  todayStr: string; lastBookableDate: string;
+  dayInfo: (ds: string) => { count: number; mine: boolean; ratio: number; pending: boolean };
+}) {
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1, 12);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const leading = (first.getDay() + 6) % 7; // Monday-first
+  const cells: (string | null)[] = [
+    ...Array.from({ length: leading }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => new Date(y, m - 1, i + 1, 12).toLocaleDateString('en-CA')),
+  ];
+  while (cells.length % 7) cells.push(null);
+  const shift = (delta: number) => {
+    const d = new Date(y, m - 1 + delta, 1, 12);
+    onMonth(d.toLocaleDateString('en-CA').slice(0, 7));
+  };
+  const label = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const fill = (ratio: number) => ratio <= 0 ? 'bg-emerald-400' : ratio < 0.5 ? 'bg-emerald-500' : ratio < 1 ? 'bg-amber-400' : 'bg-red-500';
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => shift(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Previous month"><ChevronLeft size={16} /></button>
+        <p className="text-sm font-semibold text-gray-900 font-manrope">{label}</p>
+        <button onClick={() => shift(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Next month"><ChevronRight size={16} /></button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <div key={d} className="text-[10px] text-gray-400 font-manrope py-1">{d}</div>)}
+        {cells.map((ds, i) => {
+          if (!ds) return <div key={`e${i}`} />;
+          const info = dayInfo(ds);
+          const past = ds < todayStr;
+          const beyond = !!lastBookableDate && ds > lastBookableDate;
+          const selected = ds === selectedDate;
+          const today = ds === todayStr;
+          return (
+            <button
+              key={ds}
+              onClick={() => onSelect(ds)}
+              className={`relative rounded-lg py-1.5 flex flex-col items-center gap-1 text-xs font-manrope transition-colors border ${
+                selected ? 'border-[#102C53] bg-[#102C53]/5 font-semibold text-gray-900'
+                  : past ? 'border-transparent text-gray-300 hover:bg-gray-50'
+                    : beyond ? 'border-transparent text-gray-400 hover:bg-gray-50'
+                      : 'border-transparent text-gray-700 hover:bg-gray-50'
+              }`}
+              title={`${ds}: ${info.count} booking${info.count === 1 ? '' : 's'}${info.mine ? ' (incl. yours)' : ''}${beyond ? ' — beyond your booking horizon' : ''}`}
+            >
+              <span className={today ? 'text-blue-600 font-bold' : ''}>{Number(ds.slice(8))}</span>
+              <span className="h-1.5 w-full max-w-[28px] rounded-full bg-gray-100 overflow-hidden">
+                {info.count > 0 && !past && <span className={`block h-full ${fill(info.ratio)}`} style={{ width: `${Math.max(15, Math.round(info.ratio * 100))}%` }} />}
+                {info.count > 0 && past && <span className="block h-full bg-gray-300" style={{ width: `${Math.max(15, Math.round(info.ratio * 100))}%` }} />}
+              </span>
+              {info.mine && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500" aria-label="You have a booking" />}
+              {info.pending && <span className="absolute top-1 left-1 text-[8px]" aria-label="Pending authorization">⏳</span>}
+              {beyond && !past && <Lock size={8} className="absolute bottom-1 right-1 text-gray-300" />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400 font-manrope flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-emerald-500" /> free / light</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-amber-400" /> busy</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-red-500" /> full</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> your booking</span>
+        {lastBookableDate && <span className="flex items-center gap-1"><Lock size={9} /> beyond your horizon</span>}
+      </div>
     </div>
   );
 }

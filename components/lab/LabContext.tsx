@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
-  StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings,
+  StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings, CellType,
   rolePermissions, externalRolePermissions,
   generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
@@ -20,7 +20,7 @@ import {
   fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
   fetchBookings, upsertBooking, deleteBooking, setBookingStatus,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
-  fetchWishlist, upsertWishlistItem,
+  fetchWishlist, upsertWishlistItem, deleteWishlistItem,
   fetchLogEntries, insertLogEntry,
   fetchManuals, upsertManual, deleteManual,
   fetchAppSetting, upsertAppSetting,
@@ -29,6 +29,7 @@ import {
 
 const BOOKING_SETTINGS_KEY = 'booking_settings';
 const ABSENCE_SETTINGS_KEY = 'absence_settings';
+const CELL_TYPES_KEY = 'cell_types';
 
 interface LabContextType {
   user: LabUser;
@@ -49,6 +50,9 @@ interface LabContextType {
   updateAbsence: (a: Absence) => void;
   removeAbsence: (id: string) => void;
   absenceSettings: AbsenceSettings;
+  /** Cell types → vial colours (Admin-managed, shared via app_settings). */
+  cellTypes: CellType[];
+  updateCellTypes: (types: CellType[]) => void;
   updateAbsenceSettings: (s: AbsenceSettings) => void;
   canApproveAbsences: boolean;
   reagents: Reagent[];
@@ -62,6 +66,10 @@ interface LabContextType {
   wishlist: WishlistItem[];
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => void;
   updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId'>>) => void;
+  /** Edit the content of a request (name, price, quantity…) — requester on own items, or an approver. */
+  updateWishlistItem: (w: WishlistItem) => void;
+  /** Delete a request — requester on own pending items, or an admin. */
+  removeWishlistItem: (id: string) => void;
   log: LogEntry[];
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
   users: LabUser[];
@@ -126,6 +134,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [bookingSettings, setBookingSettings] = useState<BookingSettings>(defaultBookingSettings);
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [absenceSettings, setAbsenceSettings] = useState<AbsenceSettings>(defaultAbsenceSettings);
+  const [cellTypes, setCellTypes] = useState<CellType[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -201,6 +210,8 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setAbsences(sbAbsences ?? []);
       const sbAbsSettings = await fetchAppSetting<Partial<AbsenceSettings>>(ABSENCE_SETTINGS_KEY);
       setAbsenceSettings(sanitizeAbsenceSettings(sbAbsSettings ?? defaultAbsenceSettings));
+      const sbCellTypes = await fetchAppSetting<CellType[]>(CELL_TYPES_KEY);
+      setCellTypes(Array.isArray(sbCellTypes) ? sbCellTypes.filter(t => t && t.name).map(t => ({ ...t, aliases: Array.isArray(t.aliases) ? t.aliases : [] })) : []);
 
       setLoaded(true);
     }
@@ -296,6 +307,13 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     setAbsences(prev => prev.filter(a => a.id !== id));
     track(deleteAbsence(id), 'Absence deletion');
   }, [track]);
+
+  const updateCellTypes = useCallback((types: CellType[]) => {
+    const clean = types.filter(t => t.name.trim()).map(t => ({ ...t, name: t.name.trim(), aliases: t.aliases.map(a => a.trim()).filter(Boolean) }));
+    setCellTypes(clean);
+    track(upsertAppSetting(CELL_TYPES_KEY, clean), 'Cell types');
+    addLogEntry({ userId: user.id, userName: user.name, action: 'Updated cell type colours', category: 'cryo', details: clean.map(t => t.name).join(', ') });
+  }, [user, addLogEntry, track]);
 
   const updateAbsenceSettings = useCallback((s: AbsenceSettings) => {
     const clean = sanitizeAbsenceSettings(s);
@@ -440,6 +458,21 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [user, addLogEntry]);
 
   // ---- Reagents CRUD ----
+  const updateWishlistItem = useCallback((w: WishlistItem) => {
+    setWishlist(prev => prev.map(x => x.id === w.id ? w : x));
+    track(upsertWishlistItem(w, 'update'), 'Wishlist edit');
+    addLogEntry({ userId: user.id, userName: user.name, action: `Edited request ${w.name}`, category: 'wishlist', details: `${w.supplier} ${w.catalogNumber} · €${w.estimatedCost} × ${w.quantity}` });
+  }, [user, addLogEntry, track]);
+
+  const removeWishlistItem = useCallback((id: string) => {
+    setWishlist(prev => {
+      const w = prev.find(x => x.id === id);
+      if (w) addLogEntry({ userId: user.id, userName: user.name, action: `Deleted request ${w.name}`, category: 'wishlist', details: `${w.supplier} ${w.catalogNumber}` });
+      return prev.filter(x => x.id !== id);
+    });
+    track(deleteWishlistItem(id), 'Wishlist deletion');
+  }, [user, addLogEntry, track]);
+
   const addNewReagent = useCallback((r: Reagent) => { setReagents(prev => [...prev, r]); track(upsertReagent(r), `Reagent "${r.name}"`); addLogEntry({ userId: user.id, userName: user.name, action: `Added reagent ${r.name}`, category: 'reagent', details: `${r.supplier} ${r.catalogNumber}` }); }, [user, addLogEntry, track]);
   // keepServerStock: the admin edit form did not touch the stock, so do not
   // overwrite current_stock with the (possibly stale) value the form loaded —
@@ -510,10 +543,11 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       absences, addAbsence, updateAbsence, removeAbsence,
       absenceSettings, updateAbsenceSettings,
+      cellTypes, updateCellTypes,
       canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(user.role),
       reagents, withdrawReagent, addReagentStock, prepareWorkingSolution,
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
-      wishlist, addWishlistItem, updateWishlistStatus,
+      wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
       log, addLogEntry,
       users, addUser, updateUser, removeUser,
       addNewReagent, updateReagent, removeReagent,

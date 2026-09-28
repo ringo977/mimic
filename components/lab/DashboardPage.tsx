@@ -484,6 +484,13 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
   const [preset, setPreset] = useState<RangePreset>('open');
   const [modal, setModal] = useState<ModalState | null>(null);
   const [drag, setDragState] = useState<DragState | null>(null);
+  // Why a drop was refused (shown for a few seconds above the grid)
+  const [dropError, setDropError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!dropError) return;
+    const t = setTimeout(() => setDropError(null), 5000);
+    return () => clearTimeout(t);
+  }, [dropError]);
   const dragRef = useRef<DragState | null>(null);
   const setDrag = (d: DragState | null) => { dragRef.current = d; setDragState(d); };
 
@@ -581,8 +588,18 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
         if (end - start < slotStep - EPS) end = Math.min(start + slotStep, maxH);
         setDrag({ ...d, start, end, moved: d.moved || Math.abs(cur - d.anchor) > EPS });
       } else if (d.kind === 'move') {
-        const ns = clamp(snap(raw - d.grab), d.lowStart, maxH - d.dur);
-        setDrag({ ...d, start: ns, end: ns + d.dur, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
+        // Horizontal: the day column under the pointer (move across days).
+        // Non-managers cannot drop into the past; today keeps the "not before now" floor.
+        let date = d.date, lowStart = d.lowStart, lowEnd = d.lowEnd;
+        const colEl = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.hasAttribute('data-daycol'));
+        const overDate = colEl?.getAttribute('data-daycol');
+        if (overDate && overDate !== d.date && (canManageAllBookings || overDate >= todayStr)) {
+          date = overDate;
+          const low = canManageAllBookings || overDate !== todayStr ? minH : ceilSlot(nowHour);
+          lowStart = low; lowEnd = low;
+        }
+        const ns = clamp(snap(raw - d.grab), lowStart, maxH - d.dur);
+        setDrag({ ...d, date, lowStart, lowEnd, start: ns, end: ns + d.dur, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS || date !== d.booking.date });
       } else if (d.kind === 'resize-top') {
         const ns = clamp(snap(raw), d.lowStart, d.end - slotStep);
         setDrag({ ...d, start: ns, moved: d.moved || Math.abs(ns - d.booking.startHour) > EPS });
@@ -598,13 +615,22 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
       if (!d.moved) { setModal({ mode: 'view', booking: d.booking }); return; }
       const b = d.booking;
       if (d.end - d.start < slotStep - EPS) return;
+      const inst = instruments.find(i => i.id === b.instrumentId);
       // Don't block on past time when editing an existing booking: it may already
       // be in the past (earlier today) and the user still wants to adjust it.
-      if (conflictFor(b.instrumentId, b.date, d.start, d.end, b.id)) return;
+      if (conflictFor(b.instrumentId, d.date, d.start, d.end, b.id)) {
+        setDropError(policyCapacity(inst?.bookingPolicy) > 1 ? 'No seat left in that time range.' : 'That time overlaps an existing booking.'); return;
+      }
       // Fixed-slot instruments cannot be dragged to an arbitrary time
-      const pol = instruments.find(i => i.id === b.instrumentId)?.bookingPolicy;
-      if (pol?.slots?.length && !pol.slots.some(s => Math.abs(s.start - d.start) < EPS && Math.abs(s.end - d.end) < EPS)) return;
-      updateBooking({ ...b, startHour: d.start, endHour: d.end });
+      const pol = inst?.bookingPolicy;
+      if (pol?.slots?.length && !pol.slots.some(s => Math.abs(s.start - d.start) < EPS && Math.abs(s.end - d.end) < EPS)) {
+        setDropError(`${inst?.name || 'This instrument'} is bookable only in its fixed slots.`); return;
+      }
+      if (!canManageAllBookings) {
+        const err = validateBookingPolicy({ instrument: inst, bookings, userId: b.userId, role: user.role, date: d.date, startHour: d.start, endHour: d.end, today: todayStr, ignoreId: b.id });
+        if (err) { setDropError(err); return; }
+      }
+      updateBooking({ ...b, date: d.date, startHour: d.start, endHour: d.end });
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -720,7 +746,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
               return (
                 <div
                   key={ds}
-                  data-daycol
+                  data-daycol={ds}
                   onPointerDown={isMobile ? undefined : e => startCreate(e, ds)}
                   onClick={isMobile ? e => tapCreate(e, ds) : undefined}
                   className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`}
@@ -809,14 +835,20 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
       </div>
 
       {/* Legend */}
+      {dropError && (
+        <div className="mt-3 bg-red-50 border border-red-100 text-red-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-2">
+          <AlertTriangle size={13} className="shrink-0" /> {dropError}
+        </div>
+      )}
       <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#102C53] ring-2 ring-inset ring-white/90" /> Your bookings</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" /> Color = instrument</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 2px, transparent 2px 4px)' }} /> Pending authorization</span>
         <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-500" /> Now</span>
         <span className="ml-auto text-gray-400">{isMobile
           ? 'Tap empty space to book · tap a booking for details'
-          : 'Drag empty space to book · drag a booking to move · drag its edges to resize'}</span>
+          : 'Drag empty space to book · drag a booking to move (also to another day) · drag its edges to resize'}</span>
       </div>
 
       {modal && <BookingModal state={modal} onClose={() => setModal(null)} />}

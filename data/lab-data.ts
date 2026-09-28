@@ -868,6 +868,50 @@ export interface ReagentTransaction {
   timestamp: string;
 }
 
+/**
+ * Cell types for vial colours (Admin → Cryo). A vial takes the colour of the
+ * first type whose name or alias appears in its cell line (case-insensitive,
+ * longest match first); "CH", "Chondrocytes Ch592" and "chondro P3" can all
+ * share one colour. Unmatched cell lines are grey.
+ */
+export interface CellType {
+  id: string;
+  name: string;
+  color: string;        // hex
+  aliases: string[];    // extra words/prefixes that identify this type
+}
+
+export const cellTypePalette = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#78716c', '#0ea5e9'];
+export const UNMATCHED_CELL_COLOR = '#9ca3af';
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cellTypeKeys(t: CellType): string[] {
+  return [t.name, ...(t.aliases || [])].map(k => k.trim().toLowerCase()).filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+/** The cell type matching a vial's cell line, if any. */
+export function matchCellType(cellLine: string, types: CellType[]): CellType | undefined {
+  const line = cellLine.toLowerCase();
+  let best: { t: CellType; len: number } | undefined;
+  for (const t of types) {
+    for (const k of cellTypeKeys(t)) {
+      // whole-word match, optional plural "s" (so "CH" does not fire on
+      // "CHO" or "hMSCs", but "iPSC-CM" matches "iPSC-CMs (CDI)")
+      const re = new RegExp('(^|[^a-z0-9])' + escapeRegExp(k) + 's?($|[^a-z0-9])', 'i');
+      if (re.test(line) && (!best || k.length > best.len)) best = { t, len: k.length };
+    }
+  }
+  return best?.t;
+}
+
+/** Colour for a vial's cell line: the matching type's colour, else grey. */
+export function cellLineColor(cellLine: string, types: CellType[]): string {
+  return matchCellType(cellLine, types)?.color || UNMATCHED_CELL_COLOR;
+}
+
 export interface CryoVial {
   id: string;
   cellLine: string;

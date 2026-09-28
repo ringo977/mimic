@@ -39,6 +39,7 @@
 --      then supabase-2026-09-review-stefania.sql  (reagent boxes, shelves, cryo owners — data only)
 --      then supabase-2026-09-beta-round1.sql      (no max on imported stock, antibodies, cryo thaw policy, approve_orders PI/admin; redefines lab_can)
 --      then supabase-2026-09-booking-rules.sql    (bookings.status, capacity replaces bookings_no_overlap, rules per user group, approvals; redefines enforce_booking_policy)
+--      then supabase-2026-09-beta-round2.sql      (wishlist delete own pending, protect_reagent_fields on INSERT, app_settings 'cell_types' starter list)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil } from 'lucide-react';
 import { useLabContext } from './LabContext';
+import ReagentFormModal from './ReagentFormModal';
 import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
@@ -22,6 +23,8 @@ export default function ReagentsPage() {
   const [prepTakenStr, setPrepTakenStr] = useState('1');
   const [prepMadeStr, setPrepMadeStr] = useState('1');
   const [prepNotes, setPrepNotes] = useState('');
+  // Add a new reagent / edit an existing one (anyone with add_reagents)
+  const [editForm, setEditForm] = useState<{ reagent: Reagent | null } | null>(null);
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
@@ -114,9 +117,16 @@ export default function ReagentsPage() {
     <div className="p-4 lg:p-8 max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-lg font-bold text-gray-900 font-manrope">Reagent Stock</h1>
+        <div className="flex items-center gap-2">
+        {permissions.canAddReagents && (
+          <button onClick={() => setEditForm({ reagent: null })} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#102C53] text-white rounded-lg text-xs font-medium font-manrope hover:bg-[#1a3d6e] transition-colors" title="Add a reagent that is new to the lab">
+            <Plus size={13} /> New reagent
+          </button>
+        )}
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-manrope">
           <button onClick={() => setView('list')} className={`flex items-center gap-1 px-3 py-1.5 ${view === 'list' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}><LayoutGrid size={13} /> Items</button>
           <button onClick={() => setView('units')} className={`flex items-center gap-1 px-3 py-1.5 ${view === 'units' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}><Refrigerator size={13} /> By unit</button>
+        </div>
         </div>
       </div>
 
@@ -194,9 +204,14 @@ export default function ReagentsPage() {
                 </h3>
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.supplier} &middot; {r.catalogNumber}</p>
               </div>
-              {r.currentStock <= r.alertThreshold && (
-                <AlertTriangle size={14} className="text-amber-500 shrink-0 ml-2" />
-              )}
+              <div className="flex items-center gap-1 shrink-0 ml-2">
+                {r.currentStock <= r.alertThreshold && <AlertTriangle size={14} className="text-amber-500" />}
+                {permissions.canAddReagents && (
+                  <button onClick={() => setEditForm({ reagent: r })} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="Edit (lot, expiry, location, supplier…)" aria-label="Edit reagent">
+                    <Pencil size={13} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Stock: bar against the maximum when one is set, otherwise
@@ -289,6 +304,14 @@ export default function ReagentsPage() {
         <div className="text-center py-12 text-gray-400 font-manrope text-sm">No reagents found</div>
       )}
       </>}
+
+      {editForm && (
+        <ReagentFormModal
+          initial={editForm.reagent}
+          defaultCategory={selectedCategory !== 'All' ? selectedCategory : undefined}
+          onClose={() => setEditForm(null)}
+        />
+      )}
 
       {/* Modal */}
       {modal && modalReagent && (

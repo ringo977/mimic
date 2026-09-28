@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, X, Check, XCircle, Download, AlertCircle, Package, Truck, Archive } from 'lucide-react';
+import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2 } from 'lucide-react';
 import { useLabContext } from './LabContext';
-import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent } from '@/data/lab-data';
+import { useConfirm } from './ConfirmDialog';
+import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem } from '@/data/lab-data';
 import { downloadCSV } from '@/lib/csv';
 
 const urgencyColors = {
@@ -23,9 +24,18 @@ const statusColors: Record<string, string> = {
 type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'delivered';
 
 export default function WishlistPage() {
-  const { user, permissions, wishlist, addWishlistItem, updateWishlistStatus,
+  const { user, permissions, wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
     storageUnits, reagents, addNewReagent, addReagentStock } = useLabContext();
+  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
+  // Editing an existing request: full edit for own pending items (or approvers),
+  // price-only once it has been approved/ordered (quotes arrive late).
+  const [editing, setEditing] = useState<WishlistItem | null>(null);
+  const isOwn = (w: WishlistItem) => w.requestedBy === user.id;
+  const canFullEdit = (w: WishlistItem) => w.status !== 'delivered' && (permissions.canApproveOrders || (isOwn(w) && w.status === 'pending'));
+  const canEditPrice = (w: WishlistItem) => w.status !== 'delivered' && w.status !== 'rejected' && (permissions.canApproveOrders || isOwn(w));
+  const canDelete = (w: WishlistItem) => user.isAdmin || user.role === 'admin' || (isOwn(w) && w.status === 'pending');
+  const priceOnly = !!editing && !canFullEdit(editing);
   const [filter, setFilter] = useState<FilterStatus>('all');
 
   // Stock modal state
@@ -63,13 +73,28 @@ export default function WishlistPage() {
 
   const handleSubmit = () => {
     if (!name || !supplier) return;
-    addWishlistItem({
-      name, type, catalogNumber, supplier, estimatedCost, quantity, urgency,
-      requestedBy: user.id, requestedByName: user.name, notes,
-    });
+    if (editing) {
+      updateWishlistItem(priceOnly
+        ? { ...editing, estimatedCost }
+        : { ...editing, name, type, catalogNumber, supplier, estimatedCost, quantity, urgency, notes });
+      setEditing(null);
+    } else {
+      addWishlistItem({
+        name, type, catalogNumber, supplier, estimatedCost, quantity, urgency,
+        requestedBy: user.id, requestedByName: user.name, notes,
+      });
+    }
     setShowAdd(false);
     resetForm();
   };
+
+  const openEdit = (w: WishlistItem) => {
+    setEditing(w);
+    setName(w.name); setType(w.type); setCatalogNumber(w.catalogNumber); setSupplier(w.supplier);
+    setEstimatedCostStr(String(w.estimatedCost)); setQuantityStr(String(w.quantity)); setUrgency(w.urgency); setNotes(w.notes);
+    setShowAdd(true);
+  };
+  const closeForm = () => { setShowAdd(false); setEditing(null); resetForm(); };
 
   const resetForm = () => {
     setName(''); setType('reagent'); setCatalogNumber(''); setSupplier('');
@@ -244,6 +269,20 @@ export default function WishlistPage() {
               <div className="text-right shrink-0">
                 <p className="text-sm font-bold text-gray-900 font-manrope">&euro;{(item.estimatedCost * item.quantity).toFixed(0)}</p>
                 <p className="text-[10px] text-gray-400 font-manrope">&euro;{item.estimatedCost}/unit</p>
+                {(canEditPrice(item) || canDelete(item)) && (
+                  <div className="flex justify-end gap-1 mt-1.5">
+                    {canEditPrice(item) && (
+                      <button onClick={() => openEdit(item)} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title={canFullEdit(item) ? 'Edit request' : 'Update price'} aria-label="Edit request">
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                    {canDelete(item) && (
+                      <button onClick={() => confirmDelete('Delete request?', `"${item.name}" will be removed from the wishlist.`, () => removeWishlistItem(item.id))} className="p-1 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors" title="Delete request" aria-label="Delete request">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -293,16 +332,23 @@ export default function WishlistPage() {
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900 font-manrope">New Purchase Request</h2>
-              <button onClick={() => setShowAdd(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+              <h2 className="text-lg font-bold text-gray-900 font-manrope">{editing ? (priceOnly ? 'Update Price' : 'Edit Purchase Request') : 'New Purchase Request'}</h2>
+              <button onClick={closeForm} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
 
+            {priceOnly && editing && (
+              <div className="bg-gray-50 rounded-xl p-3 text-xs font-manrope text-gray-600 mb-3">
+                <span className="font-semibold text-gray-900">{editing.name}</span> · {editing.supplier} · {editing.catalogNumber} · Qty {editing.quantity} · <span className="capitalize">{editing.status}</span>
+                <p className="text-[10px] text-gray-400 mt-1">Once a request is {editing.status}, only the price can still be updated (e.g. when the quote arrives).</p>
+              </div>
+            )}
+
             <div className="space-y-3">
-              <div>
+              {!priceOnly && <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Product Name</label>
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Anti-VE-Cadherin" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              </div>}
+              {!priceOnly && <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Type</label>
                   <select value={type} onChange={e => setType(e.target.value as typeof type)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none">
@@ -320,8 +366,8 @@ export default function WishlistPage() {
                     <option value="high">High</option>
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
+              </div>}
+              {!priceOnly && <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Supplier</label>
                   <input value={supplier} onChange={e => setSupplier(e.target.value)} placeholder="e.g., Abcam" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
@@ -330,23 +376,23 @@ export default function WishlistPage() {
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Catalog #</label>
                   <input value={catalogNumber} onChange={e => setCatalogNumber(e.target.value)} placeholder="e.g., ab33168" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
                 </div>
-              </div>
+              </div>}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Est. Cost (&euro;/unit)</label>
-                  <input type="number" min={0} value={estimatedCostStr} onChange={e => setEstimatedCostStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+                  <input type="number" min={0} step="0.01" value={estimatedCostStr} onChange={e => setEstimatedCostStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
                 </div>
-                <div>
+                {!priceOnly && <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Quantity</label>
                   <input type="number" min={1} value={quantityStr} onChange={e => setQuantityStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
-                </div>
+                </div>}
               </div>
-              <div>
+              {!priceOnly && <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Notes</label>
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Why is this needed?" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
-              </div>
+              </div>}
               <button onClick={handleSubmit} disabled={!name || !supplier} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40">
-                Submit Request
+                {editing ? 'Save changes' : 'Submit Request'}
               </button>
             </div>
           </div>
@@ -473,6 +519,7 @@ export default function WishlistPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

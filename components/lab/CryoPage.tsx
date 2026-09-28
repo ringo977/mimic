@@ -4,28 +4,13 @@ import { useState, useMemo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox } from '@/data/lab-data';
-
-// Distinct colors for cell lines
-const cellLineColors: Record<string, string> = {
-  'iPSC-CMs (CDI)': 'bg-red-400',
-  'HUVECs': 'bg-blue-400',
-  'MCF-7': 'bg-purple-400',
-  'A549': 'bg-amber-400',
-  'hiPSCs (WTC-11)': 'bg-green-400',
-  'hMSCs': 'bg-cyan-400',
-};
-
-function getCellLineColor(cellLine: string): string {
-  if (cellLineColors[cellLine]) return cellLineColors[cellLine];
-  const hash = cellLine.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const colors = ['bg-pink-400', 'bg-indigo-400', 'bg-teal-400', 'bg-orange-400', 'bg-lime-400', 'bg-rose-400'];
-  return colors[hash % colors.length];
-}
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, matchCellType } from '@/data/lab-data';
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes } = useLabContext();
+  const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
+  // Vial colour = colour of the cell type matching its cell line (Admin → Cryo → Cell types); grey if none.
+  const getCellLineColor = (cellLine: string) => cellLineColor(cellLine, cellTypes);
 
   // Only boxes with a vial grid belong here; 1×1 boxes are reagent
   // containers ("Supplements Box") and live in the Reagents page.
@@ -503,11 +488,10 @@ export default function CryoPage() {
                         <button
                           onClick={() => setSelectedVial(isSelected ? null : vial.id)}
                           className={`w-full h-full rounded-full flex items-center justify-center text-white font-bold transition-all
-                            ${getCellLineColor(vial.cellLine)}
                             ${isSelected ? 'ring-2 ring-offset-1 ring-[#102C53] scale-110' : 'hover:scale-105'}
                             ${findActive ? (isMatch(vial) ? 'ring-2 ring-offset-1 ring-amber-500' : 'opacity-25') : ''}
                           `}
-                          style={{ fontSize: isLarge ? '6px' : '8px' }}
+                          style={{ fontSize: isLarge ? '6px' : '8px', backgroundColor: getCellLineColor(vial.cellLine) }}
                           title={`${vial.cellLine} P${vial.passage}`}
                         >
                           P{vial.passage}
@@ -544,14 +528,17 @@ export default function CryoPage() {
             ))}
           </div>
 
-          {/* Cell line legend — only what is in this box */}
+          {/* Cell line legend — only what is in this box, grouped by cell type colour */}
           <div className="mt-3 flex flex-wrap gap-x-2.5 gap-y-1">
-            {Array.from(new Set(boxVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)).map(cl => (
-              <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600">
-                <span className={`w-2.5 h-2.5 rounded-full ${getCellLineColor(cl)}`} />
-                {cl} <span className="text-gray-400">{boxVials.filter(v => v.cellLine === cl).length}</span>
-              </span>
-            ))}
+            {Array.from(new Set(boxVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)).map(cl => {
+              const t = matchCellType(cl, cellTypes);
+              return (
+                <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600" title={t ? `Cell type: ${t.name}` : 'No cell type matches this name (grey) — add one in Admin → Cryo'}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getCellLineColor(cl) }} />
+                  {cl} <span className="text-gray-400">{boxVials.filter(v => v.cellLine === cl).length}</span>
+                </span>
+              );
+            })}
             {boxVials.length === 0 && <span className="text-[10px] text-gray-400 font-manrope">Empty box</span>}
           </div>
         </div>
@@ -566,7 +553,7 @@ export default function CryoPage() {
           {selectedVialData ? (
             <div className="space-y-3">
               <div className="bg-cyan-50 rounded-xl p-4 text-center">
-                <div className={`w-12 h-12 rounded-full ${getCellLineColor(selectedVialData.cellLine)} mx-auto flex items-center justify-center text-white text-sm font-bold mb-2`}>
+                <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-white text-sm font-bold mb-2" style={{ backgroundColor: getCellLineColor(selectedVialData.cellLine) }}>
                   P{selectedVialData.passage}
                 </div>
                 <p className="text-sm font-bold text-gray-900 font-manrope">{selectedVialData.cellLine}</p>
@@ -739,8 +726,9 @@ export default function CryoPage() {
 type VialSortKey = 'cellLine' | 'passage' | 'cells' | 'storage' | 'position' | 'userName' | 'date';
 
 function VialInventory() {
-  const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions } = useLabContext();
+  const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions, cellTypes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
+  const getCellLineColor = (cellLine: string) => cellLineColor(cellLine, cellTypes);
   // Mirror of the cryo_vials_delete RLS policy: anyone with manage_cryo
   // may thaw a vial (the log says who did it).
   const canWithdraw = (_v: { userId: string }) => permissions.canManageCryo;
@@ -840,7 +828,7 @@ function VialInventory() {
               <tr key={v.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-900">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${getCellLineColor(v.cellLine)}`} />
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: getCellLineColor(v.cellLine) }} />
                     {v.cellLine}
                   </span>
                 </td>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, X, ChevronLeft, ChevronRight, Clock, CalendarOff, Sun, Laptop, Thermometer, Plane, CheckCircle2, XCircle, AlertTriangle, Trash2, ClipboardList } from 'lucide-react';
+import { Plus, X, ChevronLeft, ChevronRight, Clock, CalendarOff, Sun, Laptop, Thermometer, Plane, CheckCircle2, XCircle, AlertTriangle, Trash2, ClipboardList, CalendarDays, CalendarRange } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import {
   Absence, AbsenceType, absenceTypeMeta, evaluateAbsenceRequest, isActiveAbsence,
@@ -37,9 +37,12 @@ function absenceRangeLabel(a: Absence): string {
 }
 
 export default function AbsencesPage() {
-  const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences } = useLabContext();
+  const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences, bookingSettings } = useLabContext();
   const [showForm, setShowForm] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
+  // Month grid (who's out) or week grid with hours (short leaves at a glance)
+  const [calView, setCalView] = useState<'month' | 'week'>('month');
+  const [weekOffset, setWeekOffset] = useState(0);
   const [rejecting, setRejecting] = useState<{ id: string; note: string } | null>(null);
   const today = todayStr();
 
@@ -63,6 +66,14 @@ export default function AbsencesPage() {
     } while (cur.getMonth() === monthStart.getMonth());
     return out;
   }, [monthStart]);
+
+  // ---- Week grid (Monday–Sunday) ----
+  const weekDays = useMemo(() => {
+    const d = new Date(); d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => { const x = new Date(d); x.setDate(d.getDate() + i); return x.toLocaleDateString('en-CA'); });
+  }, [weekOffset]);
+  const weekLabel = `${formatDate(weekDays[0])} → ${formatDate(weekDays[6])}`;
 
   const visibleAbsences = useMemo(() => absences.filter(isActiveAbsence), [absences]);
   const absencesOn = (dateStr: string) => visibleAbsences.filter(a => a.startDate <= dateStr && a.endDate >= dateStr);
@@ -138,17 +149,33 @@ export default function AbsencesPage() {
         </div>
       )}
 
-      {/* Team month view */}
+      {/* Team calendar: month grid, or week grid with hours */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-900 font-manrope">Who&rsquo;s out — {monthLabel}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope">Who&rsquo;s out — {calView === 'month' ? monthLabel : weekLabel}</h2>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setMonthOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
-            <button onClick={() => setMonthOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope ${monthOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Today</button>
-            <button onClick={() => setMonthOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-manrope mr-1">
+              <button onClick={() => setCalView('month')} className={`flex items-center gap-1 px-2.5 py-1.5 ${calView === 'month' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`} title="Month"><CalendarDays size={13} /> Month</button>
+              <button onClick={() => setCalView('week')} className={`flex items-center gap-1 px-2.5 py-1.5 ${calView === 'week' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`} title="Week with hours"><CalendarRange size={13} /> Week</button>
+            </div>
+            {calView === 'month' ? (<>
+              <button onClick={() => setMonthOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
+              <button onClick={() => setMonthOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope ${monthOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Today</button>
+              <button onClick={() => setMonthOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+            </>) : (<>
+              <button onClick={() => setWeekOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronLeft size={16} /></button>
+              <button onClick={() => setWeekOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope ${weekOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>This week</button>
+              <button onClick={() => setWeekOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600"><ChevronRight size={16} /></button>
+            </>)}
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-px bg-gray-100 rounded-xl overflow-hidden border border-gray-100">
+        {calView === 'week' && (
+          <WeekHoursGrid
+            days={weekDays} today={today} absencesOn={absencesOn} inBlackout={inBlackout}
+            users={users} startHour={bookingSettings.workStartHour} endHour={bookingSettings.workEndHour}
+          />
+        )}
+        {calView === 'month' && <div className="grid grid-cols-7 gap-px bg-gray-100 rounded-xl overflow-hidden border border-gray-100">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
             <div key={d} className="bg-gray-50 py-1.5 text-center text-[10px] font-semibold text-gray-400 font-manrope uppercase">{d}</div>
           ))}
@@ -179,7 +206,7 @@ export default function AbsencesPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
         <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
           {TYPE_ORDER.map(t => (
             <span key={t} className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ backgroundColor: absenceTypeMeta[t].color }} /> {absenceTypeMeta[t].label}</span>
@@ -376,6 +403,101 @@ function RequestModal({ onClose }: { onClose: () => void }) {
           <button onClick={submit} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors">
             Submit request
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ============================================================
+// Week grid with hours — full-day absences in an "all day" band on top,
+// short leaves ("hours") placed on the time axis (working hours).
+// ============================================================
+const ABS_HOUR_PX = 36;
+function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, endHour }: {
+  days: string[]; today: string;
+  absencesOn: (ds: string) => Absence[];
+  inBlackout: (ds: string) => { start: string; end: string; label?: string } | undefined;
+  users: { id: string; abbreviation: string }[];
+  startHour: number; endHour: number;
+}) {
+  const hours = Array.from({ length: Math.max(1, Math.ceil(endHour - startHour)) + 1 }, (_, i) => startHour + i);
+  const gridH = (endHour - startHour) * ABS_HOUR_PX;
+  const abbr = (a: Absence) => users.find(u => u.id === a.userId)?.abbreviation || generateAbbreviation(a.userName);
+  const perDay = days.map(ds => {
+    const all = absencesOn(ds);
+    return { ds, fullDay: all.filter(a => a.type !== 'hours'), hourly: all.filter(a => a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined) };
+  });
+  const maxFull = Math.max(1, ...perDay.map(d => d.fullDay.length));
+
+  return (
+    <div className="rounded-xl border border-gray-100 overflow-x-auto">
+      <div className="min-w-[640px]">
+        {/* Header */}
+        <div className="flex border-b border-gray-100 bg-gray-50">
+          <div className="w-12 shrink-0" />
+          {perDay.map(({ ds }) => {
+            const d = new Date(ds + 'T12:00:00');
+            const isToday = ds === today;
+            return (
+              <div key={ds} className={`flex-1 text-center py-1.5 border-l border-gray-100 ${!isWorkingDay(ds) ? 'bg-gray-100/60' : ''}`}>
+                <p className="text-[10px] font-semibold text-gray-400 font-manrope uppercase">{d.toLocaleDateString('en', { weekday: 'short' })}</p>
+                <p className={`text-sm font-bold font-manrope ${isToday ? 'text-white bg-[#102C53] rounded-full w-6 h-6 inline-flex items-center justify-center' : 'text-gray-700'}`}>{d.getDate()}</p>
+              </div>
+            );
+          })}
+        </div>
+        {/* All-day band */}
+        <div className="flex border-b border-gray-100" style={{ minHeight: 22 + (maxFull - 1) * 18 }}>
+          <div className="w-12 shrink-0 text-[9px] text-gray-400 font-manrope flex items-start justify-center pt-1">all day</div>
+          {perDay.map(({ ds, fullDay }) => {
+            const blackout = inBlackout(ds);
+            return (
+              <div key={ds} className={`flex-1 border-l border-gray-100 p-0.5 space-y-0.5 ${blackout ? 'bg-red-50/60' : !isWorkingDay(ds) ? 'bg-gray-50' : ''}`} title={blackout ? `Restricted period${blackout.label ? `: ${blackout.label}` : ''}` : undefined}>
+                {fullDay.map(a => (
+                  <div key={a.id} title={`${a.userName} — ${absenceTypeMeta[a.type].label}${a.status === 'pending' ? ' (awaiting approval)' : ''}`}
+                    className={`px-1 py-0.5 rounded text-[9px] font-bold font-manrope text-white truncate leading-tight ${a.status === 'pending' ? 'opacity-50 border border-dashed border-white' : ''}`}
+                    style={{ backgroundColor: absenceTypeMeta[a.type].color }}>
+                    {abbr(a)} · {absenceTypeMeta[a.type].short}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+        {/* Hours */}
+        <div className="flex">
+          <div className="w-12 shrink-0 relative" style={{ height: gridH }}>
+            {hours.map(h => (
+              <div key={h} className="absolute right-1.5 text-[9px] font-mono text-gray-400 -translate-y-1/2" style={{ top: (h - startHour) * ABS_HOUR_PX }}>{formatTime(h)}</div>
+            ))}
+          </div>
+          {perDay.map(({ ds, hourly }) => (
+            <div key={ds} className={`flex-1 relative border-l border-gray-100 ${!isWorkingDay(ds) ? 'bg-gray-50' : ''}`} style={{ height: gridH }}>
+              {hours.slice(0, -1).map(h => (
+                <div key={h} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: (h - startHour) * ABS_HOUR_PX, height: ABS_HOUR_PX }} />
+              ))}
+              {hourly.map((a, i) => {
+                const s = Math.max(a.startHour!, startHour), e = Math.min(a.endHour!, endHour);
+                if (e <= s) return null;
+                const overlapping = hourly.filter(o => o.startHour! < a.endHour! && o.endHour! > a.startHour!);
+                const lane = overlapping.indexOf(a), lanes = overlapping.length;
+                return (
+                  <div key={a.id}
+                    title={`${a.userName} — ${absenceTypeMeta[a.type].label} ${formatTime(a.startHour!)}–${formatTime(a.endHour!)}${a.status === 'pending' ? ' (awaiting approval)' : ''}${a.notes ? ' · ' + a.notes : ''}`}
+                    className={`absolute rounded px-1 py-0.5 text-[9px] font-bold font-manrope text-white overflow-hidden leading-tight ${a.status === 'pending' ? 'opacity-50 border border-dashed border-white' : ''}`}
+                    style={{
+                      top: (s - startHour) * ABS_HOUR_PX + 1, height: Math.max((e - s) * ABS_HOUR_PX - 2, 14),
+                      left: `calc(${(lane / lanes) * 100}% + 2px)`, width: `calc(${100 / lanes}% - 4px)`,
+                      backgroundColor: absenceTypeMeta[a.type].color, zIndex: i + 1,
+                    }}>
+                    {abbr(a)} <span className="font-normal opacity-90">{formatTime(a.startHour!)}–{formatTime(a.endHour!)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
