@@ -428,6 +428,7 @@ export async function fetchCryoVials(): Promise<CryoVial[] | null> {
     id: string; cell_line: string; passage: number; date: string;
     user_id: string; user_name: string; storage_unit_id: string;
     box_id: string | null; rack: number; box: number; row: number; col: number; notes: string;
+    cells: number | string | null;
   }>('cryo_vials', 'cell_line');
   if (!rows) return null;
   return rows.map(r => ({
@@ -435,6 +436,7 @@ export async function fetchCryoVials(): Promise<CryoVial[] | null> {
     userId: r.user_id, userName: r.user_name, storageUnitId: r.storage_unit_id,
     boxId: r.box_id ?? undefined,
     rack: r.rack, box: r.box, row: r.row, col: r.col, notes: r.notes,
+    cells: r.cells == null ? undefined : Number(r.cells),
   }));
 }
 
@@ -444,6 +446,7 @@ export async function upsertCryoVial(v: CryoVial) {
     user_id: v.userId, user_name: v.userName, storage_unit_id: v.storageUnitId,
     box_id: v.boxId ?? null,
     rack: v.rack, box: v.box, row: v.row, col: v.col, notes: v.notes,
+    cells: v.cells ?? null,
   });
 }
 

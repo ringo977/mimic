@@ -34,6 +34,7 @@
 --      then supabase-2026-09-fields.sql           (room codes, lot/owner/notes…)
 --      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
 --      then supabase-2026-09-door.sql             (door side, double-door units)
+--      then supabase-2026-09-cryo-cells.sql       (cryo_vials.cells + backfill)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
@@ -243,7 +244,8 @@ CREATE TABLE IF NOT EXISTS cryo_vials (
   row              integer NOT NULL DEFAULT 0,
   col              integer NOT NULL DEFAULT 0,
   notes            text NOT NULL DEFAULT ''::text,
-  box_id           text
+  box_id           text,
+  cells            numeric   -- cells per vial, absolute (1.25M → 1250000); 2026-09-cryo-cells.sql
 );
 
 CREATE TABLE IF NOT EXISTS wishlist_items (

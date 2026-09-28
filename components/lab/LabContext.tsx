@@ -5,7 +5,7 @@ import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
   StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings,
   rolePermissions, externalRolePermissions,
-  generateId,
+  generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta,
 } from '@/data/lab-data';
@@ -54,6 +54,7 @@ interface LabContextType {
   addReagentStock: (reagentId: string, amount: number) => void;
   cryoVials: CryoVial[];
   addCryoVial: (v: Omit<CryoVial, 'id'>) => void;
+  addCryoVials: (list: Omit<CryoVial, 'id'>[]) => void;
   removeCryoVial: (id: string) => void;
   wishlist: WishlistItem[];
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => void;
@@ -311,12 +312,22 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [changeReagentStock]);
 
   // ---- Cryo ----
-  const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => {
-    const full: CryoVial = { ...v, id: generateId() };
-    setCryoVials(prev => [...prev, full]);
-    track(upsertCryoVial(full), 'Cryo vial');
-    addLogEntry({ userId: user.id, userName: user.name, action: `Stored vial ${v.cellLine}`, category: 'cryo', details: `${v.storageUnitId} R${v.rack} B${v.box}, P${v.passage}` });
+  // One or many vials of the same batch: every row is written, one log line.
+  const addCryoVials = useCallback((list: Omit<CryoVial, 'id'>[]) => {
+    if (list.length === 0) return;
+    const full: CryoVial[] = list.map(v => ({ ...v, id: generateId() }));
+    setCryoVials(prev => [...prev, ...full]);
+    full.forEach(v => track(upsertCryoVial(v), 'Cryo vial'));
+    const v = full[0];
+    const cells = v.cells ? `, ${formatCells(v.cells)} cells` : '';
+    addLogEntry({
+      userId: user.id, userName: user.name,
+      action: full.length === 1 ? `Stored vial ${v.cellLine}` : `Stored ${full.length} vials ${v.cellLine}`,
+      category: 'cryo',
+      details: `${v.storageUnitId} R${v.rack} B${v.box}, P${v.passage}${cells}`,
+    });
   }, [user, addLogEntry, track]);
+  const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => addCryoVials([v]), [addCryoVials]);
 
   const removeCryoVial = useCallback((id: string) => {
     setCryoVials(prev => {
@@ -449,7 +460,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       absenceSettings, updateAbsenceSettings,
       canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(user.role),
       reagents, withdrawReagent, addReagentStock,
-      cryoVials, addCryoVial, removeCryoVial,
+      cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus,
       log, addLogEntry,
       users, addUser, updateUser, removeUser,

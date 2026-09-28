@@ -729,7 +729,35 @@ export interface CryoVial {
   row: number;
   col: number;
   notes: string;
+  cells?: number;          // cells per vial (absolute number, e.g. 1.25e6)
 }
+
+/**
+ * Cells per vial, the way the lab writes it: "1.25M", "950K". Accepts also
+ * "1.2 x10^6", "1e6", "1,5 M", plain "1200000". Returns undefined when the
+ * text is empty, null when it cannot be read.
+ */
+export function parseCells(raw: string): number | null | undefined {
+  const s = raw.trim().replace(',', '.').replace(/\s+/g, '');
+  if (!s) return undefined;
+  let m = s.match(/^(\d+(?:\.\d+)?)([mk])$/i);
+  if (m) return Math.round(Number(m[1]) * (m[2].toLowerCase() === 'm' ? 1e6 : 1e3));
+  m = s.match(/^(\d+(?:\.\d+)?)[x×*]10\^?(\d+)$/i);
+  if (m) return Math.round(Number(m[1]) * Math.pow(10, Number(m[2])));
+  m = s.match(/^(\d+(?:\.\d+)?)e(\d+)$/i);
+  if (m) return Math.round(Number(m[1]) * Math.pow(10, Number(m[2])));
+  if (/^\d+$/.test(s)) return Number(s);
+  return null;
+}
+
+/** "1.25M", "950K", "500" */
+export function formatCells(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n)) return '';
+  if (n >= 1e6) return `${trimNum(n / 1e6)}M`;
+  if (n >= 1e3) return `${trimNum(n / 1e3)}K`;
+  return String(Math.round(n));
+}
+function trimNum(x: number): string { return String(Math.round(x * 1000) / 1000); }
 
 export interface WishlistItem {
   id: string;

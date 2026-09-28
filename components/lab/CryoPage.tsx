@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, boxPositionLabel } from '@/data/lab-data';
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, boxPositionLabel, parseCells, formatCells, StorageBox } from '@/data/lab-data';
 
 // Distinct colors for cell lines
 const cellLineColors: Record<string, string> = {
@@ -24,7 +24,7 @@ function getCellLineColor(cellLine: string): string {
 }
 
 export default function CryoPage() {
-  const { user, permissions, cryoVials, addCryoVial, removeCryoVial, storageUnits, storageBoxes } = useLabContext();
+  const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
 
   // Units that hold boxes — any type: a dewar with racks, a −80 freezer with
@@ -44,11 +44,24 @@ export default function CryoPage() {
   // their positions across every unit, so a cell line can be located quickly.
   const [findLine, setFindLine] = useState('');
   const [findPassage, setFindPassage] = useState('');
+  const [findUser, setFindUser] = useState('');
+  const [findCells, setFindCells] = useState('');   // minimum cells per vial, "1M" / "500K"
+
+  // Multi-slot selection: pick several empty positions, store them in one go
+  const [multiMode, setMultiMode] = useState(false);
+  const [multiSel, setMultiSel] = useState<Set<string>>(new Set());
+  const slotKey = (row: number, col: number) => `${row}-${col}`;
+
+  // "Find space": how many vials are about to be frozen
+  const [spaceN, setSpaceN] = useState('');
 
   // Form state
   const [newCellLine, setNewCellLine] = useState('');
   const [newPassageStr, setNewPassageStr] = useState('0');
   const newPassage = newPassageStr === '' ? 0 : Number(newPassageStr);
+  const [newCellsStr, setNewCellsStr] = useState('');
+  const newCells = parseCells(newCellsStr);          // undefined = empty, null = unreadable
+  const [newDate, setNewDate] = useState(todayStr());
   const [newNotes, setNewNotes] = useState('');
 
   const unit = boxUnits.find(s => s.id === selectedUnitId) || boxUnits[0];
@@ -76,16 +89,20 @@ export default function CryoPage() {
       ? v.boxId === b.id
       : v.storageUnitId === b.storageUnitId && v.rack === (b.rack || 0) && v.box === b.number);
 
+  const findMinCells = parseCells(findCells) || 0;
+  const findActive = Boolean(findLine) || findPassage !== '' || Boolean(findUser) || findMinCells > 0;
   const isMatch = (v: typeof cryoVials[0]) => {
-    if (!findLine && findPassage === '') return false;
+    if (!findActive) return false;
     if (findLine && !v.cellLine.toLowerCase().includes(findLine.toLowerCase())) return false;
     if (findPassage !== '' && v.passage !== Number(findPassage)) return false;
+    if (findUser && !v.userName.toLowerCase().includes(findUser.toLowerCase())) return false;
+    if (findMinCells > 0 && !(v.cells != null && v.cells >= findMinCells)) return false;
     return true;
   };
-  const findActive = Boolean(findLine) || findPassage !== '';
   const matches = useMemo(() => findActive ? cryoVials.filter(isMatch) : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cryoVials, findLine, findPassage, findActive]);
+    [cryoVials, findLine, findPassage, findUser, findMinCells, findActive]);
+  const clearFind = () => { setFindLine(''); setFindPassage(''); setFindUser(''); setFindCells(''); };
 
   const boxOf = (v: typeof cryoVials[0]) => storageBoxes.find(b => b.id === v.boxId);
   const jumpToVial = (v: typeof cryoVials[0]) => {
@@ -101,12 +118,40 @@ export default function CryoPage() {
 
   const getVialAt = (row: number, col: number) => boxVials.find(v => v.row === row && v.col === col);
 
+  /** Empty positions of a box, in reading order (A1, A2, …) */
+  const freeSlotsOf = (b: StorageBox) => {
+    const taken = new Set(vialsInBox(b).map(v => slotKey(v.row, v.col)));
+    const out: { row: number; col: number }[] = [];
+    for (let r = 0; r < b.gridRows; r++) for (let c = 0; c < b.gridCols; c++) {
+      if (!taken.has(slotKey(r, c))) out.push({ row: r, col: c });
+    }
+    return out;
+  };
+
+  const toggleSlot = (row: number, col: number) => {
+    const k = slotKey(row, col);
+    setMultiSel(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  };
+  const selectNextFree = (n: number) => {
+    if (!box) return;
+    const free = freeSlotsOf(box).slice(0, Math.max(0, n));
+    setMultiSel(new Set(free.map(p => slotKey(p.row, p.col))));
+  };
+  const leaveMulti = () => { setMultiMode(false); setMultiSel(new Set()); };
+
+  // Positions the Store modal will fill: the clicked one, or the selection
+  const targetPositions: { row: number; col: number }[] =
+    multiMode && multiSel.size > 0
+      ? Array.from(multiSel).map(k => { const [r, c] = k.split('-').map(Number); return { row: r, col: c }; })
+          .sort((a, b) => a.row - b.row || a.col - b.col)
+      : addPosition ? [addPosition] : [];
+
   const handleAddVial = () => {
-    if (!addPosition || !newCellLine || !box) return;
-    addCryoVial({
+    if (targetPositions.length === 0 || !newCellLine || !box || newCells === null) return;
+    addCryoVials(targetPositions.map(pos => ({
       cellLine: newCellLine,
       passage: newPassage,
-      date: todayStr(),
+      date: newDate || todayStr(),
       userId: user.id,
       userName: user.name,
       storageUnitId: box.storageUnitId,
@@ -114,14 +159,41 @@ export default function CryoPage() {
       // legacy coordinates, kept in sync so older views keep working
       rack: box.rack || 0,
       box: box.number,
-      row: addPosition.row,
-      col: addPosition.col,
+      row: pos.row,
+      col: pos.col,
       notes: newNotes,
-    });
+      cells: newCells ?? undefined,
+    })));
     setShowAddModal(false);
+    setAddPosition(null);
+    leaveMulti();
     setNewCellLine('');
     setNewPassageStr('0');
+    setNewCellsStr('');
+    setNewDate(todayStr());
     setNewNotes('');
+  };
+
+  // "Find space": every box with enough free slots, best fit first
+  const spaceWanted = Math.max(0, Number(spaceN) || 0);
+  const spaceOptions = useMemo(() => {
+    if (spaceWanted <= 0) return [];
+    return storageBoxes
+      .map(b => ({ b, free: boxCapacity(b) - vialsInBox(b).length }))
+      .filter(x => x.free >= spaceWanted)
+      .sort((x, y) => x.free - y.free || x.b.storageUnitId.localeCompare(y.b.storageUnitId) || (x.b.rack || 0) - (y.b.rack || 0) || x.b.number - y.b.number);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageBoxes, cryoVials, spaceWanted]);
+  const jumpToBoxForSpace = (b: StorageBox) => {
+    setSelectedUnitId(b.storageUnitId);
+    setSelectedRack(b.rack || undefined);
+    setSelectedBoxId(b.id);
+    setSelectedVial(null);
+    if (permissions.canManageCryo) {
+      setMultiMode(true);
+      const free = freeSlotsOf(b).slice(0, spaceWanted);
+      setMultiSel(new Set(free.map(p => slotKey(p.row, p.col))));
+    }
   };
 
   const vialsInRack = (r: number) =>
@@ -158,7 +230,7 @@ export default function CryoPage() {
           return (
             <button
               key={su.id}
-              onClick={() => { setSelectedUnitId(su.id); setSelectedRack(undefined); setSelectedBoxId(''); setSelectedVial(null); }}
+              onClick={() => { setSelectedUnitId(su.id); setSelectedRack(undefined); setSelectedBoxId(''); setSelectedVial(null); setMultiSel(new Set()); }}
               className={`flex-1 min-w-[140px] p-4 rounded-xl border-2 transition-all ${
                 selectedUnitId === su.id ? 'border-[#102C53] bg-[#102C53]/5' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
@@ -176,7 +248,7 @@ export default function CryoPage() {
 
       {/* Find a cell line */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2"><Search size={14} /> Find a cell line</h2>
+        <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2"><Search size={14} /> Find vials</h2>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             value={findLine}
@@ -192,10 +264,25 @@ export default function CryoPage() {
             value={findPassage}
             onChange={e => setFindPassage(e.target.value)}
             placeholder="Passage"
-            className="w-full sm:w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+            className="w-full sm:w-24 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
           />
+          <input
+            value={findCells}
+            onChange={e => setFindCells(e.target.value)}
+            placeholder="Min cells (1M, 500K)"
+            title="Only vials with at least this many cells"
+            className="w-full sm:w-36 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+          />
+          <input
+            value={findUser}
+            onChange={e => setFindUser(e.target.value)}
+            placeholder="Frozen by"
+            list="findusers"
+            className="w-full sm:w-36 px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+          />
+          <datalist id="findusers">{Array.from(new Set(cryoVials.map(v => v.userName).filter(Boolean))).sort().map(n => <option key={n} value={n} />)}</datalist>
           {findActive && (
-            <button onClick={() => { setFindLine(''); setFindPassage(''); }}
+            <button onClick={clearFind}
               className="px-3 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-xs font-medium font-manrope hover:bg-gray-200 whitespace-nowrap">
               Clear
             </button>
@@ -221,11 +308,57 @@ export default function CryoPage() {
                     >
                       <span className="w-2 h-2 rounded-full border border-gray-300" style={rl?.color ? { backgroundColor: rl.color } : undefined} />
                       <span className="font-mono">{boxPositionLabel(b, v.row, v.col)}</span>
-                      <span className="text-gray-400">P{v.passage}</span>
+                      <span className="text-gray-400">P{v.passage}{v.cells ? ` · ${formatCells(v.cells)}` : ''}</span>
                     </button>
                   );
                 })}
                 {matches.length > 60 && <span className="text-[11px] text-gray-400 font-manrope self-center">+{matches.length - 60} more</span>}
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Find space for a batch */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2 flex-1"><Boxes size={14} /> Find space for a batch</h2>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-gray-500 font-manrope">Vials to freeze</label>
+            <input
+              type="number" min={1} value={spaceN} onChange={e => setSpaceN(e.target.value)} placeholder="e.g. 10"
+              className="w-24 px-3 py-2 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+            />
+            {spaceN && <button onClick={() => setSpaceN('')} className="px-3 py-2 rounded-xl bg-gray-100 text-gray-600 text-xs font-medium font-manrope hover:bg-gray-200">Clear</button>}
+          </div>
+        </div>
+        {spaceWanted > 0 && (
+          spaceOptions.length === 0 ? (
+            <p className="text-xs text-red-600 font-manrope">No single box has {spaceWanted} free slots. Total free: {storageBoxes.reduce((n, b) => n + boxCapacity(b) - vialsInBox(b).length, 0)} across {storageBoxes.length} boxes.</p>
+          ) : (
+            <div>
+              <p className="text-xs text-gray-500 font-manrope mb-2">
+                {spaceOptions.length} box{spaceOptions.length !== 1 ? 'es' : ''} can take {spaceWanted} vial{spaceWanted !== 1 ? 's' : ''} &mdash; tightest fit first. Click one to open it{permissions.canManageCryo ? ` with the first ${spaceWanted} free slots already selected` : ''}:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {spaceOptions.slice(0, 40).map(({ b, free }) => {
+                  const su = storageUnits.find(s => s.id === b.storageUnitId);
+                  const rl = b.rack ? su?.rackLabels?.[b.rack - 1] : undefined;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => jumpToBoxForSpace(b)}
+                      className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:border-cyan-400 hover:bg-cyan-50 text-[11px] font-manrope flex items-center gap-1.5 text-left"
+                      title={`${su?.name || ''}${b.rack ? ` · Rack ${b.rack}` : ''} · ${b.label} — ${free} free of ${boxCapacity(b)}`}
+                    >
+                      {rl?.color && <span className="w-2 h-2 rounded-full border border-gray-300" style={{ backgroundColor: rl.color }} />}
+                      <span className="text-gray-500">{su ? storageUnitTypes[su.type]?.icon || '' : ''} {su?.name || '?'}{b.rack ? ` · R${b.rack}` : ''}</span>
+                      <span className="font-semibold text-gray-900">{b.label}</span>
+                      <span className={`font-mono ${free === spaceWanted ? 'text-emerald-600' : 'text-gray-500'}`}>{free} free</span>
+                    </button>
+                  );
+                })}
+                {spaceOptions.length > 40 && <span className="text-[11px] text-gray-400 font-manrope self-center">+{spaceOptions.length - 40} more</span>}
               </div>
             </div>
           )
@@ -250,7 +383,7 @@ export default function CryoPage() {
                 return (
                   <button
                     key={r}
-                    onClick={() => { setSelectedRack(r); setSelectedBoxId(''); setSelectedVial(null); }}
+                    onClick={() => { setSelectedRack(r); setSelectedBoxId(''); setSelectedVial(null); setMultiSel(new Set()); }}
                     className={`p-3 rounded-xl border-2 transition-all text-center ${
                       isSelected ? 'bg-[#102C53]/5' : 'hover:border-gray-300'
                     } ${rl?.color ? '' : isSelected ? 'border-[#102C53]' : 'border-gray-100'}`}
@@ -283,7 +416,7 @@ export default function CryoPage() {
               return (
                 <button
                   key={b.id}
-                  onClick={() => { setSelectedBoxId(b.id); setSelectedVial(null); }}
+                  onClick={() => { setSelectedBoxId(b.id); setSelectedVial(null); setMultiSel(new Set()); }}
                   title={[b.label, b.notes, `${b.gridRows}×${b.gridCols}`].filter(Boolean).join(' — ')}
                   className={`flex-1 min-w-[56px] p-2 rounded-lg border-2 text-center transition-all ${
                     isSelected ? 'border-cyan-500 bg-cyan-50' : hits > 0 ? 'border-amber-400 bg-amber-50' : 'border-gray-100 hover:border-gray-300'
@@ -307,7 +440,40 @@ export default function CryoPage() {
               </h2>
               {box?.notes && <p className="text-[10px] text-gray-400 font-manrope">{box.notes}</p>}
             </div>
+            {permissions.canManageCryo && box && (
+              <button
+                onClick={() => multiMode ? leaveMulti() : setMultiMode(true)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium font-manrope flex items-center gap-1 border transition-colors ${
+                  multiMode ? 'bg-[#102C53] text-white border-[#102C53]' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
+                title="Pick several empty slots, then store the whole batch at once"
+              >
+                <CheckSquare size={12} /> {multiMode ? 'Done' : 'Select many'}
+              </button>
+            )}
           </div>
+          {multiMode && box && (
+            <div className="mb-3 p-2.5 rounded-xl bg-cyan-50 border border-cyan-100 flex flex-wrap items-center gap-2 text-xs font-manrope">
+              <span className="font-semibold text-gray-900">{multiSel.size} slot{multiSel.size !== 1 ? 's' : ''} selected</span>
+              <span className="text-gray-400">· {freeSlotsOf(box).length} free in this box</span>
+              <span className="flex items-center gap-1 ml-auto">
+                <span className="text-gray-500">next</span>
+                <input type="number" min={1} max={freeSlotsOf(box).length} placeholder="n"
+                  className="w-14 px-2 py-1 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-[#4DC9FF]"
+                  onKeyDown={e => { if (e.key === 'Enter') selectNextFree(Number((e.target as HTMLInputElement).value)); }}
+                  onBlur={e => { if (e.target.value) selectNextFree(Number(e.target.value)); }}
+                />
+                <span className="text-gray-500">free</span>
+              </span>
+              {multiSel.size > 0 && (
+                <>
+                  <button onClick={() => setMultiSel(new Set())} className="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-50">Clear</button>
+                  <button onClick={() => { setAddPosition(null); setShowAddModal(true); }} className="px-3 py-1 rounded-lg bg-cyan-500 text-white font-semibold hover:bg-cyan-600">
+                    Store {multiSel.size} vial{multiSel.size !== 1 ? 's' : ''}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Grid */}
           <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -344,12 +510,25 @@ export default function CryoPage() {
                         </button>
                       ) : (
                         permissions.canManageCryo ? (
+                          multiMode ? (
+                            <button
+                              onClick={() => toggleSlot(rowIdx, colIdx)}
+                              className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all ${
+                                multiSel.has(slotKey(rowIdx, colIdx))
+                                  ? 'border-cyan-500 bg-cyan-400 text-white'
+                                  : 'border-dashed border-gray-200 hover:border-cyan-400 hover:bg-cyan-50 text-gray-300'}`}
+                              title={multiSel.has(slotKey(rowIdx, colIdx)) ? 'Selected — click to deselect' : 'Click to select'}
+                            >
+                              {multiSel.has(slotKey(rowIdx, colIdx)) ? <span style={{ fontSize: isLarge ? '6px' : '8px' }} className="font-bold">✓</span> : null}
+                            </button>
+                          ) : (
                           <button
                             onClick={() => { setAddPosition({ row: rowIdx, col: colIdx }); setShowAddModal(true); }}
                             className="w-full h-full rounded-full border-2 border-dashed border-gray-200 hover:border-cyan-400 hover:bg-cyan-50 flex items-center justify-center text-gray-300 hover:text-cyan-500 transition-all"
                           >
                             <Plus size={isLarge ? 6 : 10} />
                           </button>
+                          )
                         ) : (
                           <div className="w-full h-full rounded-full border-2 border-dashed border-gray-100" />
                         )
@@ -386,7 +565,7 @@ export default function CryoPage() {
                   P{selectedVialData.passage}
                 </div>
                 <p className="text-sm font-bold text-gray-900 font-manrope">{selectedVialData.cellLine}</p>
-                <p className="text-xs text-gray-500 font-manrope">Passage {selectedVialData.passage}</p>
+                <p className="text-xs text-gray-500 font-manrope">Passage {selectedVialData.passage}{selectedVialData.cells ? ` · ${formatCells(selectedVialData.cells)} cells` : ''}</p>
               </div>
 
               <div className="space-y-2 text-xs font-manrope">
@@ -405,11 +584,15 @@ export default function CryoPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Stored</span>
+                  <span className="text-gray-500">Cells / vial</span>
+                  <span className="text-gray-900 font-medium">{selectedVialData.cells ? formatCells(selectedVialData.cells) : '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Frozen on</span>
                   <span className="text-gray-900">{formatDate(selectedVialData.date)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">By</span>
+                  <span className="text-gray-500">Frozen by</span>
                   <span className="text-gray-900">{selectedVialData.userName}</span>
                 </div>
                 {selectedVialData.notes && (
@@ -444,18 +627,22 @@ export default function CryoPage() {
       <VialInventory />
 
       {/* Add Vial Modal */}
-      {showAddModal && addPosition && (
+      {showAddModal && targetPositions.length > 0 && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-gray-900 font-manrope">Store New Vial</h2>
+              <h2 className="text-lg font-bold text-gray-900 font-manrope">
+                {targetPositions.length === 1 ? 'Store New Vial' : `Store ${targetPositions.length} Vials`}
+              </h2>
               <button onClick={() => setShowAddModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
 
             <div className="space-y-4">
               <div className="bg-cyan-50 rounded-xl p-3 text-sm font-manrope">
-                <span className="font-semibold">Position: </span>
-                {unit?.name || 'Unit'} &middot; {boxPositionLabel(box, addPosition.row, addPosition.col)}
+                <span className="font-semibold">{targetPositions.length === 1 ? 'Position: ' : 'Positions: '}</span>
+                {unit?.name || 'Unit'} &middot; {box?.label}
+                <span className="font-mono text-xs text-gray-700"> &middot; {targetPositions.map(p => boxPositionLabel(box, p.row, p.col).split(' · ').pop()).join(', ')}</span>
+                {targetPositions.length > 1 && <p className="text-[11px] text-gray-500 mt-1">Same cell line, passage, cells and date for every vial of the batch.</p>}
               </div>
 
               <div>
@@ -472,15 +659,46 @@ export default function CryoPage() {
                 </datalist>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Passage Number</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={newPassageStr}
-                  onChange={e => setNewPassageStr(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Cells per vial</label>
+                  <input
+                    value={newCellsStr}
+                    onChange={e => setNewCellsStr(e.target.value)}
+                    placeholder="1M, 500K, 1.2e6"
+                    className={`w-full px-3 py-2.5 border rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none ${newCells === null ? 'border-red-300' : 'border-gray-200'}`}
+                  />
+                  <p className={`text-[10px] mt-1 font-manrope ${newCells === null ? 'text-red-600' : 'text-gray-400'}`}>
+                    {newCells === null ? 'Not a number I can read' : newCells ? `= ${newCells.toLocaleString('en-US')} cells` : 'e.g. 1.25M · 950K · 2x10^6'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Passage</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={newPassageStr}
+                    onChange={e => setNewPassageStr(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Frozen on</label>
+                  <input
+                    type="date"
+                    value={newDate}
+                    max={todayStr()}
+                    onChange={e => setNewDate(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Frozen by</label>
+                  <div className="w-full px-3 py-2.5 border border-gray-100 bg-gray-50 rounded-xl text-sm font-manrope text-gray-600 truncate" title="The owner is whoever stores the vial">{user.name}</div>
+                </div>
               </div>
 
               <div>
@@ -495,10 +713,10 @@ export default function CryoPage() {
 
               <button
                 onClick={handleAddVial}
-                disabled={!newCellLine}
+                disabled={!newCellLine || newCells === null}
                 className="w-full py-3 bg-cyan-500 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-cyan-600 transition-colors disabled:opacity-40"
               >
-                Store Vial
+                {targetPositions.length === 1 ? 'Store Vial' : `Store ${targetPositions.length} Vials`}
               </button>
             </div>
           </div>
@@ -512,7 +730,7 @@ export default function CryoPage() {
 // ============================================================
 // Full Vial Inventory — searchable, sortable table
 // ============================================================
-type VialSortKey = 'cellLine' | 'passage' | 'storage' | 'position' | 'userName' | 'date';
+type VialSortKey = 'cellLine' | 'passage' | 'cells' | 'storage' | 'position' | 'userName' | 'date';
 
 function VialInventory() {
   const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions } = useLabContext();
@@ -540,6 +758,7 @@ function VialInventory() {
       list = list.filter(v =>
         v.cellLine.toLowerCase().includes(q) ||
         v.userName.toLowerCase().includes(q) ||
+        formatCells(v.cells).toLowerCase() === q ||
         v.notes.toLowerCase().includes(q) ||
         getUnitName(v.storageUnitId).toLowerCase().includes(q)
       );
@@ -549,6 +768,7 @@ function VialInventory() {
       switch (sortKey) {
         case 'cellLine': cmp = a.cellLine.localeCompare(b.cellLine); break;
         case 'passage': cmp = a.passage - b.passage; break;
+        case 'cells': cmp = (a.cells ?? -1) - (b.cells ?? -1); break;
         case 'storage': cmp = getUnitName(a.storageUnitId).localeCompare(getUnitName(b.storageUnitId)); break;
         case 'position': cmp = getPositionStr(a).localeCompare(getPositionStr(b)); break;
         case 'userName': cmp = a.userName.localeCompare(b.userName); break;
@@ -577,7 +797,7 @@ function VialInventory() {
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search cell line, user, notes..."
+            placeholder="Search cell line, person, notes, cells (1M)..."
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
         </div>
         {search && <p className="text-[11px] text-gray-400 font-manrope">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</p>}
@@ -601,10 +821,11 @@ function VialInventory() {
           <thead><tr className="bg-gray-50 border-b border-gray-200">
             <SortHeader label="Cell Line" k="cellLine" />
             <SortHeader label="P" k="passage" />
+            <SortHeader label="Cells" k="cells" />
             <SortHeader label="Storage" k="storage" />
             <SortHeader label="Position" k="position" />
-            <SortHeader label="Stored By" k="userName" />
-            <SortHeader label="Date" k="date" />
+            <SortHeader label="Frozen by" k="userName" />
+            <SortHeader label="Frozen on" k="date" />
             <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Notes</th>
             {permissions.canManageCryo && <th className="px-3 py-2.5 text-right font-semibold text-gray-700"></th>}
           </tr></thead>
@@ -618,6 +839,7 @@ function VialInventory() {
                   </span>
                 </td>
                 <td className="px-3 py-2 text-gray-600">P{v.passage}</td>
+                <td className="px-3 py-2 text-gray-700 font-mono">{v.cells ? formatCells(v.cells) : <span className="text-gray-300">—</span>}</td>
                 <td className="px-3 py-2 text-gray-500">{getUnitName(v.storageUnitId)}</td>
                 <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>
                 <td className="px-3 py-2 text-gray-500">{v.userName}</td>
@@ -632,7 +854,7 @@ function VialInventory() {
                 )}
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No vials found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">No vials found</td></tr>}
           </tbody>
         </table>
       </div>

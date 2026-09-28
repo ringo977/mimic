@@ -15,7 +15,9 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
   StorageBox, boxesOfUnit, boxCapacity, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
-  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide } from '@/data/lab-data';
+  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
+  parseCells, formatCells,
+} from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
 import { downloadCSV } from '@/lib/csv';
@@ -1990,6 +1992,7 @@ function CryoTab() {
   const firstBox = firstUnit ? boxesOfUnit(storageBoxes, firstUnit.id)[0] : undefined;
   const empty = () => ({ cellLine: '', passage: 0, date: todayStr(), userId: user.id, userName: user.name, storageUnitId: firstUnit?.id || '', boxId: firstBox?.id, rack: firstBox?.rack || 0, box: firstBox?.number || 1, row: 0, col: 0, notes: '' });
   const [form, setForm] = useState(empty());
+  const [cellsStr, setCellsStr] = useState('');
   const formBoxes = boxesOfUnit(storageBoxes, form.storageUnitId);
   const formBox = formBoxes.find(b => b.id === form.boxId);
 
@@ -2005,29 +2008,32 @@ function CryoTab() {
     if (!form.cellLine || !form.storageUnitId) return;
     const err = validateVialPosition(form, storageUnits, cryoVials, undefined, storageBoxes);
     if (err) { setFormError(err); return; }
+    const cells = parseCells(cellsStr);
+    if (cells === null) { setFormError('Cells per vial: use 1M, 500K, 1.2e6 or a plain number.'); return; }
     setFormError('');
-    addCryoVial(form);
+    addCryoVial({ ...form, cells: cells ?? undefined });
     setShowForm(false);
     setForm(empty());
+    setCellsStr('');
   };
 
   const getUnitName = useCallback((id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
   const getPositionStr = useCallback((v: typeof cryoVials[0]) => boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col), [storageBoxes]);
 
-  const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [getUnitName, getPositionStr]);
+  const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, cells: (v: typeof cryoVials[0]) => v.cells ?? -1, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [getUnitName, getPositionStr]);
   const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
 
   const importSpec: ImportSpec<Omit<CryoVial, 'id'>> = {
     title: 'Import cryo vials (CSV)',
-    headers: ['Cell Line', 'Passage', 'Storage Unit', 'Rack', 'Box', 'Row', 'Col', 'Stored By', 'Date', 'Notes'],
-    aliases: { 'Cell Line': ['cellline', 'cell'], 'Stored By': ['user', 'stored by'], 'Box': ['box label', 'box name'] },
+    headers: ['Cell Line', 'Passage', 'Cells', 'Storage Unit', 'Rack', 'Box', 'Row', 'Col', 'Stored By', 'Date', 'Notes'],
+    aliases: { 'Cell Line': ['cellline', 'cell'], 'Cells': ['cells/vial', 'cell count', 'n cells'], 'Stored By': ['user', 'stored by', 'frozen by'], 'Box': ['box label', 'box name'], 'Date': ['frozen on'] },
     template: [
-      ['HUVEC', 5, firstUnit?.name || 'LN₂ Dewar A', firstBox?.rack || '', firstBox?.label || 'Box 1', 0, 0, '', todayStr(), 'Early passage'],
+      ['HUVEC', 5, '1M', firstUnit?.name || 'LN₂ Dewar A', firstBox?.rack || '', firstBox?.label || 'Box 1', 0, 0, '', todayStr(), 'Early passage'],
     ],
     templateName: 'cryo_vials_template',
     notes: <>
       <p><strong>Storage Unit</strong>: must match an existing unit by name. <strong>Box</strong>: the box label (or its number) as shown in Storage &rarr; Boxes; leave <strong>Rack</strong> empty for units without racks.</p>
-      <p><strong>Row/Col</strong> are 0-based. <strong>Stored By</strong>: defaults to you if blank. <strong>Date</strong>: YYYY-MM-DD.</p>
+      <p><strong>Row/Col</strong> are 0-based. <strong>Cells</strong>: per vial, as 1M / 500K / 1.2e6 (optional). <strong>Stored By</strong>: defaults to you if blank. <strong>Date</strong>: YYYY-MM-DD.</p>
     </>,
     onAdd: addCryoVial,
     parseRow: (rec, rowNum) => {
@@ -2043,8 +2049,10 @@ function CryoTab() {
         || candidates.find(b => String(b.number) === boxVal);
       if (!bx) return { skip: `Row ${rowNum} (${rec['Cell Line']}): box "${rec['Box']}"${rackVal ? ` in rack ${rackVal}` : ''} not found in ${su.name} — skipped` };
       const numD = (v: string, fb: number) => { const n = Number(v); return v !== '' && Number.isFinite(n) ? n : fb; };
+      const cells = parseCells(rec['Cells'] || '');
+      if (cells === null) return { skip: `Row ${rowNum} (${rec['Cell Line']}): cannot read cells "${rec['Cells']}" (use 1M, 500K, 1.2e6)` };
       const item: Omit<CryoVial, 'id'> = {
-        cellLine: rec['Cell Line'], passage: numD(rec['Passage'], 0),
+        cellLine: rec['Cell Line'], passage: numD(rec['Passage'], 0), cells: cells ?? undefined,
         date: rec['Date'] || todayStr(),
         userId: user.id, userName: rec['Stored By'] || user.name, storageUnitId: su.id,
         boxId: bx.id, rack: bx.rack || 0, box: bx.number,
@@ -2063,9 +2071,9 @@ function CryoTab() {
         <p className="text-sm text-gray-500 font-manrope">{cryoVials.length} vials stored</p>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
-          <button onClick={() => downloadCSV(['Cell Line','Passage','Storage Unit','Rack','Box','Row','Col','Stored By','Date','Notes'], cryoVials.map(v => {
+          <button onClick={() => downloadCSV(['Cell Line','Passage','Cells','Storage Unit','Rack','Box','Row','Col','Stored By','Date','Notes'], cryoVials.map(v => {
             const bx = storageBoxes.find(b => b.id === v.boxId);
-            return [v.cellLine, v.passage, getUnitName(v.storageUnitId), bx?.rack || '', bx?.label || '', v.row, v.col, v.userName, v.date, v.notes];
+            return [v.cellLine, v.passage, formatCells(v.cells), getUnitName(v.storageUnitId), bx?.rack || '', bx?.label || '', v.row, v.col, v.userName, v.date, v.notes];
           }), 'cryo_vials')} className={btnExport}><Download size={14} /> Export</button>
           <button onClick={() => { setForm(empty()); setShowForm(true); }} className={btnAdd}><Plus size={14} /> Add Vial</button>
         </div>
@@ -2074,6 +2082,7 @@ function CryoTab() {
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
           <SortTh label="Cell Line" k="cellLine" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
           <SortTh label="P" k="passage" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
+          <SortTh label="Cells" k="cells" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
           <SortTh label="Storage" k="storage" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
           <SortTh label="Position" k="position" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
           <SortTh label="Stored By" k="user" sortKey={vSortKey} sortAsc={vSortAsc} toggle={vToggle} />
@@ -2086,6 +2095,7 @@ function CryoTab() {
             return (
               <tr key={v.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-900">{v.cellLine}</td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
+                <td className="px-3 py-2 text-gray-700 font-mono">{v.cells ? formatCells(v.cells) : '—'}</td>
                 <td className="px-3 py-2 text-gray-500">{su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : v.storageUnitId}</td>
                 <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>
                 <td className="px-3 py-2 text-gray-500">{v.userName}</td><td className="px-3 py-2 text-gray-500">{v.date}</td>
@@ -2101,7 +2111,8 @@ function CryoTab() {
           <Field label="Cell Line"><input value={form.cellLine} onChange={e => setForm({ ...form, cellLine: e.target.value })} placeholder="HUVECs, iPSC-CMs..." className={inputCls} list="cllist" /><datalist id="cllist">{Array.from(new Set(cryoVials.map(v => v.cellLine))).map(c => <option key={c} value={c} />)}</datalist></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Passage"><input type="number" min={0} value={form.passage || ''} onChange={e => setForm({ ...form, passage: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
-            <Field label="Date"><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className={inputCls} /></Field>
+            <Field label="Cells / vial (1M, 500K)"><input value={cellsStr} onChange={e => setCellsStr(e.target.value)} placeholder="optional" className={`${inputCls} ${parseCells(cellsStr) === null ? 'border-red-300' : ''}`} /></Field>
+            <Field label="Frozen on"><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className={inputCls} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Storage Unit"><select value={form.storageUnitId} onChange={e => {
