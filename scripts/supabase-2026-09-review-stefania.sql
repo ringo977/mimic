@@ -192,7 +192,7 @@ SELECT su.name AS unit, count(b.id) AS boxes,
        (SELECT count(*) FROM reagents r WHERE r.storage_unit_id = su.id AND r.box_id IS NOT NULL) AS reagents_in_boxes
 FROM   storage_units su
 JOIN   storage_boxes b ON b.storage_unit_id = su.id AND b.grid_rows = 1 AND b.grid_cols = 1
-GROUP  BY su.name ORDER BY su.name;
+GROUP  BY su.id, su.name ORDER BY su.name;
 
 SELECT location, count(*) AS unlinked
 FROM   reagents
