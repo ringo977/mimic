@@ -12,11 +12,11 @@ import UserDetailModal from './UserDetailModal';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
   storageUnitTypes, Project, Certification, Location, BookingSettings, AbsenceSettings,
   ReagentMacroCategory, reagentMacroCategories, allMacroKeys, getMacroCategory, instrumentCategories, instrumentIcons, suggestInstrumentIcon,
-  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots,
+  isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots, userGroups, describeBookingPolicy,
   StorageBox, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
-  ReagentKind, reagentKinds, reagentKindLabel,
+  ReagentKind, reagentKinds, reagentKindLabel, UserGroup,
   parseCells, formatCells,
 } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -986,8 +986,16 @@ function InstrumentsTab() {
   const setPolicy = (patch: Partial<NonNullable<Instrument['bookingPolicy']>>) => {
     setForm(f => {
       const next = { ...f.bookingPolicy, ...patch };
+      // Drop undefined keys and empty per-group maps so the stored JSON stays tidy
+      (Object.keys(next) as (keyof typeof next)[]).forEach(k => { if (next[k] === undefined || next[k] === false) delete next[k]; });
+      if (next.advanceDaysByGroup) {
+        const g = { ...next.advanceDaysByGroup };
+        (Object.keys(g) as UserGroup[]).forEach(k => { if (g[k] === undefined) delete g[k]; });
+        if (Object.keys(g).length === 0) delete next.advanceDaysByGroup; else next.advanceDaysByGroup = g;
+      }
       const empty = !next.slots?.length && next.maxSlotsPerWeek === undefined
-        && next.maxAdvanceDays === undefined && !next.note;
+        && next.maxAdvanceDays === undefined && !next.advanceDaysByGroup && next.capacity === undefined
+        && next.maxHoursPerDay === undefined && !next.allowInProgress && !next.extraHoursNeedApproval && !next.note;
       return { ...f, bookingPolicy: empty ? undefined : next };
     });
   };
@@ -1232,18 +1240,63 @@ function InstrumentsTab() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Max slots / week per person">
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Seats (parallel bookings)">
+                <input type="number" min={1} value={form.bookingPolicy?.capacity ?? ''} placeholder="1"
+                  onChange={e => setPolicy({ capacity: e.target.value === '' || Number(e.target.value) <= 1 ? undefined : Number(e.target.value) })}
+                  className={inputCls} />
+              </Field>
+              <Field label={form.bookingPolicy?.slots?.length ? 'Max slots / week / person' : 'Max bookings / week / person'}>
                 <input type="number" min={0} value={form.bookingPolicy?.maxSlotsPerWeek ?? ''} placeholder="no limit"
                   onChange={e => setPolicy({ maxSlotsPerWeek: e.target.value === '' ? undefined : Number(e.target.value) })}
                   className={inputCls} />
               </Field>
-              <Field label="Bookable days ahead">
+              <Field label="Max hours / day / person">
+                <input type="number" min={0} step={0.5} value={form.bookingPolicy?.maxHoursPerDay ?? ''} placeholder="no limit"
+                  onChange={e => setPolicy({ maxHoursPerDay: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className={inputCls} />
+              </Field>
+            </div>
+
+            <p className="text-[11px] text-gray-500 font-manrope mt-3 mb-1">Booking horizon (days ahead a booking may start). Blank = no limit; a group left blank uses the default.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label="Default (all)">
                 <input type="number" min={0} value={form.bookingPolicy?.maxAdvanceDays ?? ''} placeholder="no limit"
                   onChange={e => setPolicy({ maxAdvanceDays: e.target.value === '' ? undefined : Number(e.target.value) })}
                   className={inputCls} />
               </Field>
+              {userGroups.map(g => (
+                <Field key={g} label={g === 'student' ? 'Students & guests' : g === 'researcher' ? 'PhD / postdoc / researcher' : 'Staff'}>
+                  <input type="number" min={0} value={form.bookingPolicy?.advanceDaysByGroup?.[g] ?? ''} placeholder="= default"
+                    onChange={e => setPolicy({ advanceDaysByGroup: { ...form.bookingPolicy?.advanceDaysByGroup, [g]: e.target.value === '' ? undefined : Number(e.target.value) } })}
+                    className={inputCls} />
+                </Field>
+              ))}
             </div>
+
+            <div className="space-y-1.5 mt-3 mb-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={Boolean(form.bookingPolicy?.allowInProgress)}
+                  onChange={e => setPolicy({ allowInProgress: e.target.checked || undefined })}
+                  className="w-4 h-4 rounded border-gray-300 text-[#102C53]" />
+                <span className="text-sm font-manrope text-gray-700">A slot that has already started can still be booked (until it ends)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={Boolean(form.bookingPolicy?.extraHoursNeedApproval)}
+                  onChange={e => setPolicy({ extraHoursNeedApproval: e.target.checked || undefined })}
+                  className="w-4 h-4 rounded border-gray-300 text-[#102C53]" />
+                <span className="text-sm font-manrope text-gray-700">Bookings outside working hours need authorization (instrument responsible or lab manager)</span>
+              </label>
+            </div>
+            {(() => {
+              const rules = describeBookingPolicy(form.bookingPolicy);
+              return rules.length > 0 ? (
+                <div className="bg-gray-50 rounded-xl px-3 py-2 mb-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider font-manrope mb-1">Summary shown to users</p>
+                  {rules.map(r => <p key={r} className="text-[11px] text-gray-600 font-manrope">• {r}</p>)}
+                </div>
+              ) : null;
+            })()}
             <Field label="Note shown when booking">
               <input value={form.bookingPolicy?.note || ''} placeholder="e.g., sign-up opens Friday at 11:00"
                 onChange={e => setPolicy({ note: e.target.value || undefined })} className={inputCls} />

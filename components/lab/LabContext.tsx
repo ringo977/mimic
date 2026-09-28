@@ -18,7 +18,7 @@ import {
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
   fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
-  fetchBookings, upsertBooking, deleteBooking,
+  fetchBookings, upsertBooking, deleteBooking, setBookingStatus,
   fetchCryoVials, upsertCryoVial, deleteCryoVial,
   fetchWishlist, upsertWishlistItem,
   fetchLogEntries, insertLogEntry,
@@ -39,6 +39,8 @@ interface LabContextType {
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
   updateBooking: (b: Booking) => void;
   removeBooking: (id: string) => void;
+  /** Approve a pending booking (instrument responsible or booking manager). */
+  approveBooking: (id: string) => void;
   bookingSettings: BookingSettings;
   updateBookingSettings: (s: BookingSettings) => void;
   canManageAllBookings: boolean;
@@ -223,18 +225,42 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, []);
 
   // ---- Bookings ----
+  // The server (trigger enforce_booking_policy) is the authority on rules and
+  // on the pending/confirmed status: after each save we take back its row, and
+  // if it refused the booking we drop the optimistic copy.
   const addBooking = useCallback((b: Omit<Booking, 'id' | 'createdAt'>) => {
     const full: Booking = { ...b, id: generateId(), createdAt: new Date().toISOString() };
     setBookings(prev => [...prev, full]);
-    track(upsertBooking(full), 'Booking');
-    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
-  }, [addLogEntry, track]);
+    upsertBooking(full).then(({ booking: saved, error }) => {
+      if (saved) { setBookings(prev => prev.map(x => x.id === saved.id ? saved : x)); return; }
+      setBookings(prev => prev.filter(x => x.id !== full.id));
+      setSyncError(`Booking refused by the server: ${error || 'unknown error'}`);
+    }).catch(() => setSyncError('Booking: the change was NOT saved to the server. Check your connection, then reload and retry.'));
+    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}${b.status === 'pending' ? ' (pending authorization)' : ''}` });
+  }, [addLogEntry]);
 
   const updateBooking = useCallback((b: Booking) => {
-    setBookings(prev => prev.map(x => x.id === b.id ? b : x));
-    track(upsertBooking(b), 'Booking update');
+    let before: Booking | undefined;
+    setBookings(prev => { before = prev.find(x => x.id === b.id); return prev.map(x => x.id === b.id ? b : x); });
+    upsertBooking(b, 'update').then(({ booking: saved, error }) => {
+      if (saved) { setBookings(prev => prev.map(x => x.id === saved.id ? saved : x)); return; }
+      if (before) { const bk = before; setBookings(prev => prev.map(x => x.id === bk.id ? bk : x)); }
+      setSyncError(`Booking update refused by the server: ${error || 'unknown error'}`);
+    }).catch(() => setSyncError('Booking update: the change was NOT saved to the server. Check your connection, then reload and retry.'));
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
-  }, [user, addLogEntry, track]);
+  }, [user, addLogEntry]);
+
+  const approveBooking = useCallback((id: string) => {
+    const bk = bookings.find(b => b.id === id);
+    setBookings(prev => prev.map(x => x.id === id ? { ...x, status: 'confirmed' } : x));
+    const p = setBookingStatus(id, 'confirmed').then(saved => {
+      if (saved) setBookings(prev => prev.map(x => x.id === saved.id ? saved : x));
+      else setBookings(prev => prev.map(x => x.id === id ? { ...x, status: 'pending' } : x));
+      return saved;
+    });
+    track(p, 'Booking authorization');
+    if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Authorized booking on ${bk.instrumentId}`, category: 'booking', details: `${bk.userName} — ${bk.date} ${formatTime(bk.startHour)}-${formatTime(bk.endHour)}` });
+  }, [bookings, user, addLogEntry, track]);
 
   const removeBooking = useCallback((id: string) => {
     setBookings(prev => {
@@ -479,7 +505,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         const base = user.affiliation === 'MiMic Lab' ? rolePermissions[user.role] : externalRolePermissions[user.role];
         return { ...base, canAdmin: base.canAdmin || user.isAdmin };
       })(), currentPage, setCurrentPage,
-      bookings, addBooking, updateBooking, removeBooking,
+      bookings, addBooking, updateBooking, removeBooking, approveBooking,
       bookingSettings, updateBookingSettings,
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       absences, addAbsence, updateAbsence, removeAbsence,

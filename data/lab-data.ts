@@ -302,8 +302,77 @@ export interface Instrument {
 export interface BookingPolicy {
   slots?: { start: number; end: number }[];  // fixed slots, decimal hours
   maxSlotsPerWeek?: number;                  // per person, Monday–Sunday
-  maxAdvanceDays?: number;                   // how far ahead a booking can start
+  maxAdvanceDays?: number;                   // how far ahead a booking can start (default for all groups)
+  advanceDaysByGroup?: Partial<Record<UserGroup, number>>; // per-group override of maxAdvanceDays
+  capacity?: number;                         // seats bookable at the same time (default 1)
+  maxHoursPerDay?: number;                   // per person, per instrument, per day
+  allowInProgress?: boolean;                 // may book a slot that already started (today) if it has not ended
+  extraHoursNeedApproval?: boolean;          // bookings outside working hours start as "pending" until approved
   note?: string;                             // shown in the booking form
+}
+
+/**
+ * User groups for booking rules. Roles collapse into three tiers so rules stay
+ * readable: students (MSc, guests), researchers (PhD, postdoc, researcher) and
+ * staff (PI, lab/project managers, admins).
+ */
+export type UserGroup = 'student' | 'researcher' | 'staff';
+export const userGroups: UserGroup[] = ['student', 'researcher', 'staff'];
+export const userGroupLabel: Record<UserGroup, string> = {
+  student: 'Students & guests', researcher: 'PhD, postdocs & researchers', staff: 'Staff (PI, managers, admin)',
+};
+export function userGroupOf(role: UserRole): UserGroup {
+  if (role === 'msc' || role === 'guest') return 'student';
+  if (role === 'phd' || role === 'postdoc' || role === 'researcher') return 'researcher';
+  return 'staff';
+}
+
+export function policyCapacity(p: BookingPolicy | undefined): number {
+  return p?.capacity && p.capacity > 0 ? Math.floor(p.capacity) : 1;
+}
+
+/** Booking horizon (days ahead) for a given group; undefined = no limit. */
+export function policyAdvanceDays(p: BookingPolicy | undefined, group: UserGroup): number | undefined {
+  if (!p) return undefined;
+  const g = p.advanceDaysByGroup?.[group];
+  if (g !== undefined && g >= 0) return g;
+  if (p.maxAdvanceDays !== undefined && p.maxAdvanceDays >= 0) return p.maxAdvanceDays;
+  return undefined;
+}
+
+/** True when the booking touches hours outside the lab-wide working hours. */
+export function isExtraHours(startHour: number, endHour: number, settings: BookingSettings): boolean {
+  return startHour < settings.workStartHour - 1e-6 || endHour > settings.workEndHour + 1e-6;
+}
+
+/** Whether a booking by a non-manager would start as "pending" under this policy. */
+export function bookingNeedsApproval(p: BookingPolicy | undefined, startHour: number, endHour: number, settings: BookingSettings): boolean {
+  return Boolean(p?.extraHoursNeedApproval) && isExtraHours(startHour, endHour, settings);
+}
+
+/** Human-readable summary of the rules of a policy (empty when no rule applies). */
+export function describeBookingPolicy(p: BookingPolicy | undefined, group?: UserGroup): string[] {
+  if (!p) return [];
+  const out: string[] = [];
+  if (p.slots && p.slots.length > 0) out.push(`Fixed slots: ${p.slots.map(slotLabel).join(', ')}`);
+  const cap = policyCapacity(p);
+  if (cap > 1) out.push(`${cap} seats can be booked at the same time`);
+  if (p.maxSlotsPerWeek && p.maxSlotsPerWeek > 0) out.push(`Max ${p.maxSlotsPerWeek} ${p.slots?.length ? 'slots' : 'bookings'} per person per week`);
+  if (p.maxHoursPerDay && p.maxHoursPerDay > 0) out.push(`Max ${p.maxHoursPerDay} h per person per day`);
+  if (group) {
+    const d = policyAdvanceDays(p, group);
+    if (d !== undefined) out.push(`Bookable up to ${d} days ahead for you (${userGroupLabel[group].toLowerCase()})`);
+  } else {
+    const parts = userGroups.map(g => ({ g, d: policyAdvanceDays(p, g) })).filter(x => x.d !== undefined);
+    if (parts.length > 0) {
+      const same = parts.length === 3 && parts.every(x => x.d === parts[0].d);
+      out.push(same ? `Bookable up to ${parts[0].d} days ahead`
+        : `Bookable ahead: ${parts.map(x => `${x.d} days (${x.g})`).join(', ')}`);
+    }
+  }
+  if (p.allowInProgress) out.push('A slot that has already started can still be booked until it ends');
+  if (p.extraHoursNeedApproval) out.push('Bookings outside working hours need authorization by the instrument responsible');
+  return out;
 }
 
 /** Monday of the week containing the given YYYY-MM-DD (weeks run Mon–Sun). */
@@ -330,6 +399,22 @@ export function slotTaken(
     && slot.start < b.endHour - 1e-6 && slot.end > b.startHour + 1e-6);
 }
 
+/** Bookings of an instrument overlapping [s, e) on a date — i.e. seats already taken. */
+export function seatsTaken(
+  bookings: Booking[], instrumentId: string, date: string, s: number, e: number, ignoreId?: string,
+): Booking[] {
+  return bookings.filter(b => b.instrumentId === instrumentId && b.date === date && b.id !== ignoreId
+    && s < b.endHour - 1e-6 && e > b.startHour + 1e-6);
+}
+
+/** True when no seat is left on the instrument for [s, e) on that date. */
+export function isSlotFull(
+  bookings: Booking[], instrument: Instrument | undefined, instrumentId: string, date: string,
+  s: number, e: number, ignoreId?: string,
+): boolean {
+  return seatsTaken(bookings, instrumentId, date, s, e, ignoreId).length >= policyCapacity(instrument?.bookingPolicy);
+}
+
 /** How many slots a person already booked on that instrument in that week. */
 export function slotsUsedInWeek(
   bookings: Booking[], instrumentId: string, userId: string, date: string, ignoreId?: string,
@@ -339,14 +424,24 @@ export function slotsUsedInWeek(
     && b.date >= from && b.date < to).length;
 }
 
+/** Hours a person already booked on that instrument on that day. */
+export function hoursUsedOnDay(
+  bookings: Booking[], instrumentId: string, userId: string, date: string, ignoreId?: string,
+): number {
+  return bookings.filter(b => b.instrumentId === instrumentId && b.userId === userId && b.id !== ignoreId && b.date === date)
+    .reduce((sum, b) => sum + (b.endHour - b.startHour), 0);
+}
+
 /**
  * Check a booking against the instrument's policy. Returns an error message,
- * or null when the booking is allowed. Managers are expected to bypass this.
+ * or null when the booking is allowed. Managers are expected to bypass this
+ * (except for the capacity check, which is done separately by the callers).
  */
 export function validateBookingPolicy(args: {
   instrument: Instrument | undefined;
   bookings: Booking[];
   userId: string;
+  role?: UserRole;
   date: string;
   startHour: number;
   endHour: number;
@@ -363,10 +458,12 @@ export function validateBookingPolicy(args: {
     }
   }
 
-  if (p.maxAdvanceDays !== undefined && p.maxAdvanceDays >= 0) {
-    const last = addDaysStr(args.today, p.maxAdvanceDays);
+  const group = userGroupOf(args.role || 'guest');
+  const horizon = policyAdvanceDays(p, group);
+  if (horizon !== undefined) {
+    const last = addDaysStr(args.today, horizon);
     if (args.date > last) {
-      return `${args.instrument.name} can be booked up to ${p.maxAdvanceDays} days ahead (until ${last}).`;
+      return `${args.instrument.name} can be booked up to ${horizon} days ahead for ${userGroupLabel[group].toLowerCase()} (until ${last}).`;
     }
   }
 
@@ -378,7 +475,28 @@ export function validateBookingPolicy(args: {
     }
   }
 
+  if (p.maxHoursPerDay !== undefined && p.maxHoursPerDay > 0) {
+    const used = hoursUsedOnDay(args.bookings, args.instrument.id, args.userId, args.date, args.ignoreId);
+    const total = used + (args.endHour - args.startHour);
+    if (total > p.maxHoursPerDay + 1e-6) {
+      return `Daily limit exceeded: max ${p.maxHoursPerDay} h per day on ${args.instrument.name}${used > 0 ? ` (${used} h already booked on ${args.date})` : ''}.`;
+    }
+  }
+
   return null;
+}
+
+/**
+ * Whether a booking starting at startHour on `date` is still bookable now.
+ * Past dates never are; today, a slot must not have started — unless the
+ * policy allows booking a slot in progress, in which case it must not have ended.
+ */
+export function isBookableTime(
+  p: BookingPolicy | undefined, date: string, startHour: number, endHour: number, today: string, nowHour: number,
+): boolean {
+  if (date < today) return false;
+  if (date > today) return true;
+  return p?.allowInProgress ? endHour > nowHour + 1e-6 : startHour >= nowHour - 1e-6;
 }
 
 export interface MaintenanceLog {
@@ -534,7 +652,11 @@ export interface Booking {
   endHour: number;
   notes: string;
   createdAt: string;
+  /** 'pending' = waiting for authorization (extra hours on instruments that require it). */
+  status?: BookingStatus;
 }
+
+export type BookingStatus = 'confirmed' | 'pending';
 
 // Lab-wide booking configuration (editable by admins, shared via Supabase).
 export interface BookingSettings {

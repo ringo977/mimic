@@ -38,6 +38,7 @@
 --      then supabase-2026-09-reagent-kind.sql     (stock / working solution, run AFTER fix-assessment: stock RPC v4)
 --      then supabase-2026-09-review-stefania.sql  (reagent boxes, shelves, cryo owners — data only)
 --      then supabase-2026-09-beta-round1.sql      (no max on imported stock, antibodies, cryo thaw policy, approve_orders PI/admin; redefines lab_can)
+--      then supabase-2026-09-booking-rules.sql    (bookings.status, capacity replaces bookings_no_overlap, rules per user group, approvals; redefines enforce_booking_policy)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
 --      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
@@ -233,10 +234,14 @@ CREATE TABLE IF NOT EXISTS bookings (
   end_hour       numeric(4,2) NOT NULL,
   notes          text NOT NULL DEFAULT ''::text,
   created_at     text NOT NULL DEFAULT ''::text,
+  status         text NOT NULL DEFAULT 'confirmed',   -- 2026-09-booking-rules.sql: 'confirmed' | 'pending' (extra hours awaiting authorization)
   CONSTRAINT bookings_hours_check
-    CHECK ((end_hour > start_hour))   -- 2026-09-tighten.sql
-  -- bookings_no_overlap: EXCLUDE USING gist (instrument_id, date, numrange(start_hour, end_hour))
-  -- is added by supabase-security-hardening.sql, which first creates the btree_gist extension.
+    CHECK ((end_hour > start_hour)),  -- 2026-09-tighten.sql
+  CONSTRAINT bookings_status_check
+    CHECK (status IN ('confirmed', 'pending'))
+  -- bookings_no_overlap (EXCLUDE gist, 1 seat) was added by supabase-security-hardening.sql and
+  -- DROPPED by supabase-2026-09-booking-rules.sql: overlaps are now checked by the trigger
+  -- enforce_booking_policy() against booking_policy->>'capacity' (default 1) under an advisory lock.
 );
 
 CREATE TABLE IF NOT EXISTS cryo_vials (

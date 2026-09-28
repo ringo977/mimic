@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, slotTaken, slotsUsedInWeek, weekStart, addDaysStr, formatDate } from '@/data/lab-data';
+import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, permissions, bookings, addBooking, removeBooking, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, approveBooking, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
   const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
@@ -65,21 +66,36 @@ export default function InstrumentsPage() {
 
   const dateLabel = new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-  const overlaps = (start: number, end: number, list: { startHour: number; endHour: number }[]) =>
-    list.some(b => start < b.endHour - EPS && end > b.startHour + EPS);
-
-  const hasConflict = (start: number, end: number) => overlaps(start, end, dayBookings);
-
-  // Is a given slot start no longer bookable (in the past)?
-  const slotIsPast = (slotStart: number) => isPastDate || (isToday && slotStart < nowHour - EPS);
-
   // Instruments with fixed slots (PDMS hood): clicking anywhere inside a slot
   // books the whole slot, so the timeline stays usable at 30-minute resolution.
   const policy = instrument?.bookingPolicy;
   const fixedSlots = policy?.slots && policy.slots.length > 0 ? policy.slots : null;
+  const capacity = policyCapacity(policy);
   const quotaUsed = policy?.maxSlotsPerWeek && selectedInstrument
     ? slotsUsedInWeek(bookings, selectedInstrument, user.id, selectedDate) : 0;
-  const lastBookableDate = policy?.maxAdvanceDays !== undefined ? addDaysStr(todayStr, policy.maxAdvanceDays) : '';
+  const hoursUsed = policy?.maxHoursPerDay && selectedInstrument
+    ? hoursUsedOnDay(bookings, selectedInstrument, user.id, selectedDate) : 0;
+  const myGroup = userGroupOf(user.role);
+  const horizon = canManageAllBookings ? undefined : policyAdvanceDays(policy, myGroup);
+  const lastBookableDate = horizon !== undefined ? addDaysStr(todayStr, horizon) : '';
+  const beyondHorizon = Boolean(lastBookableDate) && selectedDate > lastBookableDate;
+  const canApprove = canManageAllBookings || (!!instrument?.responsibleUserId && instrument.responsibleUserId === user.id);
+
+  // Capacity-aware conflict: an interval is blocked only when all seats are taken.
+  const hasConflict = (start: number, end: number, list: typeof bookings = dayBookings) =>
+    selectedInstrument ? isSlotFull(list, instrument, selectedInstrument, selectedDate, start, end) : false;
+  // Seats still free for the whole interval that a booking starting at `start` would take.
+  const seatsLeftAt = (start: number, end: number) =>
+    selectedInstrument ? capacity - seatsTaken(bookings, selectedInstrument, selectedDate, start, end).length : 0;
+
+  // Is a given slot start no longer bookable (in the past — or, when the policy
+  // allows booking a slot in progress, already ended)?
+  const slotIsPast = (slotStart: number) => {
+    if (canManageAllBookings) return isPastDate;
+    const fs = fixedSlots?.find(s => slotStart >= s.start - EPS && slotStart < s.end - EPS);
+    const end = fs ? fs.end : slotStart + step;
+    return !isBookableTime(policy, selectedDate, fs ? fs.start : slotStart, end, todayStr, nowHour);
+  };
 
   const openModalAt = (start: number) => {
     const slot = fixedSlots?.find(s => start >= s.start - EPS && start < s.end - EPS) || fixedSlots?.[0];
@@ -95,13 +111,17 @@ export default function InstrumentsPage() {
     setBookError('');
     if (bookEndHour <= bookStartHour) { setBookError('End time must be after start time.'); return; }
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
-    if (isToday && bookStartHour < nowHour - EPS) { setBookError('Cannot book a time slot in the past.'); return; }
-    if (hasConflict(bookStartHour, bookEndHour)) { setBookError('Time conflict with an existing booking.'); return; }
-    const policyError = validateBookingPolicy({
-      instrument, bookings, userId: user.id, date: selectedDate,
-      startHour: bookStartHour, endHour: bookEndHour, today: todayStr,
-    });
-    if (policyError) { setBookError(policyError); return; }
+    if (!canManageAllBookings && !isBookableTime(policy, selectedDate, bookStartHour, bookEndHour, todayStr, nowHour)) {
+      setBookError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time slot in the past.'); return;
+    }
+    if (hasConflict(bookStartHour, bookEndHour)) { setBookError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
+    if (!canManageAllBookings) {
+      const policyError = validateBookingPolicy({
+        instrument, bookings, userId: user.id, role: user.role, date: selectedDate,
+        startHour: bookStartHour, endHour: bookEndHour, today: todayStr,
+      });
+      if (policyError) { setBookError(policyError); return; }
+    }
 
     setBooking(true);
     // Re-check against the freshest server state to reduce double-booking races.
@@ -111,9 +131,9 @@ export default function InstrumentsPage() {
       setBookError('Could not verify availability (connection problem). Please try again.');
       return;
     }
-    if (overlaps(bookStartHour, bookEndHour, fresh)) {
+    if (hasConflict(bookStartHour, bookEndHour, fresh)) {
       setBooking(false);
-      setBookError('Someone just booked an overlapping slot. Please pick another time.');
+      setBookError(capacity > 1 ? 'Someone just took the last seat in that time range. Please pick another time.' : 'Someone just booked an overlapping slot. Please pick another time.');
       return;
     }
     addBooking({
@@ -124,6 +144,7 @@ export default function InstrumentsPage() {
       startHour: bookStartHour,
       endHour: bookEndHour,
       notes: bookNotes,
+      status: !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'pending' : 'confirmed',
     });
     setBooking(false);
     setShowBookingModal(false);
@@ -317,19 +338,34 @@ export default function InstrumentsPage() {
             <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-300" /> Others</span>
             <span className="flex items-center gap-1.5"><Sun size={12} className="text-emerald-500" /> Working hours {formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}</span>
             <span className="flex items-center gap-1.5"><Moon size={12} className="text-amber-500" /> Extra hours</span>
+            {capacity > 1 && <span className="flex items-center gap-1.5"><Users size={12} className="text-gray-500" /> {capacity} seats</span>}
+            {policy?.extraHoursNeedApproval && <span className="flex items-center gap-1.5"><Hourglass size={12} className="text-amber-600" /> Hatched = pending authorization</span>}
           </div>
+          {(() => {
+            const rules = describeBookingPolicy(policy, myGroup);
+            if (rules.length === 0 && !policy?.note) return null;
+            return (
+              <div className="mt-2 text-[11px] text-gray-500 font-manrope space-y-0.5">
+                {rules.map(r => <p key={r}>• {r}</p>)}
+                {policy?.note && <p>{policy.note}</p>}
+                {beyondHorizon && <p className="text-red-600 font-medium">This date is beyond your booking horizon (until {formatDate(lastBookableDate)}).</p>}
+              </div>
+            );
+          })()}
         </div>
         <div className="divide-y divide-gray-50">
           {slots.map(slot => {
-            const slotBookings = dayBookings.filter(b => slot >= b.startHour - EPS && slot < b.endHour - EPS);
+            const slotBookings = dayBookings
+              .filter(b => slot >= b.startHour - EPS && slot < b.endHour - EPS)
+              .sort((a, b) => (a.userId === user.id ? -1 : b.userId === user.id ? 1 : 0) || a.startHour - b.startHour);
             const isBooked = slotBookings.length > 0;
-            const myBooking = slotBookings.find(b => b.userId === user.id);
-            const otherBooking = slotBookings.find(b => b.userId !== user.id);
-            const bk = myBooking || otherBooking;
-            const isStart = bk && Math.abs(bk.startHour - slot) < EPS;
             const working = isWorkingHour(slot, bookingSettings);
             const past = slotIsPast(slot);
-            const canCancel = bk && (!!myBooking || canManageAllBookings);
+            // Seats still free for what a booking started here would take (the whole
+            // fixed slot, or one step of the free timeline).
+            const fs = fixedSlots?.find(s => slot >= s.start - EPS && slot < s.end - EPS);
+            const seatsLeft = seatsLeftAt(fs ? fs.start : slot, fs ? fs.end : slot + step);
+            const bookable = canBook && isCertified && !past && !beyondHorizon && seatsLeft > 0;
 
             return (
               <div key={slot} className={`flex items-stretch min-h-[44px] ${isBooked ? '' : working ? 'hover:bg-green-50/50' : 'bg-amber-50/40 hover:bg-amber-50/70'}`}>
@@ -338,41 +374,63 @@ export default function InstrumentsPage() {
                   {!working && <Moon size={9} className="mt-0.5 opacity-70" />}
                 </div>
 
-                <div className="flex-1 p-1.5">
-                  {isBooked && bk ? (
-                    <div className={`h-full rounded-lg px-3 py-1.5 flex items-center justify-between ${myBooking ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                      {isStart ? (
-                        <>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold font-manrope truncate">{bk.userName}</p>
-                            <p className={`text-[10px] font-manrope ${myBooking ? 'text-blue-100' : 'text-gray-500'}`}>
-                              {formatTime(bk.startHour)}-{formatTime(bk.endHour)}{bk.notes ? ` · ${bk.notes}` : ''}
-                            </p>
-                          </div>
-                          {canCancel && (
-                            <button
-                              onClick={() => confirmDelete('Cancel Booking?', `${myBooking ? 'Your' : bk.userName + "'s"} booking on ${bk.date} (${formatTime(bk.startHour)}-${formatTime(bk.endHour)}) will be removed.`, () => removeBooking(bk.id))}
-                              className="p-1 rounded hover:bg-black/10 transition-colors shrink-0 ml-2"
-                              title={myBooking ? 'Cancel booking' : 'Cancel (manager override)'}
-                            >
-                              <X size={14} />
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className={`text-[10px] font-manrope ${myBooking ? 'text-blue-200' : 'text-gray-400'}`}>(continued)</div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className={`h-full rounded-lg border border-dashed flex items-center justify-center ${working ? 'border-gray-200' : 'border-amber-200'}`}>
-                      {canBook && isCertified && !past && (
+                <div className="flex-1 p-1.5 flex items-stretch gap-1.5">
+                  {slotBookings.map(bk => {
+                    const myBooking = bk.userId === user.id;
+                    const isStart = Math.abs(bk.startHour - slot) < EPS;
+                    const pending = bk.status === 'pending';
+                    const canCancel = myBooking || canManageAllBookings || (pending && canApprove);
+                    return (
+                      <div
+                        key={bk.id}
+                        className={`flex-1 min-w-0 rounded-lg px-3 py-1.5 flex items-center justify-between ${myBooking ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                        style={pending ? { backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 4px, transparent 4px 9px)' } : undefined}
+                        title={pending ? 'Pending authorization (extra hours)' : undefined}
+                      >
+                        {isStart ? (
+                          <>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold font-manrope truncate">{pending && <Hourglass size={10} className="inline mr-1 -mt-0.5" />}{bk.userName}</p>
+                              <p className={`text-[10px] font-manrope truncate ${myBooking ? 'text-blue-100' : 'text-gray-500'}`}>
+                                {formatTime(bk.startHour)}-{formatTime(bk.endHour)}{pending ? ' · pending authorization' : ''}{bk.notes ? ` · ${bk.notes}` : ''}
+                              </p>
+                            </div>
+                            <div className="flex items-center shrink-0 ml-2">
+                              {pending && canApprove && (
+                                <button onClick={() => approveBooking(bk.id)} className="p-1 rounded hover:bg-black/10 transition-colors" title="Authorize this booking">
+                                  <CheckCircle2 size={14} />
+                                </button>
+                              )}
+                              {canCancel && (
+                                <button
+                                  onClick={() => confirmDelete('Cancel Booking?', `${myBooking ? 'Your' : bk.userName + "'s"} booking on ${bk.date} (${formatTime(bk.startHour)}-${formatTime(bk.endHour)}) will be removed.`, () => removeBooking(bk.id))}
+                                  className="p-1 rounded hover:bg-black/10 transition-colors"
+                                  title={myBooking ? 'Cancel booking' : pending ? 'Refuse this request' : 'Cancel (manager override)'}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className={`text-[10px] font-manrope truncate ${myBooking ? 'text-blue-200' : 'text-gray-400'}`}>{capacity > 1 ? bk.userName.split(' ')[0] : '(continued)'}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(!isBooked || (capacity > 1 && slotBookings.length < capacity)) && (
+                    <div className={`${isBooked ? 'w-24 shrink-0' : 'flex-1'} rounded-lg border border-dashed flex flex-col items-center justify-center ${working ? 'border-gray-200' : 'border-amber-200'}`}>
+                      {bookable ? (
                         <button
                           onClick={() => openModalAt(slot)}
-                          className={`text-[10px] font-manrope transition-colors ${working ? 'text-gray-400 hover:text-[#102C53]' : 'text-amber-500 hover:text-amber-700'}`}
+                          className={`text-[10px] font-manrope transition-colors text-center ${working ? 'text-gray-400 hover:text-[#102C53]' : 'text-amber-500 hover:text-amber-700'}`}
                         >
                           + Book{working ? '' : ' (extra)'}
+                          {capacity > 1 && <span className="block text-[9px] opacity-80">{seatsLeft}/{capacity} seats free</span>}
                         </button>
-                      )}
+                      ) : capacity > 1 && seatsLeft > 0 ? (
+                        <span className="text-[9px] text-gray-300 font-manrope">{seatsLeft}/{capacity} free</span>
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -404,23 +462,33 @@ export default function InstrumentsPage() {
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Slot</label>
                   <div className="grid grid-cols-2 gap-2">
                     {fixedSlots.map(s => {
-                      const taken = slotTaken(bookings, selectedInstrument!, selectedDate, s);
+                      const occupants = seatsTaken(bookings, selectedInstrument!, selectedDate, s.start, s.end);
+                      const full = occupants.length >= capacity;
+                      const ended = !canManageAllBookings && !isBookableTime(policy, selectedDate, s.start, s.end, todayStr, nowHour);
+                      const blocked = (full && !canManageAllBookings) || ended;
                       const selected = Math.abs(s.start - bookStartHour) < EPS && Math.abs(s.end - bookEndHour) < EPS;
                       return (
                         <button
                           key={`${s.start}-${s.end}`}
                           type="button"
-                          disabled={Boolean(taken)}
+                          disabled={blocked}
                           onClick={() => { setBookStartHour(s.start); setBookEndHour(s.end); setBookError(''); }}
                           className={`px-3 py-2.5 rounded-xl text-sm font-manrope border-2 transition-all ${
                             selected ? 'border-[#102C53] bg-[#102C53]/5 font-semibold text-gray-900'
-                              : taken ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                              : blocked ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
                                 : 'border-gray-200 hover:border-gray-300 text-gray-700'
                           }`}
-                          title={taken ? `Taken — ${taken.userName}` : undefined}
+                          title={occupants.length ? occupants.map(o => o.userName).join(', ') : ended ? 'Already ended' : undefined}
                         >
                           {slotLabel(s)}
-                          {taken && <span className="block text-[10px] font-normal truncate">{taken.userName}</span>}
+                          {capacity > 1 ? (
+                            <span className={`block text-[10px] font-normal truncate ${full ? '' : 'text-gray-400'}`}>
+                              {ended ? 'ended' : full ? 'Full' : `${occupants.length}/${capacity} seats`}{occupants.length > 0 && !full ? ` · ${occupants.map(o => o.userName.split(' ')[0]).join(', ')}` : ''}
+                            </span>
+                          ) : (
+                            occupants[0] ? <span className="block text-[10px] font-normal truncate">{occupants[0].userName}</span>
+                              : ended ? <span className="block text-[10px] font-normal">ended</span> : null
+                          )}
                         </button>
                       );
                     })}
@@ -432,8 +500,9 @@ export default function InstrumentsPage() {
                       </p>
                     )}
                     {lastBookableDate && (
-                      <p className="text-[11px] text-gray-400 font-manrope">Bookable up to {formatDate(lastBookableDate)} ({policy?.maxAdvanceDays} days ahead).</p>
+                      <p className="text-[11px] text-gray-400 font-manrope">Bookable up to {formatDate(lastBookableDate)} ({horizon} days ahead for {userGroupLabel[myGroup].toLowerCase()}).</p>
                     )}
+                    {capacity > 1 && <p className="text-[11px] text-gray-400 font-manrope">{capacity} seats per slot.</p>}
                     {policy?.note && <p className="text-[11px] text-gray-500 font-manrope">{policy.note}</p>}
                   </div>
                 </div>
@@ -462,11 +531,19 @@ export default function InstrumentsPage() {
               </div>
               )}
 
-              {!fixedSlots && !isWorkingHour(bookStartHour, bookingSettings) && (
+              {!fixedSlots && isExtraHours(bookStartHour, bookEndHour, bookingSettings) && (
                 <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
-                  <Moon size={13} /> This booking is outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
+                  <Moon size={13} className="shrink-0" />
+                  <span>This booking is outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
+                  {!canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) && <strong> It will be pending until the instrument responsible authorizes it.</strong>}</span>
                 </div>
               )}
+
+              {!fixedSlots && policy?.maxHoursPerDay ? (
+                <p className={`text-[11px] font-manrope ${hoursUsed + (bookEndHour - bookStartHour) > policy.maxHoursPerDay + EPS ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                  Max {policy.maxHoursPerDay} h per day: {hoursUsed} h already booked on {formatDate(selectedDate)}, this booking adds {bookEndHour - bookStartHour} h.
+                </p>
+              ) : null}
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Notes</label>
@@ -480,7 +557,7 @@ export default function InstrumentsPage() {
 
               {(bookError || hasConflict(bookStartHour, bookEndHour)) && (
                 <div className="bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-manrope">
-                  {bookError || 'Time conflict! This slot is already booked.'}
+                  {bookError || (capacity > 1 ? `All ${capacity} seats are taken in this time range.` : 'Time conflict! This slot is already booked.')}
                 </div>
               )}
 
@@ -489,7 +566,7 @@ export default function InstrumentsPage() {
                 disabled={booking || hasConflict(bookStartHour, bookEndHour) || bookEndHour <= bookStartHour}
                 className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {booking ? 'Checking availability…' : 'Confirm Booking'}
+                {booking ? 'Checking availability…' : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
               </button>
             </div>
           </div>

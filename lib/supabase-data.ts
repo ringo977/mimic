@@ -353,24 +353,56 @@ export async function fetchBookings(): Promise<Booking[] | null> {
   const rows = await fetchAll<{
     id: string; instrument_id: string; user_id: string; user_name: string;
     date: string; start_hour: number; end_hour: number;
-    notes: string; created_at: string;
+    notes: string; created_at: string; status: string | null;
   }>('bookings', 'date');
   if (!rows) return null;
-  return rows.map(r => ({
-    id: r.id, instrumentId: r.instrument_id, userId: r.user_id,
-    userName: r.user_name, date: r.date,
-    startHour: r.start_hour, endHour: r.end_hour,
-    notes: r.notes, createdAt: r.created_at,
-  }));
+  return rows.map(mapBooking);
 }
 
-export async function upsertBooking(b: Booking) {
-  return upsertRow('bookings', {
+type BookingRow = {
+  id: string; instrument_id: string; user_id: string; user_name: string;
+  date: string; start_hour: number; end_hour: number; notes: string; created_at: string; status?: string | null;
+};
+function mapBooking(r: BookingRow): Booking {
+  return {
+    id: r.id, instrumentId: r.instrument_id, userId: r.user_id, userName: r.user_name,
+    date: r.date, startHour: r.start_hour, endHour: r.end_hour, notes: r.notes, createdAt: r.created_at,
+    status: r.status === 'pending' ? 'pending' : 'confirmed',
+  };
+}
+
+/**
+ * Insert a new booking or update an existing one. Updates are plain UPDATEs
+ * (not upserts) so the BEFORE INSERT policy trigger does not run on them, and
+ * `status` is never sent: the server decides it (pending vs confirmed) and only
+ * approvers may change it through `setBookingStatus`.
+ */
+export async function upsertBooking(b: Booking, mode: 'insert' | 'update' = 'insert'): Promise<{ booking: Booking | null; error?: string }> {
+  const row: BookingRow = {
     id: b.id, instrument_id: b.instrumentId, user_id: b.userId,
     user_name: b.userName, date: b.date,
     start_hour: b.startHour, end_hour: b.endHour,
     notes: b.notes, created_at: b.createdAt,
-  });
+  };
+  const { id, ...rest } = row;
+  const q = mode === 'update'
+    ? supabase.from('bookings').update(rest).eq('id', id).select().maybeSingle()
+    : supabase.from('bookings').upsert(row).select().maybeSingle();
+  const { data, error } = await q;
+  if (error) { console.error('Failed to save booking:', error.message); return { booking: null, error: cleanDbError(error.message) }; }
+  if (!data) return { booking: null, error: 'not allowed' };
+  return { booking: mapBooking(data as BookingRow) };
+}
+
+/** Strip Postgres noise from trigger messages so they can be shown to users. */
+function cleanDbError(msg: string): string {
+  return msg.replace(/^(ERROR:\s*)?(P\d{4}:\s*)?/, '').replace(/\s*CONTEXT:[\s\S]*$/, '').trim();
+}
+
+/** Approve (or send back to pending) a booking — instrument responsible or booking manager only. */
+export async function setBookingStatus(id: string, status: 'confirmed' | 'pending'): Promise<Booking | null> {
+  const saved = await updateRow<{ id: string; status: string }>('bookings', { id, status });
+  return saved ? mapBooking(saved as unknown as BookingRow) : null;
 }
 
 export async function deleteBooking(id: string) { return deleteRow('bookings', id); }
@@ -428,13 +460,7 @@ export async function fetchBookingsForSlot(instrumentId: string, date: string): 
     .from('bookings').select('*')
     .eq('instrument_id', instrumentId).eq('date', date);
   if (error) { console.error('Failed to fetch slot bookings:', error.message); return null; }
-  return (data || []).map((r: {
-    id: string; instrument_id: string; user_id: string; user_name: string;
-    date: string; start_hour: number; end_hour: number; notes: string; created_at: string;
-  }) => ({
-    id: r.id, instrumentId: r.instrument_id, userId: r.user_id, userName: r.user_name,
-    date: r.date, startHour: r.start_hour, endHour: r.end_hour, notes: r.notes, createdAt: r.created_at,
-  }));
+  return (data || []).map((r: BookingRow) => mapBooking(r));
 }
 
 // ============================================================
