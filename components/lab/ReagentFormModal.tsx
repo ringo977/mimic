@@ -37,6 +37,9 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
 }) {
   const { reagents, users, storageUnits, storageBoxes, addNewReagent, updateReagent, canManageAllBookings } = useLabContext();
   const canEditKind = canManageAllBookings;
+  // Stock quantity: free on creation (initial quantity); on edit only a
+  // manager may correct it directly (inventory correction, logged server-side).
+  const canEditStock = !initial || canManageAllBookings;
   const ref = useDialogA11y(true, onClose);
   const editing = !!initial;
   const [form, setForm] = useState<Reagent>(initial ? { ...initial } : emptyReagent(defaultCategory || 'Cell Culture'));
@@ -68,9 +71,11 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
       kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: kind === 'stock' ? (form.responsibleUserIds ?? []) : [],
     };
     if (initial) {
-      // Stock untouched in the form → keep whatever the server has now
-      // (someone may have withdrawn in the meantime via the atomic RPC).
-      updateReagent(clean, { keepServerStock: clean.currentStock === initial.currentStock });
+      // Quantities move only through Withdraw / Restock (logged, atomic RPC).
+      // Editing the record never touches the stock, except for a manager's
+      // explicit inventory correction — which the DB trigger logs as such.
+      const stockChanged = canEditStock && clean.currentStock !== initial.currentStock;
+      updateReagent(canEditStock ? clean : { ...clean, currentStock: initial.currentStock }, { keepServerStock: !stockChanged });
     } else {
       addNewReagent(clean);
     }
@@ -96,10 +101,17 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Stock"><input type="number" min={0} value={form.currentStock || ''} onChange={e => setForm({ ...form, currentStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
+            <Field label={canEditStock && initial ? 'Stock (correction)' : 'Stock'}>
+              <input type="number" min={0} value={form.currentStock || ''} readOnly={!canEditStock} title={canEditStock ? undefined : 'Quantities change only through Withdraw / Restock'}
+                onChange={e => canEditStock && setForm({ ...form, currentStock: e.target.value === '' ? 0 : Number(e.target.value) })}
+                className={`${inputCls} ${canEditStock ? '' : 'bg-gray-50 text-gray-500 cursor-not-allowed'}`} />
+            </Field>
             <Field label="Max (blank = no limit)"><input type="number" min={0} placeholder="no limit" value={form.maxStock || ''} onChange={e => setForm({ ...form, maxStock: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
             <Field label="Alert At"><input type="number" min={0} value={form.alertThreshold || ''} onChange={e => setForm({ ...form, alertThreshold: e.target.value === '' ? 0 : Number(e.target.value) })} className={inputCls} /></Field>
           </div>
+          {!canEditStock && (
+            <p className="text-[11px] text-gray-500 -mt-1">Quantities change only through Withdraw / Restock (logged movements). Editing here updates the record, not the stock.</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Unit"><input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} placeholder="e.g., µL, vials, bottles" className={inputCls} /></Field>
             <Field label="Storage Unit">

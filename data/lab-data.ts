@@ -407,12 +407,32 @@ export function seatsTaken(
     && s < b.endHour - 1e-6 && e > b.startHour + 1e-6);
 }
 
+/**
+ * Highest number of bookings running at the same instant within [s, e).
+ * Not the count of bookings that merely intersect the range: with two seats,
+ * 8–9 and 9–10 leave one seat free for a new 8–10 (peak 1, not 2).
+ * The peak is always reached at s or at the start of an overlapping booking.
+ */
+export function peakSeats(
+  bookings: Booking[], instrumentId: string, date: string, s: number, e: number, ignoreId?: string,
+): number {
+  const overlapping = seatsTaken(bookings, instrumentId, date, s, e, ignoreId);
+  if (overlapping.length === 0) return 0;
+  const points = [s, ...overlapping.map(b => b.startHour).filter(t => t > s && t < e)];
+  let peak = 0;
+  for (const t of points) {
+    const n = overlapping.filter(b => b.startHour <= t + 1e-6 && b.endHour > t + 1e-6).length;
+    if (n > peak) peak = n;
+  }
+  return peak;
+}
+
 /** True when no seat is left on the instrument for [s, e) on that date. */
 export function isSlotFull(
   bookings: Booking[], instrument: Instrument | undefined, instrumentId: string, date: string,
   s: number, e: number, ignoreId?: string,
 ): boolean {
-  return seatsTaken(bookings, instrumentId, date, s, e, ignoreId).length >= policyCapacity(instrument?.bookingPolicy);
+  return peakSeats(bookings, instrumentId, date, s, e, ignoreId) >= policyCapacity(instrument?.bookingPolicy);
 }
 
 /** How many slots a person already booked on that instrument in that week. */

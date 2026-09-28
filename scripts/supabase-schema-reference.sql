@@ -28,35 +28,53 @@
 --   8. Run supabase-2026-09-roles.sql        (lab_users role/affiliation CHECK
 --        aligned with UserRole — the live DB had an older, narrower list)
 --   9. Run supabase-2026-09-cryo-storage.sql (storage_units.rack_labels)
---  10. Run supabase-2026-09-storage-boxes.sql (storage_boxes + box_id)
+--  10. Schema-only migrations (columns, data backfills; they define no
+--      function or policy that a later script must keep — booking-policy's
+--      trigger is deliberately superseded in 11 and 12):
+--      supabase-2026-09-storage-boxes.sql     (storage_boxes + box_id)
 --      then supabase-2026-09-instrument-icons.sql (types & icons)
---      then supabase-2026-09-booking-policy.sql  (booking_policy + trigger)
+--      then supabase-2026-09-booking-policy.sql  (booking_policy column + trigger v1)
 --      then supabase-2026-09-fields.sql           (room codes, lot/owner/notes…)
 --      then supabase-2026-09-shelf.sql            (reagents.shelf, 1 = top)
 --      then supabase-2026-09-door.sql             (door side, double-door units)
 --      then supabase-2026-09-cryo-cells.sql       (cryo_vials.cells + backfill)
---      then supabase-2026-09-reagent-kind.sql     (stock / working solution, run AFTER fix-assessment: stock RPC v4)
---      then supabase-2026-09-review-stefania.sql  (reagent boxes, shelves, cryo owners — data only)
---      then supabase-2026-09-beta-round1.sql      (no max on imported stock, antibodies, cryo thaw policy, approve_orders PI/admin; redefines lab_can)
---      then supabase-2026-09-booking-rules.sql    (bookings.status, capacity replaces bookings_no_overlap, rules per user group, approvals; redefines enforce_booking_policy)
---      then supabase-2026-09-beta-round2.sql      (wishlist delete own pending, protect_reagent_fields on INSERT, app_settings 'cell_types' starter list)
 --  11. Run supabase-2026-09-tighten.sql      (auth.uid identity, WITH CHECK,
 --        approval triggers, CHECK constraints)
---      then supabase-2026-09-fix-assessment.sql (role matrix in the DB,
---        booking managers, certification enforced, stock RPC v2 — LAST)
---  12. Create the 'manuals' storage bucket (Storage → New bucket),
+--      then supabase-2026-09-fix-assessment.sql (role matrix lab_can v1,
+--        booking managers, enforce_booking_policy v2 with certification,
+--        stock RPC v3)
+--  12. Function/policy migrations that BUILD ON 11 — each one redefines
+--      something 11 created, so they must come after it, in this order:
+--      supabase-2026-09-reagent-kind.sql      (kind/derived_from/responsibles,
+--        can_access_stock, protect_reagent_fields v1, stock RPC v4,
+--        prepare_working_solution v1)
+--      then supabase-2026-09-review-stefania.sql  (reagent boxes, shelves, cryo owners — data only)
+--      then supabase-2026-09-beta-round1.sql      (no max on imported stock, antibodies,
+--        cryo_vials_delete for manage_cryo, lab_can v2: approve_orders PI/admin)
+--      then supabase-2026-09-booking-rules.sql    (bookings.status, DROPS bookings_no_overlap,
+--        enforce_booking_policy v3: peak capacity, rules per user group, approvals,
+--        bookings_update/delete with instrument responsible)
+--      then supabase-2026-09-beta-round2.sql      (wishlist_items_delete own pending,
+--        protect_reagent_fields v3: INSERT + current_stock guard, stock RPC v5 /
+--        prepare v2 with transaction flag, app_settings 'cell_types')
+--      Running 11 after any of these would silently restore the older
+--      enforce_booking_policy (no capacity check, while the EXCLUDE
+--      constraint is already gone), lab_can v1 and stock RPC v3.
+--  13. Create the 'manuals' storage bucket (Storage → New bucket),
 --      leaving "Public bucket" OFF (files are served via signed URLs).
 --      Do NOT apply any dashboard policy template to it: the bucket
 --      policies come from the tighten script. If a stray "…_all TO public"
---      policy appears, run supabase-2026-09-storage-cleanup.sql
---  13. Recreate auth users (Authentication → Add user) and update
+--      policy appears, run supabase-2026-09-storage-cleanup.sql. Then
+--      confirm with supabase-inspect.sql (storage policies block) that only
+--      the four manuals_bucket_* policies exist.
+--  14. Recreate auth users (Authentication → Add user) and update
 --      NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY in the deploy environments
---  13b. Bootstrap the first admin row in lab_users (SQL template at the end
+--  14b. Bootstrap the first admin row in lab_users (SQL template at the end
 --      of this file), log in, enrol TOTP — without it Restore is refused
---  13c. Re-run the RLS check block at the end of this file: it must print
+--  14c. Re-run the RLS check block at the end of this file: it must print
 --      "RLS enabled on every table in public."
---  14. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
---  15. Dashboard → Authentication: sign-ups OFF, confirm email ON,
+--  15. Lab app → Admin → Backup → Restore Database (JSON) + Restore PDFs
+--  16. Dashboard → Authentication: sign-ups OFF, confirm email ON,
 --      secure email change ON, min password length 8 + requirements
 -- ============================================================
 
@@ -380,8 +398,8 @@ END $$;
 -- ============================================================
 -- On a fresh project lab_users is empty, so is_lab_admin() is false for
 -- everybody and the app's Restore (which runs under RLS) is refused. Before
--- step 14 insert the row of the person doing the restore — with the SAME
--- email as their auth account (step 13). The trg_link_lab_user_auth
+-- step 15 insert the row of the person doing the restore — with the SAME
+-- email as their auth account (step 14). The trg_link_lab_user_auth
 -- trigger links it at first login; the app then demands TOTP enrolment
 -- (is_lab_admin requires MFA), after which the JSON restore works.
 --

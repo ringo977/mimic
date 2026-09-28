@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
+import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, peakSeats, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
   policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
@@ -89,7 +89,7 @@ export default function InstrumentsPage() {
     selectedInstrument ? isSlotFull(list, instrument, selectedInstrument, selectedDate, start, end) : false;
   // Seats still free for the whole interval that a booking starting at `start` would take.
   const seatsLeftAt = (start: number, end: number) =>
-    selectedInstrument ? capacity - seatsTaken(bookings, selectedInstrument, selectedDate, start, end).length : 0;
+    selectedInstrument ? capacity - peakSeats(bookings, selectedInstrument, selectedDate, start, end) : 0;
 
   // Is a given slot start no longer bookable (in the past — or, when the policy
   // allows booking a slot in progress, already ended)?

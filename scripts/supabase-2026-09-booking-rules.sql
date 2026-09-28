@@ -15,6 +15,11 @@
 --
 -- Run AFTER supabase-2026-09-beta-round1.sql. Idempotent.
 -- The Supabase SQL editor runs the whole file in one transaction.
+-- Re-running resets the PDMS / Confocal policies in §6 to the values
+-- below (Admin edits made in between are overwritten).
+--
+-- 28/09 (review): seats in use are the PEAK of simultaneous bookings, not
+-- the count of intersecting ones. Re-run the whole file to update the trigger.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -131,12 +136,25 @@ BEGIN
   -- requests cannot both see "3 of 4 taken" and both pass.
   cap := greatest(coalesce((p ->> 'capacity')::integer, 1), 1);
   PERFORM pg_advisory_xact_lock(hashtext(NEW.instrument_id || '|' || NEW.date));
-  SELECT count(*) INTO used FROM bookings b
-   WHERE b.instrument_id = NEW.instrument_id
-     AND b.date = NEW.date
-     AND b.id <> NEW.id
-     AND b.start_hour < NEW.end_hour
-     AND b.end_hour   > NEW.start_hour;
+  -- Seats in use = PEAK number of bookings running at the same instant
+  -- inside the new range, not the number of bookings that intersect it
+  -- (with 2 seats, 8–9 and 9–10 leave a seat free for a new 8–10). The
+  -- peak is reached at the new start or at the start of an overlapping row.
+  SELECT coalesce(max(n), 0) INTO used
+    FROM (
+      SELECT count(*) AS n
+        FROM (
+          SELECT NEW.start_hour AS t
+          UNION
+          SELECT b.start_hour FROM bookings b
+           WHERE b.instrument_id = NEW.instrument_id AND b.date = NEW.date AND b.id <> NEW.id
+             AND b.start_hour > NEW.start_hour AND b.start_hour < NEW.end_hour
+        ) pts
+        JOIN bookings o
+          ON o.instrument_id = NEW.instrument_id AND o.date = NEW.date AND o.id <> NEW.id
+         AND o.start_hour <= pts.t AND o.end_hour > pts.t
+       GROUP BY pts.t
+    ) peaks;
   IF used >= cap THEN
     IF cap > 1 THEN
       RAISE EXCEPTION 'No seat left: all % seats are taken in that time range', cap;
