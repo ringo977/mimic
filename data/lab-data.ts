@@ -932,6 +932,37 @@ export function cellLineColor(cellLine: string, types: CellType[]): string {
   return matchCellType(cellLine, types)?.color || UNMATCHED_CELL_COLOR;
 }
 
+/** Distinct, well-separated fallback colours for names no cell type matches. */
+const VIEW_PALETTE = [
+  '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#65a30d',
+  '#ea580c', '#4f46e5', '#0d9488', '#b91c1c', '#9333ea', '#ca8a04', '#0284c7', '#be185d',
+  '#15803d', '#c2410c', '#6d28d9', '#0f766e', '#a16207', '#1d4ed8', '#be123c', '#4d7c0f',
+];
+
+/**
+ * Colours for the cell lines shown in ONE view (a box, a table). Lines that
+ * match a cell type keep the type's fixed colour (same everywhere); the
+ * others get a distinct colour within this view only, so up to 25 (5×5) or
+ * 81 (9×9) names remain tellable apart instead of all being grey. Beyond
+ * the palette, colours continue on the hue wheel (golden angle).
+ */
+export function viewCellLineColors(cellLines: string[], types: CellType[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const used = new Set<string>();
+  const distinct = Array.from(new Set(cellLines)).sort((a, b) => a.localeCompare(b));
+  const unmatched: string[] = [];
+  for (const cl of distinct) {
+    const t = matchCellType(cl, types);
+    if (t) { out.set(cl, t.color); used.add(t.color.toLowerCase()); } else unmatched.push(cl);
+  }
+  const free = VIEW_PALETTE.filter(c => !used.has(c.toLowerCase()));
+  unmatched.forEach((cl, i) => {
+    if (i < free.length) out.set(cl, free[i]);
+    else out.set(cl, `hsl(${Math.round(((i - free.length) * 137.508) % 360)} 65% 42%)`);
+  });
+  return out;
+}
+
 export interface CryoVial {
   id: string;
   cellLine: string;

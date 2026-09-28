@@ -4,13 +4,11 @@ import { useState, useMemo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, matchCellType } from '@/data/lab-data';
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, matchCellType, viewCellLineColors } from '@/data/lab-data';
 
 export default function CryoPage() {
   const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
-  // Vial colour = colour of the cell type matching its cell line (Admin → Cryo → Cell types); grey if none.
-  const getCellLineColor = (cellLine: string) => cellLineColor(cellLine, cellTypes);
 
   // Only boxes with a vial grid belong here; 1×1 boxes are reagent
   // containers ("Supplements Box") and live in the Reagents page.
@@ -103,6 +101,10 @@ export default function CryoPage() {
   };
 
   const boxVials = box ? vialsInBox(box) : [];
+  // Colours are per box: cell types keep their fixed colour, every other
+  // name gets a distinct colour within this box (≤ 25 or 81 names).
+  const boxColors = useMemo(() => viewCellLineColors(boxVials.map(v => v.cellLine), cellTypes), [boxVials, cellTypes]);
+  const getCellLineColor = (cellLine: string) => boxColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
   const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
 
   const getVialAt = (row: number, col: number) => boxVials.find(v => v.row === row && v.col === col);
@@ -533,7 +535,7 @@ export default function CryoPage() {
             {Array.from(new Set(boxVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)).map(cl => {
               const t = matchCellType(cl, cellTypes);
               return (
-                <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600" title={t ? `Cell type: ${t.name}` : 'No cell type matches this name (grey) — add one in Admin → Cryo'}>
+                <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600" title={t ? `Cell type: ${t.name} (same colour in every box)` : 'Colour valid in this box only — define a cell type in Admin → Cryo to fix it everywhere'}>
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getCellLineColor(cl) }} />
                   {cl} <span className="text-gray-400">{boxVials.filter(v => v.cellLine === cl).length}</span>
                 </span>
@@ -728,7 +730,6 @@ type VialSortKey = 'cellLine' | 'passage' | 'cells' | 'storage' | 'position' | '
 function VialInventory() {
   const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions, cellTypes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
-  const getCellLineColor = (cellLine: string) => cellLineColor(cellLine, cellTypes);
   // Mirror of the cryo_vials_delete RLS policy: anyone with manage_cryo
   // may thaw a vial (the log says who did it).
   const canWithdraw = (_v: { userId: string }) => permissions.canManageCryo;
@@ -773,6 +774,9 @@ function VialInventory() {
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cryoVials, search, sortKey, sortAsc]);
+  // Same rule as the box view: fixed colour for cell types, distinct per-view colour for the rest.
+  const tableColors = useMemo(() => viewCellLineColors(filtered.map(v => v.cellLine), cellTypes), [filtered, cellTypes]);
+  const getCellLineColor = (cellLine: string) => tableColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
 
   const orphanVials = useMemo(() => cryoVials.filter(v => !storageUnits.some(s => s.id === v.storageUnitId)), [cryoVials, storageUnits]);
 

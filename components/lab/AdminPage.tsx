@@ -2021,7 +2021,7 @@ function CellTypesEditor() {
                 <button onClick={() => remove(t.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title="Remove type"><Trash2 size={13} /></button>
               </div>
             ))}
-            {list.length === 0 && <p className="text-xs text-gray-400 font-manrope">No cell types yet — all vials are grey.</p>}
+            {list.length === 0 && <p className="text-xs text-gray-400 font-manrope">No cell types yet — each box colours its own cell lines; a type gives a name the same colour in every box.</p>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => add()} className="text-[11px] text-[#102C53] font-medium font-manrope hover:underline">+ add type</button>
@@ -2032,7 +2032,7 @@ function CellTypesEditor() {
           </div>
           {unmatched.length > 0 && (
             <div className="bg-amber-50 rounded-xl p-3">
-              <p className="text-[11px] font-semibold text-amber-800 font-manrope mb-1.5">Cell line names without a type (shown grey) — click one to create a type from it:</p>
+              <p className="text-[11px] font-semibold text-amber-800 font-manrope mb-1.5">Cell line names without a type (colour varies from box to box) — click one to create a type from it:</p>
               <div className="flex flex-wrap gap-1.5">
                 {unmatched.map(cl => (
                   <button key={cl} onClick={() => add(cl)} className="px-2 py-0.5 rounded-full bg-white border border-amber-200 text-[11px] text-amber-900 font-manrope hover:bg-amber-100" title="Create a type with this name (then add aliases and pick a colour)">
