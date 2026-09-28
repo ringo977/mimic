@@ -23,7 +23,7 @@
 -- IPv6-only and GitLab runners are IPv4.)
 --
 -- Run AFTER supabase-2026-09-history.sql. Idempotent: re-running keeps the
--- role and its password (the password row is empty on re-runs).
+-- role and its password (the password cell is NULL on re-runs).
 -- Rotate:  ALTER ROLE backup_reader PASSWORD 'new-one';   then update the CI variable.
 -- Revoke:  DROP OWNED BY backup_reader; DROP ROLE backup_reader;
 -- ============================================================
@@ -65,7 +65,8 @@ REVOKE ALL ON FUNCTION backup_export() FROM PUBLIC, anon, authenticated;
 -- ------------------------------------------------------------
 -- 2. Role (created once; password shown in the final SELECT)
 -- ------------------------------------------------------------
-CREATE TEMP TABLE IF NOT EXISTS _backup_reader_pw (password text);
+-- The password is handed to the final SELECT through a transaction-local
+-- setting (no table, not even a temporary one, is created).
 DO $$
 DECLARE
   pw text;
@@ -73,7 +74,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'backup_reader') THEN
     pw := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
     EXECUTE format('CREATE ROLE backup_reader LOGIN NOINHERIT NOCREATEDB NOCREATEROLE PASSWORD %L', pw);
-    INSERT INTO _backup_reader_pw VALUES (pw);
+    PERFORM set_config('backup.new_password', pw, true);
     RAISE NOTICE 'Role backup_reader created — copy the password from the result below, it is not shown again.';
   ELSE
     RAISE NOTICE 'Role backup_reader already exists — password unchanged.';
@@ -114,5 +115,6 @@ SELECT r.rolname, has_function_privilege(r.rolname, 'public.backup_export()', 'E
 SELECT key AS table_name, jsonb_array_length(value) AS n_rows
   FROM jsonb_each(backup_export()) WHERE key <> '_meta' ORDER BY 1;
 
--- 3d. PASSWORD (only on first run). Copy it now into the GitLab variable.
-SELECT password FROM _backup_reader_pw;
+-- 3d. PASSWORD (only on first run; empty on re-runs). Copy it now into the
+--     GitLab variable — it is not stored anywhere.
+SELECT nullif(current_setting('backup.new_password', true), '') AS password;
