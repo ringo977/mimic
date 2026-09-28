@@ -57,7 +57,7 @@ BEGIN
            'version', 2,
            'exportedAt', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
            'tables', array_length(tables, 1),
-           'source', 'backup_reader / GitLab CI'))
+           'source', 'backup_reader (weekly CI export)'))
          || result;
 END;
 $$;
