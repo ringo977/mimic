@@ -1,0 +1,102 @@
+# Root .gitlab-ci.yml of the GitLab monorepo (gitlab.polimi.it/DEIB/mimic).
+# Source of truth is THIS file: scripts/sync-gitlab.sh copies it to the
+# monorepo root on every sync. Do not edit .gitlab-clone/.gitlab-ci.yml.
+#
+# Pipelines:
+#   * push on main            → build + pages (GitLab Pages mirror); deploy_ftp manual
+#   * scheduled pipeline      → db_backup only (weekly DB copy outside Supabase)
+#     Schedule: Settings → CI/CD → Schedules → "0 3 * * 1" Europe/Rome, branch main.
+#     Variable: Settings → CI/CD → Variables → SUPABASE_DB_URL (masked, protected).
+
+stages:
+  - build
+  - deploy
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - mimic-website/node_modules/
+    - mimic-website/.next/cache/
+
+build:
+  stage: build
+  image: node:20
+  script:
+    - cd mimic-website
+    - npm ci --legacy-peer-deps
+    # FORCE_NOINDEX=1: GitLab Pages is a mirror — every page gets
+    # noindex,nofollow (canonical host is www.mimic.polimi.it).
+    - BASE_PATH= FORCE_NOINDEX=1 NODE_ENV=production npm run build
+  artifacts:
+    paths:
+      - mimic-website/out/
+    expire_in: 1 day
+  only:
+    - main
+  except:
+    - schedules
+
+# GitLab Pages deploy (kept as mirror/backup at mimic-XXXXX.pages.gitlab.polimi.it)
+pages:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - mv mimic-website/out public
+  artifacts:
+    paths:
+      - public
+  dependencies:
+    - build
+  only:
+    - main
+  except:
+    - schedules
+
+# FTP deploy to mimic.polimi.it (PRIMARY production target).
+# Manual trigger for now until we verify GitLab runners can reach 131.175.186.58:2121.
+# Configure FTP_PASS as a Protected+Masked CI/CD variable in Settings > CI/CD > Variables.
+deploy_ftp:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache lftp
+  script:
+    - |
+      lftp -u "mimic,$FTP_PASS" -e "
+        set ssl:verify-certificate false;
+        set ftp:ssl-force true;
+        set ftp:ssl-protect-data false;
+        set ftp:passive-mode true;
+        set ftp:use-site-chmod false;
+        set ftp:use-mdtm false;
+        cd htdocs-SSL;
+        glob -a rm -rf *;
+        mirror -R --parallel=2 --verbose --no-perms mimic-website/out/ .;
+        bye
+      " ftp://131.175.186.58:2121
+  dependencies:
+    - build
+  when: manual
+  only:
+    - main
+  except:
+    - schedules
+
+# Weekly database backup (level 3 of the robustness plan, 28/09/2026).
+# Reads the whole lab DB through the read-only role backup_reader and keeps
+# the files as artifacts for 8 weeks (Polimi servers, project members only).
+# Restore: Admin → Backup → Restore Database with the .json file.
+db_backup:
+  stage: build
+  image: postgres:17-alpine
+  cache: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "web" && $RUN_DB_BACKUP == "1"'   # manual test: Run pipeline with RUN_DB_BACKUP=1
+  script:
+    - sh mimic-website/scripts/ci-db-backup.sh backups
+  artifacts:
+    name: "mimic-db-backup-$CI_JOB_ID"
+    paths:
+      - backups/
+    expire_in: 8 weeks

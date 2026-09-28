@@ -64,6 +64,14 @@ git archive HEAD | tar -x -C "$EXPORT_DIR"
 echo "→ Syncing files to $GITLAB_SUBFOLDER/…"
 rsync -a --delete "$EXPORT_DIR/" "$TARGET/"
 
+# The monorepo root .gitlab-ci.yml (build, Pages, FTP, weekly DB backup) is
+# versioned here as scripts/gitlab-ci.root.yml; the clone is reset to the
+# remote on every sync, so this copy is the only way to change it.
+if [[ -f "$EXPORT_DIR/scripts/gitlab-ci.root.yml" ]]; then
+  echo "→ Updating monorepo root .gitlab-ci.yml…"
+  cp "$EXPORT_DIR/scripts/gitlab-ci.root.yml" "$CACHE_DIR/.gitlab-ci.yml"
+fi
+
 # ── Step 3: Commit and push ─────────────────────────────────────────
 cd "$CACHE_DIR"
 

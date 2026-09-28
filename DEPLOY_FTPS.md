@@ -195,8 +195,12 @@ elegante ma robusto e veloce.
 
 ## 5. Deploy automatico via GitLab CI/CD
 
-Il repository sta su `gitlab.polimi.it/DEIB/mimic`. Aggiungere
-`.gitlab-ci.yml` nella root del progetto (`mimic-website/`):
+Il repository sta su `gitlab.polimi.it/DEIB/mimic`. Il `.gitlab-ci.yml`
+reale sta nella **root del monorepo** ed è versionato qui come
+`scripts/gitlab-ci.root.yml`: `scripts/sync-gitlab.sh` lo copia a ogni sync
+(modificare quello, non il clone). Contiene build + Pages, il deploy FTP
+manuale e il job pianificato `db_backup` (copia settimanale del database,
+vedi `scripts/ci-db-backup.sh`). Lo schema del deploy FTP, in sintesi:
 
 ```yaml
 stages:
