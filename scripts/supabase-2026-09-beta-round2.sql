@@ -296,16 +296,34 @@ VALUES ('cell_types', '[
   {"id":"ct-chondro",  "name":"Chondrocytes",        "color":"#3b82f6", "aliases":["CH","chondro","chondrocyte"]},
   {"id":"ct-huvec",    "name":"HUVEC",               "color":"#ef4444", "aliases":["HUVECs","endothelial","EC","ECs"]},
   {"id":"ct-ipsc",     "name":"hiPSC",               "color":"#10b981", "aliases":["iPSC","iPSCs","hiPSCs","WTC-11","WTC11"]},
-  {"id":"ct-ipsc-cm",  "name":"iPSC-CM",             "color":"#f97316", "aliases":["iPSC-CMs","CM","CMs","cardiomyocytes","cardiomyocyte"]},
+  {"id":"ct-ipsc-cm",  "name":"iPSC-CM",             "color":"#f97316", "aliases":["iPSC-CMs","CM","CMs","cardiomyocytes","cardiomyocyte","iCell"]},
   {"id":"ct-msc",      "name":"MSC",                 "color":"#06b6d4", "aliases":["hMSC","hMSCs","MSCs","BM-MSC","mesenchymal"]},
-  {"id":"ct-fibro",    "name":"Fibroblasts",         "color":"#a855f7", "aliases":["fibroblast","fibro","HDF","NHDF","HFF"]},
+  {"id":"ct-fibro",    "name":"Fibroblasts",         "color":"#a855f7", "aliases":["fibroblast","fibro","HDF","NHDF","HFF","hCF","CF"]},
   {"id":"ct-syn",      "name":"Synoviocytes",        "color":"#ec4899", "aliases":["FLS","synovio","synoviocyte"]},
   {"id":"ct-myo",      "name":"Myoblasts",           "color":"#84cc16", "aliases":["myoblast","C2C12","myo"]},
   {"id":"ct-osteo",    "name":"Osteoblasts",         "color":"#f59e0b", "aliases":["osteoblast","osteo","MG-63","MG63"]},
   {"id":"ct-hek",      "name":"HEK293",              "color":"#6366f1", "aliases":["HEK","HEK-293","HEK293T","293T"]},
-  {"id":"ct-mn",       "name":"Motor neurons",       "color":"#0ea5e9", "aliases":["MN","MNs","motoneurons","neurons"]}
+  {"id":"ct-mn",       "name":"Motor neurons",       "color":"#0ea5e9", "aliases":["MN","MNs","motoneurons","neurons"]},
+  {"id":"ct-peri",     "name":"Pericytes",           "color":"#d946ef", "aliases":["pericyte","pericytes precursors"]}
 ]'::jsonb)
 ON CONFLICT (key) DO NOTHING;
+
+-- ------------------------------------------------------------
+-- 3b. Cell line names that still carry the vial count (bulk load kept
+--     the first words of the note as the name). Marco, 28/09: "PEICYTES
+--     PRECURSORS 700K" → Pericytes precursors, 700K is the count. Same
+--     pattern on hCF and iCell rows. The original text stays in notes;
+--     cells is filled only where the cryo-cells backfill left it NULL.
+-- ------------------------------------------------------------
+UPDATE cryo_vials SET cell_line = 'Pericytes precursors', cells = coalesce(cells, 700000)
+ WHERE cell_line = 'PEICYTES PRECURSORS 700K';
+UPDATE cryo_vials SET cell_line = 'hCF', cells = coalesce(cells, 400000) WHERE cell_line = 'hCF 0.4m';
+UPDATE cryo_vials SET cell_line = 'hCF', cells = coalesce(cells, 450000) WHERE cell_line = 'hCF 0.45m';
+UPDATE cryo_vials SET cell_line = 'hCF', cells = coalesce(cells, 518000) WHERE cell_line = 'hCF 0.518m';
+UPDATE cryo_vials SET cell_line = 'iCell Cardiomyocytes2', cells = coalesce(cells, 5000000)
+ WHERE cell_line = 'iCell Cardiomyocyte2, donor 1434, 5m, Lot 108657, R1017';
+UPDATE cryo_vials SET cell_line = 'iCell Cardiomyocytes2', cells = coalesce(cells, 1250000)
+ WHERE cell_line = 'iCell Cardiomyocyte2, donor 1434, 1.25m, Lot 108658, R1220';
 
 -- ------------------------------------------------------------
 -- 4. Checks
@@ -327,6 +345,11 @@ SELECT p.proname, p.prosrc LIKE '%lab.stock_rpc%' AS uses_flag, p.prosecdef AS s
  WHERE n.nspname = 'public'
    AND p.proname IN ('adjust_reagent_stock', 'prepare_working_solution', 'protect_reagent_fields')
  ORDER BY p.proname;
+
+-- 4b3. Cell line names still carrying a count (expect no rows)
+SELECT cell_line, count(*) FROM cryo_vials
+ WHERE cell_line ~* '(^|[^a-z0-9])[0-9]+(\.[0-9]+)?\s?[km]($|[^a-z0-9])'
+ GROUP BY cell_line;
 
 -- 4c. Which stored cell line names get a colour with the starter list
 --     (types with no match show as NULL → add aliases in Admin → Cryo)
