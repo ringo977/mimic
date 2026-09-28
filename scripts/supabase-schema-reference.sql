@@ -60,8 +60,9 @@
 --      then supabase-2026-09-history.sql          (row_history + trigger on 15 tables,
 --        restore RPCs, db_snapshots + pg_cron nightly job; needs pg_cron enabled)
 --      then supabase-2026-09-backup-reader.sql    (backup_export() + read-only role
---        backup_reader for the weekly GitLab CI copy; it prints a NEW password →
---        update the GitLab variable SUPABASE_DB_URL afterwards)
+--        backup_reader for the weekly encrypted copy made by GitHub Actions in
+--        the private repo ringo977/mimic-backups; it prints a NEW password →
+--        update that repo's secret SUPABASE_DB_URL afterwards)
 --      Running 11 after any of these would silently restore the older
 --      enforce_booking_policy (no capacity check, while the EXCLUDE
 --      constraint is already gone), lab_can v1 and stock RPC v3.

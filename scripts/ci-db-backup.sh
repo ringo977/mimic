@@ -1,13 +1,16 @@
 #!/bin/sh
-# Weekly database backup, run by GitLab CI (job "db_backup" in the monorepo
-# .gitlab-ci.yml, source: scripts/gitlab-ci.root.yml). Runs on a Polimi
-# runner inside the postgres image — nothing here touches Marco's Mac.
+# Weekly database backup. Run by GitHub Actions in the PRIVATE repo
+# ringo977/mimic-backups (.github/workflows/weekly-backup.yml), which checks
+# out this file from the public site repo and executes it inside
+# postgres:17-alpine on a GitHub-hosted runner, then encrypts the output with
+# age before keeping it. Nothing here touches a lab computer.
+# (GitLab CI was ruled out on 28/09/2026: its only runner is Marco's Mac.)
 #
-# Needs: SUPABASE_DB_URL  (masked + protected CI variable) —
+# Needs: SUPABASE_DB_URL  (repository secret) —
 #   postgresql://backup_reader.<ref>:<password>@<session pooler host>:5432/postgres
 # The role backup_reader is created by scripts/supabase-2026-09-backup-reader.sql.
 #
-# Output (kept as job artifacts, see expire_in in the CI file):
+# Output (encrypted and kept by the workflow):
 #   backups/mimic-db-YYYY-MM-DD.json  — backup JSON v2, restorable from
 #                                       Admin → Backup → Restore Database
 #   backups/mimic-db-YYYY-MM-DD.sql   — plain pg_dump of public data

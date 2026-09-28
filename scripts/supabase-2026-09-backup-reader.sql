@@ -2,8 +2,9 @@
 -- Weekly external backup: read-only role + export function
 --
 -- Level 3 of the robustness plan (28/09): a copy of the database that lives
--- OUTSIDE Supabase, produced every week by GitLab CI (gitlab.polimi.it,
--- private project, Polimi runners — Marco's Mac is not involved).
+-- OUTSIDE Supabase, produced every week by GitHub Actions in the private
+-- repo ringo977/mimic-backups (GitHub-hosted runners, output encrypted with
+-- age — no lab computer involved).
 --
 -- What this file creates:
 --   * backup_export()  — SECURITY DEFINER, returns the whole lab database as
@@ -16,15 +17,15 @@
 --     public tables, so that CI can also run a plain pg_dump.
 --
 -- The password is generated here (64 hex chars) and shown ONCE in the
--- result of the last SELECT. Paste it into the GitLab CI/CD variable
--- SUPABASE_DB_URL (masked + protected) and nowhere else:
+-- result of the last SELECT. Paste it into the repository secret
+-- SUPABASE_DB_URL of ringo977/mimic-backups and nowhere else:
 --   postgresql://backup_reader.<project-ref>:<password>@<session pooler host>:5432/postgres
 -- (host from Dashboard → Connect → Session pooler; the direct host is
--- IPv6-only and GitLab runners are IPv4.)
+-- IPv6-only and GitHub runners are IPv4.)
 --
 -- Run AFTER supabase-2026-09-history.sql. Idempotent: re-running keeps the
 -- role and its password (the password cell is NULL on re-runs).
--- Rotate:  ALTER ROLE backup_reader PASSWORD 'new-one';   then update the CI variable.
+-- Rotate:  ALTER ROLE backup_reader PASSWORD 'new-one';   then update the secret.
 -- Revoke:  DROP OWNED BY backup_reader; DROP ROLE backup_reader;
 -- ============================================================
 

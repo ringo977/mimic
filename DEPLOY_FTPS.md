@@ -198,9 +198,11 @@ elegante ma robusto e veloce.
 Il repository sta su `gitlab.polimi.it/DEIB/mimic`. Il `.gitlab-ci.yml`
 reale sta nella **root del monorepo** ed è versionato qui come
 `scripts/gitlab-ci.root.yml`: `scripts/sync-gitlab.sh` lo copia a ogni sync
-(modificare quello, non il clone). Contiene build + Pages, il deploy FTP
-manuale e il job pianificato `db_backup` (copia settimanale del database,
-vedi `scripts/ci-db-backup.sh`). Lo schema del deploy FTP, in sintesi:
+(modificare quello, non il clone). Contiene build + Pages e il deploy FTP
+manuale. Attenzione: il progetto **non ha runner condivisi**; l'unico runner
+è `gitlab-runner` sul Mac di Marco (Homebrew, executor shell), quindi le
+pipeline girano solo con quel Mac acceso e `image:` viene ignorato. Lo schema
+del deploy FTP, in sintesi:
 
 ```yaml
 stages:

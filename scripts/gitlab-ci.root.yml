@@ -2,11 +2,14 @@
 # Source of truth is THIS file: scripts/sync-gitlab.sh copies it to the
 # monorepo root on every sync. Do not edit .gitlab-clone/.gitlab-ci.yml.
 #
-# Pipelines:
-#   * push on main            → build + pages (GitLab Pages mirror); deploy_ftp manual
-#   * scheduled pipeline      → db_backup only (weekly DB copy outside Supabase)
-#     Schedule: Settings → CI/CD → Schedules → "0 3 * * 1" Europe/Rome, branch main.
-#     Variable: Settings → CI/CD → Variables → SUPABASE_DB_URL (masked, protected).
+# Pipelines: push on main → build + pages (GitLab Pages mirror); deploy_ftp manual.
+#
+# NOTE (28/09/2026): the project has NO instance runners. The only runner is
+# gitlab-runner on Marco's Mac (Homebrew, launchd, executor "shell"), so
+# `image:` is ignored and every pipeline runs only while that Mac is on.
+# The weekly DB backup therefore lives in GitHub Actions (private repo
+# ringo977/mimic-backups), not here. `except: schedules` is kept so that a
+# stray schedule never rebuilds the site.
 
 stages:
   - build
@@ -81,22 +84,3 @@ deploy_ftp:
     - main
   except:
     - schedules
-
-# Weekly database backup (level 3 of the robustness plan, 28/09/2026).
-# Reads the whole lab DB through the read-only role backup_reader and keeps
-# the files as artifacts for 8 weeks (Polimi servers, project members only).
-# Restore: Admin → Backup → Restore Database with the .json file.
-db_backup:
-  stage: build
-  image: postgres:17-alpine
-  cache: []
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-    - if: '$CI_PIPELINE_SOURCE == "web" && $RUN_DB_BACKUP == "1"'   # manual test: Run pipeline with RUN_DB_BACKUP=1
-  script:
-    - sh mimic-website/scripts/ci-db-backup.sh backups
-  artifacts:
-    name: "mimic-db-backup-$CI_JOB_ID"
-    paths:
-      - backups/
-    expire_in: 8 weeks
