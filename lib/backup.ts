@@ -17,12 +17,6 @@ const TABLE_PK: Record<string, string> = { app_settings: 'key' };
 export const BACKUP_VERSION = 2;
 const pkOf = (table: string) => TABLE_PK[table] ?? 'id';
 
-// Tables where rows missing from the backup are deleted on restore.
-// lab_users is excluded on purpose: restore never deletes accounts (a stale
-// backup must not lock people out); clean up extra users manually if needed.
-// app_settings is excluded too (settings added after the backup survive).
-const DELETE_STALE = new Set<string>(TABLES.filter(t => t !== 'lab_users' && t !== 'app_settings'));
-
 // ============================================================
 // JSON Backup — full database dump
 // ============================================================
@@ -111,9 +105,9 @@ export function validateBackupJSON(json: string): {
  * supabase-2026-09-consolidation.sql): every row upserted parents-first,
  * stale rows removed children-first, the caller's own account untouched.
  * If a single row is refused, nothing changes — the browser-side loop this
- * replaces could stop half-way with some tables restored and others not.
- * `importDatabaseJSONClientSide` is kept only as a fallback for a database
- * where that RPC has not been installed yet.
+ * replaced could stop half-way with some tables restored and others not,
+ * which is why there is no client-side fallback: a database without the RPC
+ * must be migrated first.
  */
 export async function importDatabaseJSON(json: string): Promise<{
   ok: boolean;
@@ -133,110 +127,20 @@ export async function importDatabaseJSON(json: string): Promise<{
 
   const { data, error } = await supabase.rpc('restore_backup', { p_backup: parsed });
   if (error) {
-    // RPC not installed yet (older database): fall back to the old loop.
+    // RPC not installed (database behind the app): stop here. Never fall back
+    // to the browser-side loop — it is not atomic and can leave the database
+    // half restored.
     if (/restore_backup/.test(error.message) && /(not find|does not exist|schema cache)/i.test(error.message)) {
-      return importDatabaseJSONClientSide(json);
+      return {
+        ok: false,
+        errors: ['This database has no restore_backup() function — nothing was changed. Run scripts/supabase-2026-09-consolidation.sql in the Supabase SQL Editor, then retry.'],
+        imported: {},
+      };
     }
     return { ok: false, errors: [`Restore refused — nothing was changed: ${error.message}`], imported: {} };
   }
   const d = (data ?? {}) as { upserted?: Record<string, number>; removed?: Record<string, number> };
   return { ok: true, errors: [], imported: d.upserted ?? {}, removed: d.removed ?? {} };
-}
-
-/**
- * Legacy browser-side restore (table by table, NOT atomic). Used only when
- * the `restore_backup` RPC is missing.
- */
-export async function importDatabaseJSONClientSide(json: string): Promise<{
-  ok: boolean;
-  errors: string[];
-  imported: Record<string, number>;
-}> {
-  const errors: string[] = [];
-  const imported: Record<string, number> = {};
-  let parsed: Record<string, unknown>;
-  try { parsed = JSON.parse(json); } catch { return { ok: false, errors: ['Invalid JSON file'], imported: {} }; }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, errors: ['Backup must be a JSON object'], imported: {} };
-  }
-
-  // Phase 1: Validate before touching anything
-  const validation = validateBackupJSON(json);
-  if (!validation.valid) {
-    return { ok: false, errors: ['Validation failed: ' + validation.errors.join('; ')], imported: {} };
-  }
-
-  // Identify the caller: needed to protect their own lab_users row below.
-  const { data: authData } = await supabase.auth.getUser();
-  const myAuthId = authData?.user?.id ?? null;
-  const myEmail = authData?.user?.email?.toLowerCase() ?? null;
-
-  // Phase 2: Upsert table by table
-  for (const table of TABLES) {
-    const raw = parsed[table];
-    if (!Array.isArray(raw)) continue;   // cannot happen after validation
-    // An EMPTY array is meaningful: the table had no rows at backup time, so
-    // the stale-row phase below must still run and empty it (except for the
-    // tables never deleted from). Skipping it would keep whatever is there.
-    let rows: unknown[] = raw;
-    const pk = pkOf(table);
-
-    if (table === 'lab_users') {
-      rows = rows
-        // Never restore the caller's own row: an old backup could demote
-        // or deactivate the very admin performing the restore.
-        .filter(r => {
-          const row = r as Record<string, unknown>;
-          const rowEmail = typeof row.email === 'string' ? row.email.toLowerCase() : null;
-          return !((myAuthId && row.auth_user_id === myAuthId) || (myEmail && rowEmail === myEmail));
-        })
-        // Strip auth_user_id: on a fresh Supabase project (disaster recovery)
-        // the backed-up UUIDs don't exist in auth.users, and a non-null
-        // auth_user_id disables the email fallback in the RLS helpers —
-        // locking everyone out. The trg_link_lab_user_auth trigger re-links
-        // rows to the right auth account on insert.
-        .map(r => {
-          const { auth_user_id: _dropped, ...rest } = r as Record<string, unknown>;
-          return rest;
-        });
-    }
-
-    let tableUpserted = 0;
-    let tableFailed = false;
-    for (let i = 0; i < rows.length; i += 500) {
-      const batch = rows.slice(i, i + 500);
-      const { error: upErr } = await supabase.from(table).upsert(batch, { onConflict: pk });
-      if (upErr) {
-        errors.push(`Failed to restore ${table} (batch ${Math.floor(i / 500) + 1}): ${upErr.message}`);
-        tableFailed = true;
-      } else {
-        tableUpserted += batch.length;
-      }
-    }
-    imported[table] = tableUpserted;
-
-    // Phase 3: remove rows not present in the backup — but only if every
-    // upsert for this table succeeded (never wipe more than we restored).
-    if (!tableFailed && DELETE_STALE.has(table)) {
-      const keep = new Set(rows.map(r => (r as Record<string, unknown>)[pk]).filter(v => typeof v === 'string') as string[]);
-      const existing = await fetchAllRows<Record<string, unknown>>(table, pk, pk);
-      if (!existing) {
-        errors.push(`Restored ${table}, but could not check for stale rows (read failed)`);
-      } else {
-        const stale = existing.map(r => (r as unknown as Record<string, string>)[pk]).filter(id => typeof id === 'string' && !keep.has(id));
-        for (let i = 0; i < stale.length; i += 200) {
-          const chunk = stale.slice(i, i + 200);
-          const { error: delErr } = await supabase.from(table).delete().in(pk, chunk);
-          if (delErr) {
-            errors.push(`Restored ${table}, but could not remove ${chunk.length} stale row(s): ${delErr.message}`);
-            break;
-          }
-        }
-      }
-    }
-  }
-
-  return { ok: errors.length === 0, errors, imported };
 }
 
 // ============================================================
@@ -246,7 +150,8 @@ const BUCKET = 'manuals';
 
 export async function exportPDFsZip(): Promise<Blob | null> {
   const { data: files, error } = await supabase.storage.from(BUCKET).list('', { limit: 1000 });
-  if (error || !files || files.length === 0) return null;
+  if (error) throw new Error(`Could not list the PDF files: ${error.message}`);
+  if (!files || files.length === 0) return null;
 
   const zip = new JSZip();
 
@@ -280,10 +185,13 @@ export async function exportPDFsZip(): Promise<Blob | null> {
   const manifest: Record<string, { manualId: string | null; storagePath: string; fileName: string; title: string | null }> = {};
   const usedPaths = new Set<string>();
 
+  // A file that fails to download is an incomplete backup, not a file to
+  // skip: collect the failures and abort (same rule as exportDatabaseJSON).
+  const failed: string[] = [];
   for (const file of files) {
     if (file.name.startsWith('.') || file.name.endsWith('/')) continue;
-    const { data: blob } = await supabase.storage.from(BUCKET).download(file.name);
-    if (!blob) continue;
+    const { data: blob, error: dlError } = await supabase.storage.from(BUCKET).download(file.name);
+    if (!blob) { failed.push(`${file.name}${dlError ? ` (${dlError.message})` : ''}`); continue; }
 
     const meta = manualMap.get(file.name);
     const folder = categoryLabels[meta?.category || 'other'] || 'Other';
@@ -300,6 +208,9 @@ export async function exportPDFsZip(): Promise<Blob | null> {
       fileName: baseName,
       title: meta?.title ?? null,
     };
+  }
+  if (failed.length > 0) {
+    throw new Error(`PDF backup aborted — ${failed.length} file(s) could not be downloaded: ${failed.join(', ')}`);
   }
   zip.file('manifest.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), files: manifest }, null, 2));
 
@@ -335,13 +246,17 @@ export async function importPDFsZip(zipBlob: Blob): Promise<{ ok: boolean; uploa
   for (const [path, file] of entries) {
     const fromManifest = manifest[path];
     const fileName = fromManifest?.fileName || path.split('/').pop() || path;
-    const blob = await file.async('blob');
+    // JSZip returns an untyped Blob. storage-js sends a Blob as multipart and
+    // takes the MIME type from blob.type — the `contentType` upload option is
+    // ignored for Blob bodies — so an untyped Blob goes out as
+    // application/octet-stream and the bucket (application/pdf only) refuses it.
+    const blob = new Blob([await file.async('arraybuffer')], { type: 'application/pdf' });
 
     const manualId = fromManifest ? fromManifest.manualId : fileNameToManualId.get(fileName);
     if (manualId && !knownIds.has(manualId)) {
       // The manual row is gone: keep the file under its original object name
       // so a later restore of the row (history / JSON) finds it again.
-      const { error } = await supabase.storage.from(BUCKET).upload(fromManifest?.storagePath || `${manualId}.pdf`, blob, { cacheControl: '3600', upsert: true });
+      const { error } = await supabase.storage.from(BUCKET).upload(fromManifest?.storagePath || `${manualId}.pdf`, blob, { cacheControl: '3600', contentType: 'application/pdf', upsert: true });
       if (error) errors.push(`Failed to upload ${fileName}: ${error.message}`); else uploaded++;
       continue;
     }
@@ -349,6 +264,7 @@ export async function importPDFsZip(zipBlob: Blob): Promise<{ ok: boolean; uploa
 
     const { error } = await supabase.storage.from(BUCKET).upload(storagePath, blob, {
       cacheControl: '3600',
+      contentType: 'application/pdf',
       upsert: true,
     });
 

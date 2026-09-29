@@ -23,7 +23,11 @@ export async function uploadManualFile(manualId: string, file: File): Promise<st
 
   const path = `${manualId}.pdf`;
 
-  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+  // storage-js takes the multipart MIME type from blob.type (the contentType
+  // option is ignored for Blob bodies) and the bucket only accepts
+  // application/pdf: do not rely on what the browser guessed from the name.
+  const body = file.type === 'application/pdf' ? file : new Blob([file], { type: 'application/pdf' });
+  const { error } = await supabase.storage.from(BUCKET).upload(path, body, {
     cacheControl: '3600',
     contentType: 'application/pdf',
     upsert: true,
@@ -66,19 +70,26 @@ export async function getManualFileUrl(fileUrl: string): Promise<string | null> 
 // from the Supabase dashboard; the weekly backup does not include PDFs.
 const TRASH_PREFIX = 'trash/';
 
-export async function deleteManualFile(manualId: string): Promise<void> {
-  const { data } = await supabase.storage.from(BUCKET).list('', { search: manualId });
-  if (!data || data.length === 0) return;
+/**
+ * Move the manual's PDF(s) to trash/. Returns true when every file is in the
+ * trash (or there was nothing to move), false otherwise — the file is then
+ * left where it is: a PDF that cannot be trashed is never hard-deleted.
+ */
+export async function deleteManualFile(manualId: string): Promise<boolean> {
+  const { data, error: listError } = await supabase.storage.from(BUCKET).list('', { search: manualId });
+  if (listError) { console.error('Could not list PDFs to trash:', listError.message); return false; }
+  if (!data || data.length === 0) return true;
+  let ok = true;
   for (const f of data) {
-    if (f.name.endsWith('/')) continue;
+    // `search` is a substring match: only touch this manual's own object(s).
+    if (f.name.endsWith('/') || !f.name.startsWith(`${manualId}.`)) continue;
     const { error } = await supabase.storage.from(BUCKET).move(f.name, `${TRASH_PREFIX}${f.name}`);
     if (error) {
-      // Moving is refused (policy) → fall back to the old hard delete rather
-      // than leaving the file where the deleted manual pointed.
-      console.warn('Could not move PDF to trash, deleting instead:', error.message);
-      await supabase.storage.from(BUCKET).remove([f.name]);
+      console.error('Could not move PDF to trash (file kept in place):', error.message);
+      ok = false;
     }
   }
+  return ok;
 }
 
 /** After a manual row is restored from the history: put its PDF back. */
@@ -87,6 +98,7 @@ export async function restoreManualFile(manualId: string): Promise<boolean> {
   if (!data || data.length === 0) return false;
   let ok = false;
   for (const f of data) {
+    if (f.name.endsWith('/') || !f.name.startsWith(`${manualId}.`)) continue;
     const { error } = await supabase.storage.from(BUCKET).move(`${TRASH_PREFIX}${f.name}`, f.name);
     if (!error) ok = true; else console.warn('Could not restore PDF from trash:', error.message);
   }

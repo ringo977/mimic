@@ -522,8 +522,13 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const removeManual = useCallback((id: string) => {
     setManuals(prev => { const m = prev.find(x => x.id === id); if (m) addLogEntry({ userId: user.id, userName: user.name, action: `Removed manual ${m.title}`, category: 'manual', details: m.category }); return prev.filter(x => x.id !== id); });
     track(deleteManual(id), 'Document removal');
-    // Also delete the PDF from storage (files used to be orphaned forever)
-    import('@/lib/supabase-storage').then(({ deleteManualFile }) => deleteManualFile(id)).catch(() => { /* best effort */ });
+    // Move the PDF to trash/ so the history can bring the manual back. If the
+    // move fails the file stays where it is and the admin is told (a PDF is
+    // never hard-deleted from here).
+    import('@/lib/supabase-storage')
+      .then(({ deleteManualFile }) => deleteManualFile(id))
+      .then(ok => { if (!ok) setSyncError('The document was removed but its PDF could not be moved to the trash: the file is still in storage. Check the storage policies, then move it by hand from the Supabase dashboard.'); })
+      .catch(() => setSyncError('The document was removed but its PDF could not be moved to the trash: the file is still in storage.'));
   }, [user, addLogEntry, track]);
 
   // ---- Storage Units ----

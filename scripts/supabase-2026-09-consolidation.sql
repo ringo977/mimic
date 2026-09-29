@@ -99,10 +99,28 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS cryo_vials_slot_box_uidx
-  ON cryo_vials (box_id, row, col) WHERE box_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS cryo_vials_slot_legacy_uidx
-  ON cryo_vials (storage_unit_id, rack, box, row, col) WHERE box_id IS NULL;
+-- DEFERRABLE exclusion constraints instead of partial unique indexes (29/09
+-- follow-up): a restore that puts an old vial into a slot currently held by
+-- a vial not in the backup, or swaps two vials, must not fail row by row.
+-- restore_backup() runs SET CONSTRAINTS ALL DEFERRED so slots are checked
+-- once at commit, on the final state. Every other write is still checked
+-- immediately (INITIALLY IMMEDIATE). Partial unique indexes cannot be
+-- deferred; EXCLUDE supports both WHERE and DEFERRABLE.
+DROP INDEX IF EXISTS cryo_vials_slot_box_uidx;
+DROP INDEX IF EXISTS cryo_vials_slot_legacy_uidx;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cryo_vials_slot_box_excl') THEN
+    ALTER TABLE cryo_vials ADD CONSTRAINT cryo_vials_slot_box_excl
+      EXCLUDE USING btree (box_id WITH =, "row" WITH =, col WITH =)
+      WHERE (box_id IS NOT NULL) DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'cryo_vials_slot_legacy_excl') THEN
+    ALTER TABLE cryo_vials ADD CONSTRAINT cryo_vials_slot_legacy_excl
+      EXCLUDE USING btree (storage_unit_id WITH =, rack WITH =, box WITH =, "row" WITH =, col WITH =)
+      WHERE (box_id IS NULL) DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+END $$;
 
 -- ------------------------------------------------------------
 -- 4. Absences: the server re-applies the auto-approval rules
@@ -313,6 +331,10 @@ BEGIN
   END LOOP;
 
   PERFORM set_config('lab.stock_rpc', '1', true);
+  -- Slot constraints (cryo_vials_slot_*_excl) are checked at commit, on the
+  -- final state: an occupied slot freed by phase 2, or two vials swapping
+  -- places, would otherwise abort the upsert row by row.
+  SET CONSTRAINTS ALL DEFERRED;
 
   -- Phase 1: upserts, parents first
   FOREACH t IN ARRAY tables LOOP
@@ -374,8 +396,9 @@ GRANT EXECUTE ON FUNCTION restore_backup(jsonb) TO authenticated;
 -- 6a. is_lab_approver now mentions is_aal2 (expect true)
 SELECT prosrc LIKE '%is_aal2()%' AS approver_needs_mfa FROM pg_proc WHERE proname = 'is_lab_approver';
 
--- 6b. Unique slot indexes (expect 2 rows)
-SELECT indexname FROM pg_indexes WHERE tablename = 'cryo_vials' AND indexname LIKE 'cryo_vials_slot_%';
+-- 6b. Slot constraints: expect 2 rows, both deferrable, and no leftover index
+SELECT conname, condeferrable FROM pg_constraint WHERE conname LIKE 'cryo_vials_slot_%_excl';
+SELECT indexname AS leftover_index FROM pg_indexes WHERE tablename = 'cryo_vials' AND indexname LIKE 'cryo_vials_slot_%_uidx';
 
 -- 6c. Server-side absence check wired in (expect true)
 SELECT prosrc LIKE '%absence_auto_approve_ok%' AS absence_check FROM pg_proc WHERE proname = 'protect_absence_status';

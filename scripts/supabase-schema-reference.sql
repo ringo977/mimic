@@ -64,9 +64,12 @@
 --        the private repo ringo977/mimic-backups; it prints a NEW password →
 --        update that repo's secret SUPABASE_DB_URL afterwards)
 --      then supabase-2026-09-consolidation.sql   (29/09 assessment: no self-restore of
---        lab_users, is_lab_approver needs aal2, unique cryo slots, server-side
+--        lab_users, is_lab_approver needs aal2, one vial per slot as DEFERRABLE
+--        EXCLUDE constraints cryo_vials_slot_{box,legacy}_excl, server-side
 --        absence auto-approval check, atomic restore_backup(jsonb) used by
---        Admin → Backup → Restore Database)
+--        Admin → Backup → Restore Database — re-run it after 29/09 pm: it
+--        replaces the earlier partial unique indexes so a restore can free an
+--        occupied slot or swap two vials; checked once at commit)
 --      Running 11 after any of these would silently restore the older
 --      enforce_booking_policy (no capacity check, while the EXCLUDE
 --      constraint is already gone), lab_can v1 and stock RPC v3.
