@@ -63,6 +63,10 @@
 --        backup_reader for the weekly encrypted copy made by GitHub Actions in
 --        the private repo ringo977/mimic-backups; it prints a NEW password →
 --        update that repo's secret SUPABASE_DB_URL afterwards)
+--      then supabase-2026-09-consolidation.sql   (29/09 assessment: no self-restore of
+--        lab_users, is_lab_approver needs aal2, unique cryo slots, server-side
+--        absence auto-approval check, atomic restore_backup(jsonb) used by
+--        Admin → Backup → Restore Database)
 --      Running 11 after any of these would silently restore the older
 --      enforce_booking_policy (no capacity check, while the EXCLUDE
 --      constraint is already gone), lab_can v1 and stock RPC v3.

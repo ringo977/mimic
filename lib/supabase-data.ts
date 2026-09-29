@@ -508,6 +508,20 @@ export async function upsertCryoVial(v: CryoVial) {
   });
 }
 
+/** Like upsertCryoVial, but tells a slot collision (unique index) apart from other failures. */
+export async function upsertCryoVialChecked(v: CryoVial): Promise<{ ok: true } | { ok: false; slotTaken: boolean; error: string }> {
+  const { error } = await supabase.from('cryo_vials').upsert({
+    id: v.id, cell_line: v.cellLine, passage: v.passage, date: v.date,
+    user_id: v.userId, user_name: v.userName, storage_unit_id: v.storageUnitId,
+    box_id: v.boxId ?? null,
+    rack: v.rack, box: v.box, row: v.row, col: v.col, notes: v.notes,
+    cells: v.cells ?? null,
+  }).select('id').single();
+  if (!error) return { ok: true };
+  console.error('Failed to upsert cryo_vials:', error.message);
+  return { ok: false, slotTaken: error.code === '23505' && /cryo_vials_slot/.test(error.message), error: error.message };
+}
+
 export async function deleteCryoVial(id: string) { return deleteRow('cryo_vials', id); }
 
 // ============================================================

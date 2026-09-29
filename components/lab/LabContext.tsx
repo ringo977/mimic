@@ -19,7 +19,7 @@ import {
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
   fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
   fetchBookings, upsertBooking, deleteBooking, setBookingStatus,
-  fetchCryoVials, upsertCryoVial, deleteCryoVial,
+  fetchCryoVials, upsertCryoVialChecked, deleteCryoVial,
   fetchWishlist, upsertWishlistItem, deleteWishlistItem,
   fetchLogEntries, insertLogEntry,
   fetchManuals, upsertManual, deleteManual,
@@ -293,7 +293,16 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const addAbsence = useCallback((a: Omit<Absence, 'id' | 'requestedAt'>) => {
     const full: Absence = { ...a, id: generateId(), requestedAt: new Date().toISOString() };
     setAbsences(prev => [...prev, full]);
-    track(upsertAbsence(full), 'Absence request');
+    // The server re-applies the auto-approval rules and may downgrade the
+    // request to "pending": take its word for the status.
+    const saved = upsertAbsence(full).then(row => {
+      if (row && row.status !== full.status) {
+        setAbsences(prev => prev.map(x => x.id === full.id ? { ...x, status: row.status as Absence['status'], flags: (row as { flags?: string | null }).flags ?? x.flags } : x));
+        setSyncError('Absence request: the server decided it needs supervisor approval, so it was saved as pending (not auto-approved).');
+      }
+      return row;
+    });
+    track(saved, 'Absence request');
     addLogEntry({ userId: a.userId, userName: a.userName, action: `Requested ${absenceTypeMeta[a.type].label}`, category: 'absence', details: `${a.startDate}${a.endDate !== a.startDate ? ` → ${a.endDate}` : ''} (${full.status.replace('_', '-')})` });
   }, [addLogEntry, track]);
 
@@ -387,7 +396,18 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     if (list.length === 0) return;
     const full: CryoVial[] = list.map(v => ({ ...v, id: generateId() }));
     setCryoVials(prev => [...prev, ...full]);
-    full.forEach(v => track(upsertCryoVial(v), 'Cryo vial'));
+    // The database enforces one vial per slot (unique index). If someone
+    // took the slot between our screen refresh and the save, drop the
+    // optimistic vial and say exactly why instead of a generic sync error.
+    full.forEach(v => {
+      upsertCryoVialChecked(v).then(res => {
+        if (res.ok) return;
+        setCryoVials(prev => prev.filter(x => x.id !== v.id));
+        setSyncError(res.slotTaken
+          ? `Slot ${String.fromCharCode(65 + v.row)}${v.col + 1} was taken by another vial in the meantime — this vial was NOT stored. Reload and pick a free slot.`
+          : `Cryo vial: the change was NOT saved to the server (${res.error}). Check your connection, then reload and retry.`);
+      });
+    });
     const v = full[0];
     const cells = v.cells ? `, ${formatCells(v.cells)} cells` : '';
     addLogEntry({
@@ -396,7 +416,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       category: 'cryo',
       details: `${v.storageUnitId} R${v.rack} B${v.box}, P${v.passage}${cells}`,
     });
-  }, [user, addLogEntry, track]);
+  }, [user, addLogEntry]);
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => addCryoVials([v]), [addCryoVials]);
 
   const removeCryoVial = useCallback((id: string) => {

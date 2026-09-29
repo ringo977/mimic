@@ -105,17 +105,49 @@ export function validateBackupJSON(json: string): {
 }
 
 /**
- * Import a validated backup JSON.
+ * Import a validated backup JSON — in ONE server transaction.
  *
- * Restore strategy (safe by construction):
- *   1. UPSERT every row from the backup (no destructive clear first — the
- *      old delete+insert flow could leave lab_users empty, at which point
- *      is_lab_admin() failed and every later step was rejected by RLS).
- *   2. Only after a table's upserts succeeded, delete rows that are not in
- *      the backup ("stale" rows) — never for lab_users or app_settings.
- *   3. lab_users is processed last.
+ * The whole restore runs inside the RPC `restore_backup` (scripts/
+ * supabase-2026-09-consolidation.sql): every row upserted parents-first,
+ * stale rows removed children-first, the caller's own account untouched.
+ * If a single row is refused, nothing changes — the browser-side loop this
+ * replaces could stop half-way with some tables restored and others not.
+ * `importDatabaseJSONClientSide` is kept only as a fallback for a database
+ * where that RPC has not been installed yet.
  */
 export async function importDatabaseJSON(json: string): Promise<{
+  ok: boolean;
+  errors: string[];
+  imported: Record<string, number>;
+  removed?: Record<string, number>;
+}> {
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(json); } catch { return { ok: false, errors: ['Invalid JSON file'], imported: {} }; }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, errors: ['Backup must be a JSON object'], imported: {} };
+  }
+  const validation = validateBackupJSON(json);
+  if (!validation.valid) {
+    return { ok: false, errors: ['Validation failed: ' + validation.errors.join('; ')], imported: {} };
+  }
+
+  const { data, error } = await supabase.rpc('restore_backup', { p_backup: parsed });
+  if (error) {
+    // RPC not installed yet (older database): fall back to the old loop.
+    if (/restore_backup/.test(error.message) && /(not find|does not exist|schema cache)/i.test(error.message)) {
+      return importDatabaseJSONClientSide(json);
+    }
+    return { ok: false, errors: [`Restore refused — nothing was changed: ${error.message}`], imported: {} };
+  }
+  const d = (data ?? {}) as { upserted?: Record<string, number>; removed?: Record<string, number> };
+  return { ok: true, errors: [], imported: d.upserted ?? {}, removed: d.removed ?? {} };
+}
+
+/**
+ * Legacy browser-side restore (table by table, NOT atomic). Used only when
+ * the `restore_backup` RPC is missing.
+ */
+export async function importDatabaseJSONClientSide(json: string): Promise<{
   ok: boolean;
   errors: string[];
   imported: Record<string, number>;
@@ -220,12 +252,13 @@ export async function exportPDFsZip(): Promise<Blob | null> {
 
   // Fetch manual metadata to organize by category
   const { data: manuals } = await supabase.from('manuals').select('id, title, category, file_name, file_url');
-  const manualMap = new Map<string, { title: string; category: string; fileName: string }>();
+  const manualMap = new Map<string, { id: string; title: string; category: string; fileName: string }>();
   if (manuals) {
     for (const m of manuals) {
       if (m.file_url) {
         const storageFileName = m.file_url.split('/').pop() || '';
         manualMap.set(storageFileName, {
+          id: m.id,
           title: m.title,
           category: m.category || 'other',
           fileName: m.file_name || `${m.title}.pdf`,
@@ -241,16 +274,34 @@ export async function exportPDFsZip(): Promise<Blob | null> {
     other: 'Other',
   };
 
+  // Two manuals may share a display name ("Protocol.pdf" twice): the ZIP
+  // path is made unique and a manifest maps every entry back to its manual
+  // id and storage object, so the import never has to guess by name.
+  const manifest: Record<string, { manualId: string | null; storagePath: string; fileName: string; title: string | null }> = {};
+  const usedPaths = new Set<string>();
+
   for (const file of files) {
-    if (file.name.startsWith('.')) continue;
+    if (file.name.startsWith('.') || file.name.endsWith('/')) continue;
     const { data: blob } = await supabase.storage.from(BUCKET).download(file.name);
     if (!blob) continue;
 
     const meta = manualMap.get(file.name);
     const folder = categoryLabels[meta?.category || 'other'] || 'Other';
-    const fileName = meta?.fileName || file.name;
-    zip.folder(folder)!.file(fileName, blob);
+    const baseName = meta?.fileName || file.name;
+    let entryName = baseName;
+    for (let k = 2; usedPaths.has(`${folder}/${entryName}`); k++) {
+      entryName = baseName.replace(/(\.pdf)?$/i, ` (${k})$1`);
+    }
+    usedPaths.add(`${folder}/${entryName}`);
+    zip.folder(folder)!.file(entryName, blob);
+    manifest[`${folder}/${entryName}`] = {
+      manualId: meta?.id ?? null,
+      storagePath: file.name,
+      fileName: baseName,
+      title: meta?.title ?? null,
+    };
   }
+  zip.file('manifest.json', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), files: manifest }, null, 2));
 
   return zip.generateAsync({ type: 'blob' });
 }
@@ -262,20 +313,38 @@ export async function importPDFsZip(zipBlob: Blob): Promise<{ ok: boolean; uploa
   const zip = await JSZip.loadAsync(zipBlob);
   const entries = Object.entries(zip.files).filter(([, f]) => !f.dir && f.name.toLowerCase().endsWith('.pdf'));
 
-  // Get existing manuals to match files
+  // Manifest (ZIPs made after 29/09/2026): exact mapping entry → manual.
+  let manifest: Record<string, { manualId: string | null; storagePath: string; fileName: string }> = {};
+  const mf = zip.file('manifest.json');
+  if (mf) {
+    try { manifest = (JSON.parse(await mf.async('string')) as { files: typeof manifest }).files ?? {}; }
+    catch { errors.push('manifest.json is unreadable — falling back to matching by file name'); }
+  }
+
+  // Older ZIPs: match by file name (ambiguous when two manuals share it).
   const { data: manuals } = await supabase.from('manuals').select('id, file_name, file_url');
   const fileNameToManualId = new Map<string, string>();
+  const knownIds = new Set<string>();
   if (manuals) {
     for (const m of manuals) {
+      knownIds.add(m.id);
       if (m.file_name) fileNameToManualId.set(m.file_name, m.id);
     }
   }
 
   for (const [path, file] of entries) {
-    const fileName = path.split('/').pop() || path;
+    const fromManifest = manifest[path];
+    const fileName = fromManifest?.fileName || path.split('/').pop() || path;
     const blob = await file.async('blob');
 
-    const manualId = fileNameToManualId.get(fileName);
+    const manualId = fromManifest ? fromManifest.manualId : fileNameToManualId.get(fileName);
+    if (manualId && !knownIds.has(manualId)) {
+      // The manual row is gone: keep the file under its original object name
+      // so a later restore of the row (history / JSON) finds it again.
+      const { error } = await supabase.storage.from(BUCKET).upload(fromManifest?.storagePath || `${manualId}.pdf`, blob, { cacheControl: '3600', upsert: true });
+      if (error) errors.push(`Failed to upload ${fileName}: ${error.message}`); else uploaded++;
+      continue;
+    }
     const storagePath = manualId ? `${manualId}.pdf` : fileName;
 
     const { error } = await supabase.storage.from(BUCKET).upload(storagePath, blob, {

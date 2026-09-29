@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { History, Trash2, RotateCcw, Clock, Camera, Download, Loader2, AlertCircle, CheckCircle2, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { useConfirm } from './ConfirmDialog';
+import { restoreManualFile } from '@/lib/supabase-storage';
 import {
   HistoryLine, AsOfRow, SnapshotRun, HISTORY_TABLES, HISTORY_TABLE_LABELS, historyRowLabel, describeChange,
   fetchHistory, fetchRecentlyDeleted, restoreHistoryVersion, fetchTableAsOf, restoreTableAsOf, fetchHistorySince,
@@ -105,7 +106,10 @@ function RecentlyDeleted({ show }: { show: (t: Status['type'], m: string) => voi
     const label = historyRowLabel(l.tableName, l.oldRow, l.rowId);
     confirm('Restore this row?', `${tableLabel(l.tableName)}: "${label}" will be re-created exactly as it was when ${l.changedByName} deleted it on ${fmtWhen(l.changedAt)}.`, async () => {
       const r = await restoreHistoryVersion(l.id);
-      if (r.ok) { show('success', `Restored "${label}". Reload the page to see it in the app.`); load(); }
+      if (r.ok) {
+        const pdf = l.tableName === 'manuals' ? await restoreManualFile(l.rowId) : null;
+        show('success', `Restored "${label}".${pdf === false ? ' Its PDF was not found in the trash: upload it again.' : ''} Reload the page to see it in the app.`); load();
+      }
       else show('error', `Restore refused: ${r.error}`);
     }, 'Restore');
   };
@@ -163,7 +167,10 @@ function ChangeHistory({ show }: { show: (t: Status['type'], m: string) => void 
     const label = historyRowLabel(l.tableName, l.oldRow, l.rowId);
     confirm('Go back to this version?', `${tableLabel(l.tableName)}: "${label}" will be put back as it was BEFORE the change made by ${l.changedByName} on ${fmtWhen(l.changedAt)}. Any later change to this row is undone as well.`, async () => {
       const r = await restoreHistoryVersion(l.id);
-      if (r.ok) { show('success', `"${label}" reverted (${r.result}). Reload the page to see it in the app.`); load(); }
+      if (r.ok) {
+        if (l.tableName === 'manuals' && r.result === 'inserted') await restoreManualFile(l.rowId);
+        show('success', `"${label}" reverted (${r.result}). Reload the page to see it in the app.`); load();
+      }
       else show('error', `Revert refused: ${r.error}`);
     }, 'Revert');
   };
