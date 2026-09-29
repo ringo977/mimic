@@ -5,7 +5,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
   DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon,
-  Search, Archive, RotateCcw, CalendarOff, Boxes } from 'lucide-react';
+  Search, Archive, RotateCcw, CalendarOff, Boxes, CalendarRange } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
@@ -967,6 +967,96 @@ function LocationsTab() {
 // ============================================================
 // Instruments Tab
 // ============================================================
+// Which instruments can be booked for several days in a row — all of them in
+// one list (per-instrument editing was too easy to get wrong with 50+ rows).
+// Grouped by category, with all/none per group, a search box and ONE save
+// that writes bookingPolicy.multiDay only on the rows that changed.
+function MultiDayPanel({ instruments, onSave }: { instruments: Instrument[]; onSave: (changed: Instrument[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<Set<string> | null>(null);
+  const [q, setQ] = useState('');
+  const current = useMemo(() => new Set(instruments.filter(i => i.bookingPolicy?.multiDay).map(i => i.id)), [instruments]);
+  const sel = draft ?? current;
+  const dirty = draft !== null && (draft.size !== current.size || Array.from(draft).some(id => !current.has(id)));
+  const categories = useMemo(() => {
+    const present = new Set(instruments.map(i => i.category));
+    const ordered = (instrumentCategories as readonly string[]).filter(c => present.has(c));
+    return [...ordered, ...Array.from(present).filter(c => !ordered.includes(c)).sort()];
+  }, [instruments]);
+  const visible = (c: string) => instruments
+    .filter(i => i.category === c && (!q || i.name.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const toggle = (id: string) => setDraft(prev => { const n = new Set(prev ?? current); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const setMany = (ids: string[], on: boolean) => setDraft(prev => { const n = new Set(prev ?? current); ids.forEach(id => on ? n.add(id) : n.delete(id)); return n; });
+  const save = () => {
+    const changed = instruments
+      .filter(i => Boolean(i.bookingPolicy?.multiDay) !== sel.has(i.id))
+      .map(i => {
+        const pol = { ...(i.bookingPolicy || {}) };
+        if (sel.has(i.id)) pol.multiDay = true; else delete pol.multiDay;
+        return { ...i, bookingPolicy: Object.keys(pol).length ? pol : undefined };
+      });
+    onSave(changed);
+    setDraft(null);
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-4 py-3 text-left">
+        <div>
+          <p className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2"><CalendarRange size={15} className="text-[#102C53]" /> Multi-day booking</p>
+          <p className="text-[11px] text-gray-500 font-manrope mt-0.5">{current.size} of {instruments.length} instruments can be booked for several days in a row (one booking per day, same hours, in one go)</p>
+        </div>
+        {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter by name…" className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+            </div>
+            <span className="text-[11px] text-gray-500 font-manrope">{sel.size} selected</span>
+            <button onClick={() => setMany(instruments.map(i => i.id), false)} className="text-[11px] text-gray-500 hover:text-gray-700 font-manrope">clear all</button>
+            {dirty && <>
+              <button onClick={save} className="ml-auto flex items-center gap-1 px-3 py-1.5 bg-[#102C53] text-white text-xs font-medium font-manrope rounded-lg hover:bg-[#1a3d6e]"><Save size={12} /> Save</button>
+              <button onClick={() => setDraft(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-manrope">Discard</button>
+            </>}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map(c => {
+              const list = visible(c);
+              if (list.length === 0) return null;
+              const all = instruments.filter(i => i.category === c).map(i => i.id);
+              const nOn = all.filter(id => sel.has(id)).length;
+              return (
+                <div key={c} className="rounded-xl border border-gray-100 p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 font-manrope">{c} <span className="text-gray-400 font-normal normal-case">{nOn}/{all.length}</span></p>
+                    <span className="flex gap-2 text-[10px] font-manrope">
+                      <button onClick={() => setMany(all, true)} className="text-[#102C53] hover:underline">all</button>
+                      <button onClick={() => setMany(all, false)} className="text-gray-400 hover:underline">none</button>
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {list.map(i => (
+                      <label key={i.id} className={`flex items-center gap-2 px-1.5 py-1 rounded-lg cursor-pointer text-xs font-manrope ${sel.has(i.id) ? 'bg-[#102C53]/5 text-gray-900' : 'text-gray-600 hover:bg-gray-50'}`}>
+                        <input type="checkbox" checked={sel.has(i.id)} onChange={() => toggle(i.id)} className="w-3.5 h-3.5 rounded border-gray-300 text-[#102C53]" />
+                        <span className="truncate">{i.icon} {i.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {dirty && <p className="text-[11px] text-amber-700 font-manrope">Unsaved changes — press Save to apply them.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InstrumentsTab() {
   const { instruments, addInstrument, updateInstrument, removeInstrument, locations, users, user, addLogEntry, bookings, removeBooking, certifications, updateCertification, reportError } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
@@ -1093,6 +1183,10 @@ function InstrumentsTab() {
           <button onClick={() => open()} className={btnAdd}><Plus size={14} /> Add</button>
         </div>
       </div>
+      <MultiDayPanel instruments={instruments} onSave={changed => {
+        changed.forEach(i => updateInstrument(i));
+        if (changed.length > 0) addLogEntry({ userId: user.id, userName: user.name, action: 'Updated multi-day booking list', category: 'booking', details: `${changed.length} instrument${changed.length === 1 ? '' : 's'} changed` });
+      }} />
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-xs font-manrope"><thead><tr className="bg-gray-50 border-b border-gray-200">
           <th className="px-3 py-2.5 text-left font-semibold text-gray-700"></th>
