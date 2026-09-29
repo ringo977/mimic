@@ -5,7 +5,7 @@ import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Box
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, matchCellType, viewCellLineColors } from '@/data/lab-data';
+import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, cellLineAbbr, matchCellType, viewCellLineColors } from '@/data/lab-data';
 
 export default function CryoPage() {
   const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
@@ -111,8 +111,11 @@ export default function CryoPage() {
     [box, cryoVials]);
   // Colours are per box: cell types keep their fixed colour, every other
   // name gets a distinct colour within this box (≤ 25 or 81 names).
-  const boxColors = useMemo(() => viewCellLineColors(boxVials.map(v => v.cellLine), cellTypes), [boxVials, cellTypes]);
-  const getCellLineColor = (cellLine: string) => boxColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
+  // One colour per cell line across the WHOLE inventory (same colour in every
+  // box, in the legend and in the table below) — testers found per-box
+  // colours confusing. Lines matching a cell type keep the type's colour.
+  const lineColors = useMemo(() => viewCellLineColors(cryoVials.map(v => v.cellLine), cellTypes), [cryoVials, cellTypes]);
+  const getCellLineColor = (cellLine: string) => lineColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
   const selectedVialData = selectedVial ? cryoVials.find(v => v.id === selectedVial) : null;
 
   const getVialAt = (row: number, col: number) => boxVials.find(v => v.row === row && v.col === col);
@@ -501,10 +504,14 @@ export default function CryoPage() {
                             ${isSelected ? 'ring-2 ring-offset-1 ring-[#102C53] scale-110' : 'hover:scale-105'}
                             ${findActive ? (isMatch(vial) ? 'ring-2 ring-offset-1 ring-amber-500' : 'opacity-25') : ''}
                           `}
-                          style={{ fontSize: isLarge ? '6px' : '8px', backgroundColor: getCellLineColor(vial.cellLine) }}
-                          title={`${vial.cellLine} P${vial.passage}`}
+                          style={{ backgroundColor: getCellLineColor(vial.cellLine) }}
+                          title={`${vial.cellLine} P${vial.passage}${vial.userName ? ` · ${vial.userName}` : ''}`}
                         >
-                          P{vial.passage}
+                          {/* Cell line abbreviation on top, passage below (testers asked to read the line without hovering) */}
+                          <span className="flex flex-col items-center leading-none">
+                            <span style={{ fontSize: isLarge ? '6.5px' : '9px' }} className="tracking-tight">{cellLineAbbr(vial.cellLine, cellTypes)}</span>
+                            <span style={{ fontSize: isLarge ? '5px' : '7px' }} className="font-medium opacity-80">P{vial.passage}</span>
+                          </span>
                         </button>
                       ) : (
                         permissions.canManageCryo ? (
@@ -543,7 +550,7 @@ export default function CryoPage() {
             {Array.from(new Set(boxVials.map(v => v.cellLine))).sort((a, b) => a.localeCompare(b)).map(cl => {
               const t = matchCellType(cl, cellTypes);
               return (
-                <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600" title={t ? `Cell type: ${t.name} (same colour in every box)` : 'Colour valid in this box only — define a cell type in Admin → Cryo to fix it everywhere'}>
+                <span key={cl} className="inline-flex items-center gap-1 text-[10px] font-manrope text-gray-600" title={t ? `Cell type: ${t.name}` : 'Same colour for this line in every box — define a cell type in Admin → Cryo to choose it'}>
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getCellLineColor(cl) }} />
                   {cl} <span className="text-gray-400">{boxVials.filter(v => v.cellLine === cl).length}</span>
                 </span>
@@ -788,8 +795,8 @@ function VialInventory() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cryoVials, search, sortKey, sortAsc]);
   // Same rule as the box view: fixed colour for cell types, distinct per-view colour for the rest.
-  const tableColors = useMemo(() => viewCellLineColors(filtered.map(v => v.cellLine), cellTypes), [filtered, cellTypes]);
-  const getCellLineColor = (cellLine: string) => tableColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
+  const lineColors = useMemo(() => viewCellLineColors(cryoVials.map(v => v.cellLine), cellTypes), [cryoVials, cellTypes]);
+  const getCellLineColor = (cellLine: string) => lineColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
 
   const orphanVials = useMemo(() => cryoVials.filter(v => !storageUnits.some(s => s.id === v.storageUnitId)), [cryoVials, storageUnits]);
 

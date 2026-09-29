@@ -18,7 +18,7 @@ import {
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
   fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
-  fetchBookings, upsertBooking, deleteBooking, setBookingStatus,
+  fetchBookings, upsertBooking, deleteBooking, setBookingStatus, createBookingSeries, deleteBookingSeries,
   fetchCryoVials, upsertCryoVialChecked, deleteCryoVial,
   fetchWishlist, upsertWishlistItem, deleteWishlistItem,
   fetchLogEntries, insertLogEntry,
@@ -40,6 +40,9 @@ interface LabContextType {
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
   updateBooking: (b: Booking) => void;
   removeBooking: (id: string) => void;
+  /** Multi-day booking (one row per date, all-or-nothing). Resolves to an error message, or null on success. */
+  addBookingSeries: (args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }) => Promise<string | null>;
+  removeBookingSeries: (seriesId: string) => void;
   /** Approve a pending booking (instrument responsible or booking manager). */
   approveBooking: (id: string) => void;
   bookingSettings: BookingSettings;
@@ -280,6 +283,26 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       return prev.filter(b => b.id !== id);
     });
     track(deleteBooking(id), 'Booking cancellation');
+  }, [user, addLogEntry, track]);
+
+  const addBookingSeries = useCallback(async (args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }): Promise<string | null> => {
+    // No optimistic rows: the server decides all-or-nothing and the status of each day.
+    const { bookings: saved, error } = await createBookingSeries(args);
+    if (!saved) return error || 'unknown error';
+    setBookings(prev => [...prev.filter(b => !saved.some(s => s.id === b.id)), ...saved]);
+    addLogEntry({ userId: user.id, userName: user.name, action: `Booked ${args.instrumentId} for ${saved.length} days`, category: 'booking', details: `${args.dates[0]} → ${args.dates[args.dates.length - 1]} ${formatTime(args.startHour)}-${formatTime(args.endHour)}` });
+    return null;
+  }, [user, addLogEntry]);
+
+  const removeBookingSeries = useCallback((seriesId: string) => {
+    let removed: Booking[] = [];
+    setBookings(prev => { removed = prev.filter(b => b.seriesId === seriesId); return prev.filter(b => b.seriesId !== seriesId); });
+    const p = deleteBookingSeries(seriesId).then(ids => {
+      if (ids === null) { setBookings(prev => [...prev, ...removed]); return null; }
+      return ids;
+    });
+    track(p, 'Series cancellation');
+    if (removed.length > 0) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${removed[0].instrumentId} series`, category: 'booking', details: `${removed.length} days from ${removed[0].date}` });
   }, [user, addLogEntry, track]);
 
   const updateBookingSettings = useCallback((s: BookingSettings) => {
@@ -563,7 +586,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         const base = user.affiliation === 'MiMic Lab' ? rolePermissions[user.role] : externalRolePermissions[user.role];
         return { ...base, canAdmin: base.canAdmin || user.isAdmin };
       })(), currentPage, setCurrentPage,
-      bookings, addBooking, updateBooking, removeBooking, approveBooking,
+      bookings, addBooking, updateBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries,
       bookingSettings, updateBookingSettings,
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       absences, addAbsence, updateAbsence, removeAbsence,

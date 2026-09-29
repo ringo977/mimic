@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2 } from 'lucide-react';
+import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2, CalendarDays, Rows3 } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
   validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy } from '@/data/lab-data';
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 
@@ -103,7 +103,7 @@ type DragState =
   | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; lowStart: number; lowEnd: number; start: number; end: number; moved: boolean };
 
 function BookingModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
-  const { user, users, permissions, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, approveBooking, canManageAllBookings } = useLabContext();
+  const { user, users, permissions, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, removeBookingSeries, approveBooking, canManageAllBookings } = useLabContext();
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
   const step = bookingSettings.slotMinutes / 60;
   const todayStr = new Date().toLocaleDateString('en-CA');
@@ -257,9 +257,14 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 
             {confirmingCancel ? (
               <div className="bg-red-50 border border-red-100 rounded-xl p-3">
-                <p className="text-sm text-red-700 font-manrope mb-3">{isMine ? 'Cancel your booking?' : `Cancel ${existing.userName}'s booking?`}</p>
-                <div className="flex gap-2">
-                  <button onClick={() => { removeBooking(existing.id); onClose(); }} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold font-manrope hover:bg-red-700 transition-colors">Yes, cancel</button>
+                <p className="text-sm text-red-700 font-manrope mb-3">{isMine ? 'Cancel your booking?' : `Cancel ${existing.userName}'s booking?`}{existing.seriesId ? ' It is part of a multi-day series.' : ''}</p>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => { removeBooking(existing.id); onClose(); }} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold font-manrope hover:bg-red-700 transition-colors">{existing.seriesId ? 'Only this day' : 'Yes, cancel'}</button>
+                  {existing.seriesId && (
+                    <button onClick={() => { removeBookingSeries(existing.seriesId!); onClose(); }} className="flex-1 py-2 bg-red-700 text-white rounded-xl text-sm font-semibold font-manrope hover:bg-red-800 transition-colors">
+                      Whole series ({bookings.filter(b => b.seriesId === existing.seriesId).length} days)
+                    </button>
+                  )}
                   <button onClick={() => setConfirmingCancel(false)} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200 transition-colors">Keep</button>
                 </div>
               </div>
@@ -475,8 +480,240 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   );
 }
 
-function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
+type CalendarView = 'day' | 'week';
+const CALENDAR_VIEW_KEY = 'mimic-lab-calendar-view';
+
+/** Day / Week segmented control shared by both calendars. */
+function CalendarViewToggle({ view, onChange }: { view: CalendarView; onChange: (v: CalendarView) => void }) {
+  const btn = (v: CalendarView, Icon: typeof CalendarDays, label: string) => (
+    <button
+      onClick={() => onChange(v)}
+      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium font-manrope transition-colors ${view === v ? 'bg-white text-[#102C53] shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+      aria-pressed={view === v}
+    >
+      <Icon size={12} /> {label}
+    </button>
+  );
+  return (
+    <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-gray-100" role="group" aria-label="Calendar view">
+      {btn('day', Rows3, 'Day')}
+      {btn('week', CalendarDays, 'Week')}
+    </div>
+  );
+}
+
+const ROW_PX = 30; // height of one instrument row in the day overview
+
+/**
+ * Day overview: one row per instrument, one column per hour — "what is free
+ * today at 14:00?" at a glance (asked by the beta testers). Filter by
+ * category, step through the days. Click an empty stretch of a row to book
+ * that instrument at that hour; click a booking to open it.
+ */
+function DailyOverview({ bookings, instruments, user, bookingSettings, view, onViewChange }: {
   bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
+  view: CalendarView; onViewChange: (v: CalendarView) => void;
+}) {
+  const now = new Date();
+  const todayStr = localDateStr(now);
+  const nowHour = now.getHours() + now.getMinutes() / 60;
+  const [dayOffset, setDayOffset] = useState(0);
+  const [category, setCategory] = useState<string>('All');
+  const [preset, setPreset] = useState<RangePreset>('open');
+  const [onlyBooked, setOnlyBooked] = useState(false);
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const isMobile = useMediaQuery('(max-width: 640px)');
+
+  const day = useMemo(() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + dayOffset); return d; }, [dayOffset]);
+  const ds = localDateStr(day);
+  const isToday = ds === todayStr;
+
+  const [rangeStart, rangeEnd] = preset === 'work'
+    ? [Math.floor(bookingSettings.workStartHour), Math.ceil(bookingSettings.workEndHour)]
+    : preset === 'all'
+      ? [0, 24]
+      : [Math.floor(bookingSettings.openStartHour), Math.ceil(bookingSettings.openEndHour)];
+  const span = rangeEnd - rangeStart;
+  const hourMarks = Array.from({ length: span + 1 }, (_, i) => rangeStart + i);
+  const pct = (h: number) => `${((h - rangeStart) / span) * 100}%`;
+
+  const dayBookings = useMemo(() => bookings.filter(b => b.date === ds), [bookings, ds]);
+  const bookedIds = useMemo(() => new Set(dayBookings.map(b => b.instrumentId)), [dayBookings]);
+
+  // Categories present among the instruments, in the canonical order
+  const categories = useMemo(() => {
+    const present = new Set(instruments.map(i => i.category));
+    const ordered = instrumentCategories.filter(c => present.has(c)) as string[];
+    const extra = Array.from(present).filter(c => !ordered.includes(c)).sort();
+    return [...ordered, ...extra];
+  }, [instruments]);
+
+  const rows = useMemo(() => instruments
+    .filter(i => category === 'All' || i.category === category)
+    .filter(i => !onlyBooked || bookedIds.has(i.id))
+    .sort((a, b) => categories.indexOf(a.category) - categories.indexOf(b.category) || a.name.localeCompare(b.name)),
+    [instruments, category, onlyBooked, bookedIds, categories]);
+
+  const colorOf = useMemo(() => {
+    const map = new Map<string, string>();
+    instruments.forEach((i, idx) => map.set(i.id, INSTRUMENT_PALETTE[idx % INSTRUMENT_PALETTE.length]));
+    return map;
+  }, [instruments]);
+
+  const slotStep = bookingSettings.slotMinutes / 60;
+  const snap = (h: number) => Math.round((Math.floor(h / slotStep) * slotStep) * 100) / 100;
+  const clickRow = (e: React.MouseEvent<HTMLDivElement>, inst: Instrument) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const raw = rangeStart + ((e.clientX - r.left) / r.width) * span;
+    const h = Math.min(Math.max(snap(raw), bookingSettings.openStartHour), bookingSettings.openEndHour - slotStep);
+    setModal({ mode: 'create', date: ds, startHour: h, endHour: Math.min(h + 1, bookingSettings.openEndHour), instrumentId: inst.id });
+  };
+
+  const presetLabels: Record<RangePreset, string> = {
+    work: `Work ${formatTime(bookingSettings.workStartHour)}–${formatTime(bookingSettings.workEndHour)}`,
+    open: `Open ${formatTime(bookingSettings.openStartHour)}–${formatTime(bookingSettings.openEndHour)}`,
+    all: 'All hours',
+  };
+  const dayLabel = day.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const labelW = isMobile ? 'w-[96px]' : 'w-[180px]';
+
+  let lastCategory = '';
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+        <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2">
+          <Calendar size={16} className="text-[#102C53]" />
+          Day Overview
+          <span className="text-xs font-normal text-gray-400">{dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}</span>
+        </h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CalendarViewToggle view={view} onChange={onViewChange} />
+          <select
+            value={preset}
+            onChange={e => setPreset(e.target.value as RangePreset)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium font-manrope bg-gray-100 text-gray-600 border-0 outline-none cursor-pointer hover:bg-gray-200"
+          >
+            {(['work', 'open', 'all'] as RangePreset[]).map(p => <option key={p} value={p}>{presetLabels[p]}</option>)}
+          </select>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setDayOffset(o => o - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Previous day"><ChevronLeft size={16} /></button>
+            <button onClick={() => setDayOffset(0)} className={`px-3 py-1.5 rounded-lg text-xs font-medium font-manrope transition-colors ${dayOffset === 0 ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Today</button>
+            <button onClick={() => setDayOffset(o => o + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600" aria-label="Next day"><ChevronRight size={16} /></button>
+          </div>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 font-manrope mb-3">{dayLabel}</p>
+
+      {/* Category filter */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
+        {['All', ...categories].map(c => (
+          <button
+            key={c}
+            onClick={() => setCategory(c)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${category === c ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            {c === 'All' ? 'All categories' : c}
+          </button>
+        ))}
+        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500 font-manrope whitespace-nowrap cursor-pointer pl-2">
+          <input type="checkbox" checked={onlyBooked} onChange={e => setOnlyBooked(e.target.checked)} className="rounded" /> Only booked
+        </label>
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className={isMobile ? 'min-w-[560px]' : 'min-w-[820px]'}>
+          {/* Hour header */}
+          <div className="flex border-b border-gray-100 pb-1">
+            <div className={`${labelW} shrink-0`} />
+            <div className="flex-1 relative h-4">
+              {hourMarks.map(h => (
+                <div key={h} className="absolute text-[10px] font-mono text-gray-400 -translate-x-1/2" style={{ left: pct(h) }}>{h < 24 ? formatTime(h) : ''}</div>
+              ))}
+            </div>
+          </div>
+
+          {rows.length === 0 && <p className="text-xs text-gray-400 font-manrope py-6 text-center">No instrument{onlyBooked ? ' booked' : ''} in this category.</p>}
+
+          {rows.map(inst => {
+            const showCat = category === 'All' && inst.category !== lastCategory;
+            lastCategory = inst.category;
+            const layout = layoutDayEvents(dayBookings.filter(b => b.instrumentId === inst.id));
+            const lanes = Math.max(1, ...layout.map(l => l.lanes));
+            const rowH = ROW_PX * (lanes > 1 ? Math.min(lanes, 3) : 1);
+            const color = colorOf.get(inst.id) || '#64748b';
+            return (
+              <div key={inst.id}>
+                {showCat && <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 font-manrope pt-2 pb-0.5">{inst.category}</div>}
+                <div className="flex border-t border-gray-100" style={{ height: rowH }}>
+                  <div className={`${labelW} shrink-0 flex items-center gap-1.5 pr-2 text-xs font-manrope text-gray-800 truncate`} title={inst.name}>
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span className="truncate">{inst.icon} {inst.name}</span>
+                  </div>
+                  <div
+                    className="flex-1 relative cursor-pointer hover:bg-[#102C53]/[0.03]"
+                    onClick={e => clickRow(e, inst)}
+                    title="Click to book this instrument at this hour"
+                  >
+                    {/* hour bands */}
+                    {hourMarks.slice(0, -1).map(h => (
+                      <div key={h} className={`absolute top-0 bottom-0 border-l border-gray-100 ${isWorkingHour(h, bookingSettings) ? '' : 'bg-amber-50/50'}`} style={{ left: pct(h), width: `${100 / span}%` }} />
+                    ))}
+                    {/* now line */}
+                    {isToday && nowHour >= rangeStart && nowHour <= rangeEnd && (
+                      <div className="absolute top-0 bottom-0 border-l border-red-500 z-20 pointer-events-none" style={{ left: pct(nowHour) }} />
+                    )}
+                    {/* bookings */}
+                    {layout.map(({ ev, lane, lanes: n }) => {
+                      const start = Math.max(ev.startHour, rangeStart);
+                      const end = Math.min(ev.endHour, rangeEnd);
+                      if (end <= start) return null;
+                      const isMine = ev.userId === user.id;
+                      const pending = ev.status === 'pending';
+                      const laneH = rowH / Math.min(n, 3);
+                      return (
+                        <div
+                          key={ev.id}
+                          onClick={e => { e.stopPropagation(); setModal({ mode: 'view', booking: ev }); }}
+                          title={`${inst.name} · ${ev.userName} · ${formatTime(ev.startHour)}–${formatTime(ev.endHour)}${ev.notes ? ' · ' + ev.notes : ''}${pending ? ' · PENDING AUTHORIZATION' : ''}`}
+                          className="absolute rounded-md px-1.5 text-white text-[10px] font-semibold font-manrope leading-none flex items-center overflow-hidden shadow-sm hover:brightness-105 z-10 cursor-pointer"
+                          style={{
+                            left: `calc(${pct(start)} + 1px)`,
+                            width: `calc(${((end - start) / span) * 100}% - 2px)`,
+                            top: (lane % 3) * laneH + 2,
+                            height: laneH - 4,
+                            backgroundColor: color,
+                            backgroundImage: pending ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 4px, transparent 4px 9px)' : undefined,
+                            boxShadow: isMine ? 'inset 0 0 0 2px rgba(255,255,255,0.9)' : undefined,
+                          }}
+                        >
+                          <span className="truncate">{pending ? '⏳ ' : ''}{isMine ? 'You' : ev.userName}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#102C53] ring-2 ring-inset ring-white/90" /> Your bookings</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 2px, transparent 2px 4px)' }} /> Pending authorization</span>
+        <span className="flex items-center gap-1"><span className="w-0.5 h-3 bg-red-500" /> Now</span>
+        <span className="ml-auto text-gray-400">Click a free stretch to book · click a booking for details</span>
+      </div>
+
+      {modal && <BookingModal state={modal} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, onViewChange }: {
+  bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
+  view: CalendarView; onViewChange: (v: CalendarView) => void;
 }) {
   const { updateBooking, canManageAllBookings } = useLabContext();
   const [weekOffset, setWeekOffset] = useState(0);
@@ -666,7 +903,8 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings }: {
           Weekly Calendar
           <span className="text-xs font-normal text-gray-400">{weekBookingCount} booking{weekBookingCount !== 1 ? 's' : ''}</span>
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <CalendarViewToggle view={view} onChange={onViewChange} />
           <select
             value={preset}
             onChange={e => setPreset(e.target.value as RangePreset)}
@@ -870,6 +1108,13 @@ interface Props {
 export default function DashboardPage({ onNavigate }: Props) {
   const { user, permissions, bookings, reagents, cryoVials, wishlist, instruments: mockInstruments, manuals, bookingSettings, approveBooking, removeBooking, canManageAllBookings } = useLabContext();
 
+  // Day (instruments × hours) or Week (days × hours) — remembered per browser.
+  const [calView, setCalViewState] = useState<CalendarView>('day');
+  useEffect(() => {
+    try { const v = localStorage.getItem(CALENDAR_VIEW_KEY); if (v === 'day' || v === 'week') setCalViewState(v); } catch { /* private mode */ }
+  }, []);
+  const setCalView = (v: CalendarView) => { setCalViewState(v); try { localStorage.setItem(CALENDAR_VIEW_KEY, v); } catch { /* ignore */ } };
+
   const today = todayStr();
   // Extra-hours bookings waiting for authorization by this user (instrument
   // responsible or booking manager). Own pending requests are listed too.
@@ -970,7 +1215,9 @@ export default function DashboardPage({ onNavigate }: Props) {
       )}
 
       {/* Weekly Calendar — all bookings, filterable by instrument */}
-      <WeeklyCalendar bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} />
+      {calView === 'day'
+        ? <DailyOverview bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} view={calView} onViewChange={setCalView} />
+        : <WeeklyCalendar bookings={bookings} instruments={mockInstruments} user={user} bookingSettings={bookingSettings} view={calView} onViewChange={setCalView} />}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* My Bookings Today */}

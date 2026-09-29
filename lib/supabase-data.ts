@@ -353,7 +353,7 @@ export async function fetchBookings(): Promise<Booking[] | null> {
   const rows = await fetchAll<{
     id: string; instrument_id: string; user_id: string; user_name: string;
     date: string; start_hour: number; end_hour: number;
-    notes: string; created_at: string; status: string | null;
+    notes: string; created_at: string; status: string | null; series_id?: string | null;
   }>('bookings', 'date');
   if (!rows) return null;
   return rows.map(mapBooking);
@@ -362,13 +362,42 @@ export async function fetchBookings(): Promise<Booking[] | null> {
 type BookingRow = {
   id: string; instrument_id: string; user_id: string; user_name: string;
   date: string; start_hour: number; end_hour: number; notes: string; created_at: string; status?: string | null;
+  series_id?: string | null;
 };
 function mapBooking(r: BookingRow): Booking {
   return {
     id: r.id, instrumentId: r.instrument_id, userId: r.user_id, userName: r.user_name,
-    date: r.date, startHour: r.start_hour, endHour: r.end_hour, notes: r.notes, createdAt: r.created_at,
+    date: r.date, startHour: Number(r.start_hour), endHour: Number(r.end_hour), notes: r.notes, createdAt: r.created_at,
     status: r.status === 'pending' ? 'pending' : 'confirmed',
+    seriesId: r.series_id || undefined,
   };
+}
+
+/**
+ * Multi-day booking: one row per date, same hours, all-or-nothing (RPC
+ * book_series, scripts/supabase-2026-09-booking-series.sql). RLS and the
+ * policy trigger run on every row as the caller; the error names the day
+ * that was refused.
+ */
+export async function createBookingSeries(args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }):
+  Promise<{ bookings: Booking[] | null; error?: string }> {
+  const { data, error } = await supabase.rpc('book_series', {
+    p_instrument_id: args.instrumentId, p_dates: args.dates, p_start_hour: args.startHour, p_end_hour: args.endHour, p_notes: args.notes,
+  });
+  if (error) {
+    if (/book_series/.test(error.message) && /(not find|does not exist|schema cache)/i.test(error.message)) {
+      return { bookings: null, error: 'Multi-day bookings are not enabled on this database yet (run scripts/supabase-2026-09-booking-series.sql).' };
+    }
+    return { bookings: null, error: cleanDbError(error.message) };
+  }
+  return { bookings: ((data ?? []) as BookingRow[]).map(mapBooking) };
+}
+
+/** Delete every booking of a series (own rows, or any as admin — RLS decides). Returns the ids removed. */
+export async function deleteBookingSeries(seriesId: string): Promise<string[] | null> {
+  const { data, error } = await supabase.from('bookings').delete().eq('series_id', seriesId).select('id');
+  if (error) { console.error('Failed to delete booking series:', error.message); return null; }
+  return (data ?? []).map((r: { id: string }) => r.id);
 }
 
 /**

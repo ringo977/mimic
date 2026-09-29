@@ -70,6 +70,8 @@
 --        Admin → Backup → Restore Database — re-run it after 29/09 pm: it
 --        replaces the earlier partial unique indexes so a restore can free an
 --        occupied slot or swap two vials; checked once at commit)
+--      then supabase-2026-09-booking-series.sql  (bookings.series_id + book_series() RPC:
+--        multi-day bookings as one transaction; SECURITY INVOKER, RLS + policy trigger per row)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -272,6 +274,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   notes          text NOT NULL DEFAULT ''::text,
   created_at     text NOT NULL DEFAULT ''::text,
   status         text NOT NULL DEFAULT 'confirmed',   -- 2026-09-booking-rules.sql: 'confirmed' | 'pending' (extra hours awaiting authorization)
+  series_id      text,                                -- 2026-09-booking-series.sql: multi-day booking (one row per day, same series_id)
   CONSTRAINT bookings_hours_check
     CHECK ((end_hour > start_hour)),  -- 2026-09-tighten.sql
   CONSTRAINT bookings_status_check

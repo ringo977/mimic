@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays, CalendarRange, CalendarX2 } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, peakSeats, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
@@ -11,7 +11,7 @@ import { fetchBookingsForSlot } from '@/lib/supabase-data';
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, permissions, bookings, addBooking, removeBooking, approveBooking, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
   const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
@@ -32,12 +32,18 @@ export default function InstrumentsPage() {
   const [bookStartHour, setBookStartHour] = useState(bookingSettings.workStartHour);
   const [bookEndHour, setBookEndHour] = useState(bookingSettings.workStartHour + 1);
   const [bookNotes, setBookNotes] = useState('');
+  // Multi-day series (instruments with policy.multiDay): last day, weekends on/off
+  const [bookUntil, setBookUntil] = useState('');
+  const [skipWeekends, setSkipWeekends] = useState(true);
   const [bookError, setBookError] = useState('');
   const [booking, setBooking] = useState(false);
   const [search, setSearch] = useState('');
   // Month overview of the selected instrument (find a free day quickly)
   const [showMonth, setShowMonth] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => new Date().toLocaleDateString('en-CA').slice(0, 7)); // YYYY-MM
+  // Week view: 7 days from the selected date × hours, in one grid (beta testers'
+  // request: see the whole week of one instrument without stepping day by day)
+  const [showWeek, setShowWeek] = useState(false);
 
   const step = bookingSettings.slotMinutes / 60;
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
@@ -58,6 +64,8 @@ export default function InstrumentsPage() {
 
   const instrument = mockInstruments.find(i => i.id === selectedInstrument);
   const dayBookings = bookings.filter(b => b.instrumentId === selectedInstrument && b.date === selectedDate);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysStr(selectedDate, i)), [selectedDate]);
+  const weekBookings = bookings.filter(b => b.instrumentId === selectedInstrument && b.date >= weekDays[0] && b.date <= weekDays[6]);
 
   const isCertified = instrument ? (!instrument.requiresCertification || user.certifications.includes(instrument.id)) : false;
 
@@ -105,9 +113,29 @@ export default function InstrumentsPage() {
     setBookStartHour(slot ? slot.start : start);
     setBookEndHour(slot ? slot.end : Math.min(start + 1, bookingSettings.openEndHour));
     setBookNotes('');
+    setBookUntil('');
+    setSkipWeekends(true);
     setBookError('');
     setShowBookingModal(true);
   };
+
+  // Dates of the series being composed in the form (selected date → until), or [] for a single day
+  const seriesDates = (() => {
+    if (!policy?.multiDay || !bookUntil || bookUntil <= selectedDate) return [];
+    const out: string[] = [];
+    for (let i = 0; out.length <= 31; i++) {
+      const ds = addDaysStr(selectedDate, i);
+      if (ds > bookUntil) break;
+      const dow = new Date(ds + 'T12:00:00').getDay();
+      if (skipWeekends && (dow === 0 || dow === 6)) continue;
+      out.push(ds);
+    }
+    return out;
+  })();
+  const isSeries = seriesDates.length > 1;
+  // First day of the series (after the selected one) that is already full at these hours
+  const seriesConflictDay = isSeries
+    ? seriesDates.find(ds => selectedInstrument && isSlotFull(bookings, instrument, selectedInstrument, ds, bookStartHour, bookEndHour)) : undefined;
 
   const handleBook = async () => {
     if (!selectedInstrument || !isCertified || !canBook) return;
@@ -124,6 +152,27 @@ export default function InstrumentsPage() {
         startHour: bookStartHour, endHour: bookEndHour, today: todayStr,
       });
       if (policyError) { setBookError(policyError); return; }
+    }
+
+    if (isSeries) {
+      if (seriesDates.length > 31) { setBookError('A series covers at most 31 days.'); return; }
+      if (!canManageAllBookings) {
+        for (const ds of seriesDates) {
+          if (lastBookableDate && ds > lastBookableDate) { setBookError(`${formatDate(ds)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
+          const err = validateBookingPolicy({ instrument, bookings, userId: user.id, role: user.role, date: ds, startHour: bookStartHour, endHour: bookEndHour, today: todayStr });
+          if (err) { setBookError(`${formatDate(ds)}: ${err}`); return; }
+        }
+      }
+      if (seriesConflictDay) { setBookError(`${formatDate(seriesConflictDay)} is already taken at these hours.`); return; }
+      setBooking(true);
+      // All-or-nothing on the server (RLS + policy trigger on every day).
+      const err = await addBookingSeries({ instrumentId: selectedInstrument, dates: seriesDates, startHour: bookStartHour, endHour: bookEndHour, notes: bookNotes });
+      setBooking(false);
+      if (err) { setBookError(`Series refused — nothing was booked. ${err}`); return; }
+      setShowBookingModal(false);
+      setBookNotes('');
+      setBookUntil('');
+      return;
     }
 
     setBooking(true);
@@ -294,23 +343,40 @@ export default function InstrumentsPage() {
 
       {/* Date Navigation */}
       <div className="bg-white rounded-xl p-3 shadow-sm border border-gray-100 flex items-center justify-between">
-        <button onClick={() => changeDate(-1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+        <button onClick={() => changeDate(showWeek ? -7 : -1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600" aria-label={showWeek ? 'Previous week' : 'Previous day'}>
           <ChevronLeft size={18} />
         </button>
         <div className="text-center">
-          <p className="text-sm font-semibold text-gray-900 font-manrope">{dateLabel}{isToday && <span className="ml-2 text-[10px] text-blue-600">Today</span>}</p>
-          <p className="text-xs text-gray-400 font-manrope mt-0.5">{dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}{isPastDate && ' · past date (read-only)'}</p>
+          {showWeek ? (
+            <>
+              <p className="text-sm font-semibold text-gray-900 font-manrope">{formatDate(selectedDate)} – {formatDate(addDaysStr(selectedDate, 6))}</p>
+              <p className="text-xs text-gray-400 font-manrope mt-0.5">{weekBookings.length} booking{weekBookings.length !== 1 ? 's' : ''} in these 7 days</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-gray-900 font-manrope">{dateLabel}{isToday && <span className="ml-2 text-[10px] text-blue-600">Today</span>}</p>
+              <p className="text-xs text-gray-400 font-manrope mt-0.5">{dayBookings.length} booking{dayBookings.length !== 1 ? 's' : ''}{isPastDate && ' · past date (read-only)'}</p>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={() => { setShowMonth(v => !v); setMonthCursor(selectedDate.slice(0, 7)); }}
+            onClick={() => { setShowWeek(v => !v); setShowMonth(false); }}
+            className={`p-2 rounded-lg transition-colors ${showWeek ? 'bg-[#102C53] text-white' : 'hover:bg-gray-100 text-gray-600'}`}
+            title={showWeek ? 'Back to the day timeline' : 'Week view (7 days from this date)'}
+            aria-pressed={showWeek}
+          >
+            <CalendarRange size={18} />
+          </button>
+          <button
+            onClick={() => { setShowMonth(v => !v); setShowWeek(false); setMonthCursor(selectedDate.slice(0, 7)); }}
             className={`p-2 rounded-lg transition-colors ${showMonth ? 'bg-[#102C53] text-white' : 'hover:bg-gray-100 text-gray-600'}`}
             title={showMonth ? 'Hide month overview' : 'Month overview'}
             aria-pressed={showMonth}
           >
             <CalendarDays size={18} />
           </button>
-          <button onClick={() => changeDate(1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600">
+          <button onClick={() => changeDate(showWeek ? 7 : 1)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600" aria-label={showWeek ? 'Next week' : 'Next day'}>
             <ChevronRight size={18} />
           </button>
         </div>
@@ -343,7 +409,7 @@ export default function InstrumentsPage() {
       )}
 
       {/* Week Quick Nav */}
-      {!showMonth && <div className="flex gap-1.5 overflow-x-auto pb-1">
+      {!showMonth && !showWeek && <div className="flex gap-1.5 overflow-x-auto pb-1">
         {Array.from({ length: 7 }, (_, i) => {
           const base = new Date(selectedDate + 'T12:00:00');
           const d = new Date(base);
@@ -368,8 +434,116 @@ export default function InstrumentsPage() {
         })}
       </div>}
 
+      {/* Week grid: 7 days × hours for this instrument */}
+      {showWeek && instrument && (() => {
+        const HOUR_PX = 28;
+        const rangeStart = Math.floor(bookingSettings.openStartHour);
+        const rangeEnd = Math.ceil(bookingSettings.openEndHour);
+        const hours = Array.from({ length: rangeEnd - rangeStart + 1 }, (_, i) => rangeStart + i);
+        const gridH = (rangeEnd - rangeStart) * HOUR_PX;
+        const snap = (h: number) => Math.round((Math.floor(h / step) * step) * 100) / 100;
+        const cellClick = (e: React.MouseEvent<HTMLDivElement>, ds: string) => {
+          if (!canBook || !isCertified) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          const raw = rangeStart + (e.clientY - r.top) / HOUR_PX;
+          const h = Math.min(Math.max(snap(raw), bookingSettings.openStartHour), bookingSettings.openEndHour - step);
+          const inHorizon = !lastBookableDate || ds <= lastBookableDate;
+          const past = canManageAllBookings ? ds < todayStr : !isBookableTime(policy, ds, h, Math.min(h + step, bookingSettings.openEndHour), todayStr, nowHour);
+          if (past || !inHorizon) return;
+          setSelectedDate(ds);
+          openModalAt(h);
+        };
+        return (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex items-center gap-3 flex-wrap text-xs font-manrope">
+              <h2 className="text-sm font-semibold text-gray-900">Week</h2>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-500" /> Your bookings</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-300" /> Others</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-100 border border-amber-200" /> Extra hours</span>
+              <span className="ml-auto text-gray-400">Click a free hour to book it · click a day name to open its timeline</span>
+            </div>
+            <div className="overflow-x-auto">
+              <div className="min-w-[640px]">
+                <div className="flex border-b border-gray-100">
+                  <div className="w-12 shrink-0" />
+                  {weekDays.map(ds => {
+                    const d = new Date(ds + 'T12:00:00');
+                    const dIsToday = ds === todayStr;
+                    const n = weekBookings.filter(b => b.date === ds).length;
+                    return (
+                      <button key={ds} onClick={() => { setSelectedDate(ds); setShowWeek(false); }} className="flex-1 text-center py-2 hover:bg-gray-50" title="Open this day">
+                        <p className={`text-[10px] font-semibold uppercase tracking-wide font-manrope ${dIsToday ? 'text-[#102C53]' : 'text-gray-400'}`}>{d.toLocaleDateString('en', { weekday: 'short' })}</p>
+                        <p className={`text-sm font-bold font-manrope inline-flex items-center justify-center w-7 h-7 rounded-full ${dIsToday ? 'bg-[#102C53] text-white' : 'text-gray-700'}`}>{d.getDate()}</p>
+                        <p className="text-[9px] text-gray-400 font-manrope">{n > 0 ? `${n} bk` : ''}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex">
+                  <div className="w-12 shrink-0 relative" style={{ height: gridH }}>
+                    {hours.map(h => (
+                      <div key={h} className="absolute right-1.5 text-[10px] font-mono text-gray-400 -translate-y-1/2" style={{ top: (h - rangeStart) * HOUR_PX }}>{h < 24 ? formatTime(h) : ''}</div>
+                    ))}
+                  </div>
+                  {weekDays.map(ds => {
+                    const list = weekBookings.filter(b => b.date === ds);
+                    const dIsToday = ds === todayStr;
+                    const beyond = Boolean(lastBookableDate) && ds > lastBookableDate;
+                    const pastDay = ds < todayStr;
+                    // simple lanes for capacity > 1: sort by start, assign first free lane
+                    const laneEnd: number[] = [];
+                    const placed = list.slice().sort((a, b) => a.startHour - b.startHour).map(b => {
+                      let lane = laneEnd.findIndex(e => e <= b.startHour + EPS);
+                      if (lane < 0) { lane = laneEnd.length; laneEnd.push(b.endHour); } else laneEnd[lane] = b.endHour;
+                      return { b, lane };
+                    });
+                    const lanes = Math.max(1, laneEnd.length);
+                    return (
+                      <div
+                        key={ds}
+                        onClick={e => cellClick(e, ds)}
+                        className={`flex-1 relative border-l border-gray-100 ${dIsToday ? 'bg-[#102C53]/[0.02]' : ''} ${pastDay || beyond ? 'bg-gray-50/60 cursor-default' : canBook && isCertified ? 'cursor-pointer' : ''}`}
+                        style={{ height: gridH }}
+                        title={beyond ? `Beyond your booking horizon (until ${formatDate(lastBookableDate)})` : undefined}
+                      >
+                        {hours.slice(0, -1).map(h => (
+                          <div key={h} className={`absolute left-0 right-0 border-t border-gray-100 ${isWorkingHour(h, bookingSettings) ? '' : 'bg-amber-50/50'}`} style={{ top: (h - rangeStart) * HOUR_PX, height: HOUR_PX }} />
+                        ))}
+                        {dIsToday && nowHour >= rangeStart && nowHour <= rangeEnd && (
+                          <div className="absolute left-0 right-0 border-t border-red-500 z-20 pointer-events-none" style={{ top: (nowHour - rangeStart) * HOUR_PX }} />
+                        )}
+                        {placed.map(({ b, lane }) => {
+                          const st = Math.max(b.startHour, rangeStart), en = Math.min(b.endHour, rangeEnd);
+                          if (en <= st) return null;
+                          const mine = b.userId === user.id;
+                          const pending = b.status === 'pending';
+                          const w = 100 / lanes;
+                          return (
+                            <div
+                              key={b.id}
+                              onClick={e => { e.stopPropagation(); setSelectedDate(ds); setShowWeek(false); }}
+                              className={`absolute rounded-md px-1 py-0.5 text-[10px] font-manrope leading-tight overflow-hidden z-10 cursor-pointer ${mine ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                              style={{ top: (st - rangeStart) * HOUR_PX + 1, height: Math.max((en - st) * HOUR_PX - 2, 14), left: `calc(${lane * w}% + 1px)`, width: `calc(${w}% - 2px)`,
+                                backgroundImage: pending ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.35) 0 4px, transparent 4px 9px)' : undefined }}
+                              title={`${b.userName} · ${formatTime(b.startHour)}–${formatTime(b.endHour)}${b.notes ? ' · ' + b.notes : ''}${pending ? ' · pending authorization' : ''}`}
+                            >
+                              <p className="font-semibold truncate">{pending ? '⏳ ' : ''}{mine ? 'You' : b.userName}</p>
+                              {(en - st) * HOUR_PX >= 30 && <p className="truncate opacity-80">{formatTime(b.startHour)}–{formatTime(b.endHour)}</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Hourly Timeline */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {!showWeek && <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-gray-900 font-manrope">Timeline</h2>
           <div className="flex items-center gap-3 mt-2 text-xs font-manrope flex-wrap">
@@ -431,7 +605,7 @@ export default function InstrumentsPage() {
                             <div className="min-w-0">
                               <p className="text-xs font-semibold font-manrope truncate">{pending && <Hourglass size={10} className="inline mr-1 -mt-0.5" />}{bk.userName}</p>
                               <p className={`text-[10px] font-manrope truncate ${myBooking ? 'text-blue-100' : 'text-gray-500'}`}>
-                                {formatTime(bk.startHour)}-{formatTime(bk.endHour)}{pending ? ' · pending authorization' : ''}{bk.notes ? ` · ${bk.notes}` : ''}
+                                {formatTime(bk.startHour)}-{formatTime(bk.endHour)}{bk.seriesId ? ' · multi-day' : ''}{pending ? ' · pending authorization' : ''}{bk.notes ? ` · ${bk.notes}` : ''}
                               </p>
                             </div>
                             <div className="flex items-center shrink-0 ml-2">
@@ -442,13 +616,25 @@ export default function InstrumentsPage() {
                               )}
                               {canCancel && (
                                 <button
-                                  onClick={() => confirmDelete('Cancel Booking?', `${myBooking ? 'Your' : bk.userName + "'s"} booking on ${bk.date} (${formatTime(bk.startHour)}-${formatTime(bk.endHour)}) will be removed.`, () => removeBooking(bk.id))}
+                                  onClick={() => confirmDelete('Cancel Booking?', `${myBooking ? 'Your' : bk.userName + "'s"} booking on ${bk.date} (${formatTime(bk.startHour)}-${formatTime(bk.endHour)}) will be removed.${bk.seriesId ? ' Only this day — the other days of the series stay.' : ''}`, () => removeBooking(bk.id), 'Cancel this day')}
                                   className="p-1 rounded hover:bg-black/10 transition-colors"
-                                  title={myBooking ? 'Cancel booking' : pending ? 'Refuse this request' : 'Cancel (manager override)'}
+                                  title={bk.seriesId ? 'Cancel this day only' : myBooking ? 'Cancel booking' : pending ? 'Refuse this request' : 'Cancel (manager override)'}
                                 >
                                   <X size={14} />
                                 </button>
                               )}
+                              {canCancel && bk.seriesId && (() => {
+                                const days = bookings.filter(x => x.seriesId === bk.seriesId).map(x => x.date).sort();
+                                return (
+                                  <button
+                                    onClick={() => confirmDelete('Cancel the whole series?', `All ${days.length} days (${formatDate(days[0])} → ${formatDate(days[days.length - 1])}, ${formatTime(bk.startHour)}-${formatTime(bk.endHour)}) of ${myBooking ? 'your' : bk.userName + "'s"} booking will be removed.`, () => removeBookingSeries(bk.seriesId!), `Cancel ${days.length} days`)}
+                                    className="p-1 rounded hover:bg-black/10 transition-colors"
+                                    title={`Cancel the whole series (${days.length} days)`}
+                                  >
+                                    <CalendarX2 size={14} />
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </>
                         ) : (
@@ -477,7 +663,7 @@ export default function InstrumentsPage() {
             );
           })}
         </div>
-      </div>
+      </div>}
 
       {/* Booking Modal */}
       {showBookingModal && (
@@ -594,6 +780,32 @@ export default function InstrumentsPage() {
                 />
               </div>
 
+              {policy?.multiDay && (
+                <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 font-manrope">Repeat every day until <span className="text-gray-400 font-normal">(optional — same hours each day)</span></label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={bookUntil}
+                      min={addDaysStr(selectedDate, 1)}
+                      max={lastBookableDate || addDaysStr(selectedDate, 31)}
+                      onChange={e => setBookUntil(e.target.value)}
+                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
+                    />
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 font-manrope cursor-pointer">
+                      <input type="checkbox" checked={skipWeekends} onChange={e => setSkipWeekends(e.target.checked)} className="rounded" /> Skip weekends
+                    </label>
+                    {bookUntil && <button onClick={() => setBookUntil('')} className="text-xs text-gray-400 hover:text-gray-600 font-manrope">clear</button>}
+                  </div>
+                  {isSeries && (
+                    <p className={`text-[11px] font-manrope ${seriesConflictDay ? 'text-red-600' : 'text-gray-500'}`}>
+                      {seriesDates.length} bookings, {formatDate(seriesDates[0])} → {formatDate(seriesDates[seriesDates.length - 1])}, {formatTime(bookStartHour)}–{formatTime(bookEndHour)} each day.
+                      {seriesConflictDay ? ` ${formatDate(seriesConflictDay)} is already taken.` : ' Either every day is booked or none.'}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {(bookError || hasConflict(bookStartHour, bookEndHour)) && (
                 <div className="bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-manrope">
                   {bookError || (capacity > 1 ? `All ${capacity} seats are taken in this time range.` : 'Time conflict! This slot is already booked.')}
@@ -602,10 +814,10 @@ export default function InstrumentsPage() {
 
               <button
                 onClick={handleBook}
-                disabled={booking || hasConflict(bookStartHour, bookEndHour) || bookEndHour <= bookStartHour}
+                disabled={booking || hasConflict(bookStartHour, bookEndHour) || bookEndHour <= bookStartHour || Boolean(seriesConflictDay)}
                 className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {booking ? 'Checking availability…' : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
+                {booking ? (isSeries ? 'Booking every day…' : 'Checking availability…') : isSeries ? `Book ${seriesDates.length} days` : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
               </button>
             </div>
           </div>

@@ -19,7 +19,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
   SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
   ReagentKind, reagentKinds, reagentKindLabel, UserGroup,
-  CellType, cellTypePalette, matchCellType, cellLineColor,
+  CellType, cellTypePalette, matchCellType, cellLineColor, viewCellLineColors, cellLineAbbr,
   parseCells, formatCells,
 } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
@@ -998,7 +998,7 @@ function InstrumentsTab() {
       }
       const empty = !next.slots?.length && next.maxSlotsPerWeek === undefined
         && next.maxAdvanceDays === undefined && !next.advanceDaysByGroup && next.capacity === undefined
-        && next.maxHoursPerDay === undefined && !next.allowInProgress && !next.extraHoursNeedApproval && !next.note;
+        && next.maxHoursPerDay === undefined && !next.allowInProgress && !next.extraHoursNeedApproval && !next.multiDay && !next.note;
       return { ...f, bookingPolicy: empty ? undefined : next };
     });
   };
@@ -1289,6 +1289,12 @@ function InstrumentsTab() {
                   onChange={e => setPolicy({ extraHoursNeedApproval: e.target.checked || undefined })}
                   className="w-4 h-4 rounded border-gray-300 text-[#102C53]" />
                 <span className="text-sm font-manrope text-gray-700">Bookings outside working hours need authorization (instrument responsible or lab manager)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={Boolean(form.bookingPolicy?.multiDay)}
+                  onChange={e => setPolicy({ multiDay: e.target.checked || undefined })}
+                  className="w-4 h-4 rounded border-gray-300 text-[#102C53]" />
+                <span className="text-sm font-manrope text-gray-700">Can be booked for several days in a row (the form offers &ldquo;until&rdquo;: one booking per day, same hours, all or nothing)</span>
               </label>
             </div>
             {(() => {
@@ -2018,6 +2024,7 @@ function CellTypesEditor() {
                 <input type="color" value={t.color} onChange={e => edit(t.id, { color: e.target.value })} className="w-8 h-8 rounded-lg border border-gray-200 p-0.5 cursor-pointer" title="Colour" />
                 <input value={t.name} onChange={e => edit(t.id, { name: e.target.value })} placeholder="Type name (e.g. Chondrocytes)" className="flex-1 min-w-[140px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope" />
                 <input value={t.aliases.join(', ')} onChange={e => edit(t.id, { aliases: e.target.value.split(',').map(a => a.trim()).filter(Boolean) })} placeholder="aliases, comma-separated (e.g. CH, chondro)" className="flex-[2] min-w-[180px] px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope" />
+                <input value={t.abbr || ''} onChange={e => edit(t.id, { abbr: e.target.value.slice(0, 5) })} placeholder={cellLineAbbr(t.name, [])} maxLength={5} className="w-16 px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope text-center" title="Label inside the vial circle (max 5 characters)" />
                 <span className="text-[10px] text-gray-400 font-manrope w-14 text-right">{countFor(t)} vial{countFor(t) === 1 ? '' : 's'}</span>
                 <button onClick={() => remove(t.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title="Remove type"><Trash2 size={13} /></button>
               </div>
@@ -2089,6 +2096,7 @@ function CryoTab() {
   const getUnitName = useCallback((id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
   const getPositionStr = useCallback((v: typeof cryoVials[0]) => boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col), [storageBoxes]);
 
+  const lineColors = useMemo(() => viewCellLineColors(cryoVials.map(v => v.cellLine), cellTypes), [cryoVials, cellTypes]);
   const vAcc = useMemo(() => ({ cellLine: (v: typeof cryoVials[0]) => v.cellLine, passage: (v: typeof cryoVials[0]) => v.passage, cells: (v: typeof cryoVials[0]) => v.cells ?? -1, storage: (v: typeof cryoVials[0]) => getUnitName(v.storageUnitId), position: (v: typeof cryoVials[0]) => getPositionStr(v), user: (v: typeof cryoVials[0]) => v.userName, date: (v: typeof cryoVials[0]) => v.date }), [getUnitName, getPositionStr]);
   const { sorted: sortedVials, sortKey: vSortKey, sortAsc: vSortAsc, toggle: vToggle } = useSort(cryoVials, 'cellLine', vAcc);
 
@@ -2166,7 +2174,7 @@ function CryoTab() {
             const su = storageUnits.find(s => s.id === v.storageUnitId);
             return (
               <tr key={v.id} className="hover:bg-gray-50">
-                <td className="px-3 py-2 font-medium text-gray-900"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cellLineColor(v.cellLine, cellTypes) }} />{v.cellLine}</span></td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
+                <td className="px-3 py-2 font-medium text-gray-900"><span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: lineColors.get(v.cellLine) || cellLineColor(v.cellLine, cellTypes) }} />{v.cellLine}</span></td><td className="px-3 py-2 text-gray-600">P{v.passage}</td>
                 <td className="px-3 py-2 text-gray-700 font-mono">{v.cells ? formatCells(v.cells) : '—'}</td>
                 <td className="px-3 py-2 text-gray-500">{su ? `${storageUnitTypes[su.type]?.icon || ''} ${su.name}` : v.storageUnitId}</td>
                 <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>

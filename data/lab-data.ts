@@ -308,6 +308,7 @@ export interface BookingPolicy {
   maxHoursPerDay?: number;                   // per person, per instrument, per day
   allowInProgress?: boolean;                 // may book a slot that already started (today) if it has not ended
   extraHoursNeedApproval?: boolean;          // bookings outside working hours start as "pending" until approved
+  multiDay?: boolean;                        // the form offers "until <date>": one booking per day, same hours, in one go
   note?: string;                             // shown in the booking form
 }
 
@@ -355,6 +356,7 @@ export function describeBookingPolicy(p: BookingPolicy | undefined, group?: User
   if (!p) return [];
   const out: string[] = [];
   if (p.slots && p.slots.length > 0) out.push(`Fixed slots: ${p.slots.map(slotLabel).join(', ')}`);
+  if (p.multiDay) out.push('Can be booked for several days in a row (same hours every day)');
   const cap = policyCapacity(p);
   if (cap > 1) out.push(`${cap} seats can be booked at the same time`);
   if (p.maxSlotsPerWeek && p.maxSlotsPerWeek > 0) out.push(`Max ${p.maxSlotsPerWeek} ${p.slots?.length ? 'slots' : 'bookings'} per person per week`);
@@ -674,6 +676,8 @@ export interface Booking {
   createdAt: string;
   /** 'pending' = waiting for authorization (extra hours on instruments that require it). */
   status?: BookingStatus;
+  /** Set when the booking was made as part of a multi-day series (one row per day). */
+  seriesId?: string;
 }
 
 export type BookingStatus = 'confirmed' | 'pending';
@@ -899,6 +903,7 @@ export interface CellType {
   name: string;
   color: string;        // hex
   aliases: string[];    // extra words/prefixes that identify this type
+  abbr?: string;        // 2–4 characters written inside the vial circle (default: derived from the name)
 }
 
 export const cellTypePalette = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#a855f7', '#ec4899', '#78716c', '#0ea5e9'];
@@ -927,6 +932,30 @@ export function matchCellType(cellLine: string, types: CellType[]): CellType | u
   return best?.t;
 }
 
+/**
+ * Short label written inside a vial's circle (≤ 5 characters): the matching
+ * cell type's abbr when set, else derived from the type name or the cell line
+ * name — first word (minus a plural "s") when it is short, initials when the
+ * name has several words, otherwise the first letters. "HT-29" stays "HT-29",
+ * "CACO2 batch 2" → "CACO2", "Cord Blood MNCs" → "Cord", "AHCFs" → "AHCF".
+ */
+export function cellLineAbbr(cellLine: string, types: CellType[]): string {
+  const MAX = 5;
+  const t = matchCellType(cellLine, types);
+  if (t && (t.abbr || '').trim()) return t.abbr!.trim().slice(0, MAX);
+  const source = t ? t.name : cellLine;
+  const clean = source.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ').trim();
+  const words = clean.split(/\s+/).filter(w => /^[\p{L}\p{N}]/u.test(w) && !/^p\d+$/i.test(w));
+  const tidy = (x: string) => x.slice(0, MAX).replace(/[^\p{L}\p{N}+]+$/u, '');
+  if (words.length === 0) return tidy(source.trim());
+  const first = words[0].replace(/[,.;:]+$/, '');
+  const singular = first.length > MAX && /[a-z0-9]s$/i.test(first) ? first.slice(0, -1) : first;
+  if (singular.length <= MAX) return singular;
+  // Long first word: initials when the name is a phrase, else its first letters
+  if (words.length >= 2 && first.length > 7) return tidy(words.map(w => w[0]).join('').toUpperCase());
+  return tidy(first);
+}
+
 /** Colour for a vial's cell line: the matching type's colour, else grey. */
 export function cellLineColor(cellLine: string, types: CellType[]): string {
   return matchCellType(cellLine, types)?.color || UNMATCHED_CELL_COLOR;
@@ -940,11 +969,12 @@ const VIEW_PALETTE = [
 ];
 
 /**
- * Colours for the cell lines shown in ONE view (a box, a table). Lines that
- * match a cell type keep the type's fixed colour (same everywhere); the
- * others get a distinct colour within this view only, so up to 25 (5×5) or
- * 81 (9×9) names remain tellable apart instead of all being grey. Beyond
- * the palette, colours continue on the hue wheel (golden angle).
+ * Colours for a set of cell lines — the app passes the WHOLE inventory so a
+ * line has the same colour in every box, legend and table. Lines that match
+ * a cell type keep the type's fixed colour; the others get a distinct colour
+ * from the palette (sorted by name, so the assignment is stable as long as
+ * the set of names is). Beyond the palette, colours continue on the hue
+ * wheel (golden angle).
  */
 export function viewCellLineColors(cellLines: string[], types: CellType[]): Map<string, string> {
   const out = new Map<string, string>();
