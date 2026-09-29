@@ -70,6 +70,11 @@
 --        Admin → Backup → Restore Database — re-run it after 29/09 pm: it
 --        replaces the earlier partial unique indexes so a restore can free an
 --        occupied slot or swap two vials; checked once at commit)
+--      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
+--        30 May 2026 grants nothing on new public tables, so the Data API
+--        answers "permission denied" despite correct RLS. Restores the old
+--        grants and re-closes history_meta. Also run it once on production
+--        before 30 Oct 2026, when that default reaches existing projects.)
 --      Running 11 after any of these would silently restore the older
 --      enforce_booking_policy (no capacity check, while the EXCLUDE
 --      constraint is already gone), lab_can v1 and stock RPC v3.
