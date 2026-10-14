@@ -1252,11 +1252,11 @@ export const externalRolePermissions: Record<UserRole, typeof rolePermissions[Us
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Post-Doc',
   },
-  // Beta round 4: DEIB / POLIMI / external PhDs work in the lab like the
-  // MiMic ones — own vials and purchase requests included (lab_can v3).
+  // External PhDs: no cryo, no wishlist (lab_can v2). A PhD who works in the
+  // lab day by day is registered with affiliation "MiMic Lab" instead.
   phd: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'PhD Student',
   },

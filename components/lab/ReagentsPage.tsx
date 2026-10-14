@@ -74,10 +74,14 @@ export default function ReagentsPage() {
     return reagents.filter(r => {
       const matchCat = selectedCategory === 'All' || r.category === selectedCategory;
       const matchKind = selectedKind === 'All' || (r.kind ?? 'item') === selectedKind;
-      const matchSearch = !search || r.name.toLowerCase().includes(search.toLowerCase()) || r.catalogNumber.toLowerCase().includes(search.toLowerCase());
+      const q = search.toLowerCase();
+      // Name, catalogue number, supplier, lot — and the responsibles (name or initials)
+      const matchSearch = !q || r.name.toLowerCase().includes(q) || r.catalogNumber.toLowerCase().includes(q)
+        || (r.supplier || '').toLowerCase().includes(q) || (r.lot || '').toLowerCase().includes(q)
+        || (r.responsibleUserIds ?? []).some(id => { const u = users.find(x => x.id === id); return !!u && (u.name.toLowerCase().includes(q) || u.abbreviation.toLowerCase() === q); });
       return matchCat && matchKind && matchSearch;
     });
-  }, [reagents, selectedCategory, selectedKind, search]);
+  }, [reagents, selectedCategory, selectedKind, search, users]);
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
 
@@ -257,7 +261,7 @@ export default function ReagentsPage() {
               {r.lot && <span className="font-mono">lot {r.lot}</span>}
               {r.owner && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{r.owner}</span>}
             </div>
-            {r.kind === 'stock' && (
+            {(r.kind === 'stock' || (r.responsibleUserIds ?? []).length > 0) && (
               <p className="mt-1.5 text-[10px] font-manrope flex items-center gap-1 text-[#102C53]">
                 <Users size={10} />
                 {responsibleNames(r).length ? <>Responsible: {responsibleNames(r).join(', ')}</> : <span className="text-amber-600">No responsible assigned yet</span>}

@@ -1877,14 +1877,26 @@ function ReagentsTab() {
   const [selectedSubCat, setSelectedSubCat] = useState<string>('All');
   const [editing, setEditing] = useState<Reagent | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Free search across ALL items (every macro-category): name, catalogue
+  // number, supplier, lot, and the responsibles by name or initials.
+  const [search, setSearch] = useState('');
+  const responsiblesOf = useCallback((r: Reagent) => (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)).filter((u): u is LabUser => !!u), [users]);
 
   const macroInfo = reagentMacroCategories[activeMacro];
   // Items in this macro-category
   // getMacroCategory falls back to "Reagents" for unknown sub-categories, so a
   // free-text category (e.g. from a CSV import) never disappears from every tab.
   const macroFiltered = useMemo(() => reagents.filter(r => getMacroCategory(r.category) === activeMacro), [reagents, activeMacro]);
-  // Further filter by selected sub-category
-  const filtered = useMemo(() => selectedSubCat === 'All' ? macroFiltered : macroFiltered.filter(r => r.category === selectedSubCat), [macroFiltered, selectedSubCat]);
+  // Further filter by selected sub-category — or, while searching, look through everything
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q) {
+      return reagents.filter(r => r.name.toLowerCase().includes(q) || (r.catalogNumber || '').toLowerCase().includes(q)
+        || (r.supplier || '').toLowerCase().includes(q) || (r.lot || '').toLowerCase().includes(q)
+        || responsiblesOf(r).some(u => u.name.toLowerCase().includes(q) || u.abbreviation.toLowerCase() === q));
+    }
+    return selectedSubCat === 'All' ? macroFiltered : macroFiltered.filter(r => r.category === selectedSubCat);
+  }, [macroFiltered, selectedSubCat, search, reagents, responsiblesOf]);
   // All sub-categories for current macro (from data + from definition, deduplicated)
   const availableSubCategories = useMemo(() => {
     const fromData = new Set(macroFiltered.map(r => r.category));
@@ -1907,7 +1919,7 @@ function ReagentsTab() {
   const getUnitName = useCallback((id?: string) => { if (!id) return '—'; const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; }, [storageUnits]);
 
   // Sorting
-  const rAcc = useMemo(() => ({ name: (r: Reagent) => r.name, category: (r: Reagent) => r.category, stock: (r: Reagent) => r.currentStock, supplier: (r: Reagent) => r.supplier, storage: (r: Reagent) => getUnitName(r.storageUnitId), expiry: (r: Reagent) => r.expiryDate || 'zzz' }), [getUnitName]);
+  const rAcc = useMemo(() => ({ name: (r: Reagent) => r.name, category: (r: Reagent) => r.category, stock: (r: Reagent) => r.currentStock, supplier: (r: Reagent) => r.supplier, storage: (r: Reagent) => getUnitName(r.storageUnitId), expiry: (r: Reagent) => r.expiryDate || 'zzz', responsible: (r: Reagent) => responsiblesOf(r).map(u => u.abbreviation).join(' ') || 'zzz' }), [getUnitName, responsiblesOf]);
   const { sorted: sortedReagents, sortKey: rSortKey, sortAsc: rSortAsc, toggle: rToggle } = useSort(filtered, 'name', rAcc);
 
   // Counts per macro-category
@@ -1939,7 +1951,7 @@ function ReagentsTab() {
       <p><strong>Category</strong>: a sub-category ({macroInfo.subCategories.join(', ')}). If blank, items go to <em>{defaultCategory}</em>.</p>
       <p><strong>Storage Unit</strong>: must match an existing unit name; otherwise imported without a link. <strong>Door</strong>: left/right (or sx/dx), only for double-door units. <strong>Shelf</strong>: number, 1 = top. <strong>Box</strong>: label of a box already created in that unit (Admin → Storage → Boxes). <strong>Expiry</strong>: YYYY-MM-DD.</p>
       <p><strong>Lot</strong>, <strong>Owner</strong> and <strong>Notes</strong> are free text (owner may be someone who has left).</p>
-      <p><strong>Kind</strong>: <em>stock</em> (concentrated form, reserved to its responsibles), <em>working</em> (solution prepared from a stock) or <em>item</em> (default). <strong>From Stock</strong>: name or catalog # of an existing stock, for working solutions. <strong>Responsible</strong>: lab member names separated by “;”, for stocks.</p>
+      <p><strong>Kind</strong>: <em>stock</em> (concentrated form, reserved to its responsibles), <em>working</em> (solution prepared from a stock) or <em>item</em> (default). <strong>From Stock</strong>: name or catalog # of an existing stock, for working solutions. <strong>Responsible</strong>: lab member names (or initials) separated by “;” — on a stock they are the only ones who may take from it; on any item they may restock it whatever their role.</p>
     </>,
     onAdd: addNewReagent,
     parseRow: (rec, rowNum) => {
@@ -1974,7 +1986,7 @@ function ReagentsTab() {
         if (st) item.derivedFromId = st.id; else notes.push(`stock "${rec['From Stock']}" not found — link it later`);
       }
       const respRaw = (rec['Responsible'] || '').split(/[;|]/).map(x => x.trim()).filter(Boolean);
-      if (kind === 'stock' && respRaw.length) {
+      if (respRaw.length) {
         const ids: string[] = [];
         respRaw.forEach(n => {
           const u = activeUsers.find(x => x.name.toLowerCase() === n.toLowerCase() || x.abbreviation.toLowerCase() === n.toLowerCase() || x.email.toLowerCase() === n.toLowerCase());
@@ -2020,8 +2032,16 @@ function ReagentsTab() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500 font-manrope">{filtered.length} items{selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, cat#, supplier, lot, responsible…"
+              className="pl-8 pr-7 py-1.5 w-72 max-w-full border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+            {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" aria-label="Clear search"><X size={12} /></button>}
+          </div>
+          <p className="text-sm text-gray-500 font-manrope whitespace-nowrap">{filtered.length} items{search.trim() ? ' matching, all categories' : selectedSubCat !== 'All' ? ` in ${selectedSubCat}` : ` in ${macroInfo.label}`}</p>
+        </div>
         <div className="flex gap-2">
           <ImportButton spec={importSpec} />
           <button onClick={() => downloadCSV(['Name','Category','Stock','Max','Unit','Supplier','Cat#','Storage Unit','Door','Shelf','Box','Expiry','Alert','Lot','Owner','Notes','Kind','From Stock','Responsible'], filtered.map(r => [r.name, r.category, r.currentStock, r.maxStock, r.unit, r.supplier, r.catalogNumber, getUnitName(r.storageUnitId), reagentDoor(r, storageBoxes) ?? '', reagentShelf(r, storageBoxes) ?? '', storageBoxes.find(b => b.id === r.boxId)?.label || '', r.expiryDate, r.alertThreshold, r.lot || '', r.owner || '', r.notes || '', r.kind ?? 'item', reagents.find(x => x.id === r.derivedFromId)?.name || '', (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || '').filter(Boolean).join('; ')]), `inventory_${activeMacro.toLowerCase().replace(/\s+/g, '_')}`)} className={btnExport}><Download size={14} /> Export</button>
@@ -2037,6 +2057,7 @@ function ReagentsTab() {
           <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cat#</th>
           <SortTh label="Storage" k="storage" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
           <SortTh label="Expiry" k="expiry" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
+          <SortTh label="Resp." k="responsible" sortKey={rSortKey} sortAsc={rSortAsc} toggle={rToggle} />
           <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
         </tr></thead><tbody className="divide-y divide-gray-100">
           {sortedReagents.map(r => (
@@ -2045,19 +2066,31 @@ function ReagentsTab() {
                 {r.kind === 'stock' && <span className="mr-1.5 px-1.5 py-px rounded bg-[#102C53] text-white text-[9px] font-semibold" title={(r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name).filter(Boolean).join(', ') || 'no responsible yet'}>STOCK</span>}
                 {r.kind === 'working' && <span className="mr-1.5 px-1.5 py-px rounded bg-[#4DC9FF]/20 text-[#102C53] text-[9px] font-semibold" title={r.derivedFromId ? `from ${reagents.find(x => x.id === r.derivedFromId)?.name || '?'}` : 'stock not linked'}>WS</span>}
                 {r.name}
+                {search.trim() && <span className="ml-1.5 text-[10px] font-normal text-gray-400">{getMacroCategory(r.category)} › {r.category}</span>}
               </td>
               {availableSubCategories.length > 1 && <td className="px-3 py-2 text-gray-500">{r.category}</td>}
               <td className="px-3 py-2"><span className={r.currentStock <= r.alertThreshold ? 'text-red-600 font-medium' : 'text-gray-900'}>{r.currentStock}{r.maxStock > 0 ? `/${r.maxStock}` : ''} {r.unit}</span></td>
               <td className="px-3 py-2 text-gray-500">{r.supplier}</td><td className="px-3 py-2 text-gray-500 font-mono">{r.catalogNumber}</td>
               <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate" title={reagentPlaceLabel(r, storageUnits, storageBoxes)}>{reagentPlaceLabel(r, storageUnits, storageBoxes) || '—'}</td>
               <td className="px-3 py-2 text-gray-500">{r.expiryDate}</td>
+              <td className="px-3 py-2">
+                <div className="flex items-center gap-1">
+                  {responsiblesOf(r).map(u => (
+                    <span key={u.id} title={`${u.name} — responsible${r.kind === 'stock' ? ' (may take from this stock)' : ''}, may restock`}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#102C53] text-white text-[9px] font-bold font-manrope tracking-wide">
+                      {u.abbreviation}
+                    </span>
+                  ))}
+                  {responsiblesOf(r).length === 0 && r.kind === 'stock' && <span className="text-[10px] text-amber-600" title="No responsible yet — only admin/PI/lab manager can take from this stock">—</span>}
+                </div>
+              </td>
               <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
                 <button onClick={() => open(r)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600"><Edit2 size={13} /></button>
                 <button onClick={() => confirmDelete('Delete Item?', `"${r.name}" will be permanently removed from inventory.`, () => removeReagent(r.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
               </div></td>
             </tr>
           ))}
-          {filtered.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400">No items in this category</td></tr>}
+          {filtered.length === 0 && <tr><td colSpan={9} className="px-3 py-8 text-center text-gray-400">{search.trim() ? `Nothing matches “${search.trim()}”` : 'No items in this category'}</td></tr>}
         </tbody></table>
       </div></div>
       {showForm && (

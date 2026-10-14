@@ -7,10 +7,11 @@
 -- supabase-2026-09-data-api-grants.sql (it redefines book_series,
 -- lab_can, absence_auto_approve_ok and adjust_reagent_stock).
 --
---   §1 lab_can v3 — PhD students of DEIB / POLIMI / External get the same
---      cryo + wishlist rights as MiMic PhDs (three of the four testers are
---      "PhD Student · DEIB" and had no Withdraw button in Cryo and no
---      Wishlist menu). Mirrored in data/lab-data.ts (externalRolePermissions).
+--   §1 (WITHDRAWN the same day, see supabase-2026-10-beta-round4b.sql) —
+--      a lab_can v3 that gave external PhDs cryo + wishlist. Marco chose to
+--      keep the matrix as it was and registered the three testers with
+--      affiliation "MiMic Lab" instead. The section below is kept only as a
+--      no-op comment so this file stays idempotent in the DR order.
 --   §2 book_series v2 — hours PER DAY: a continuous booking starts at the
 --      chosen hour on the first day, covers the whole bookable day in
 --      between and ends at the chosen hour on the last day. The app sends
@@ -30,41 +31,10 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
--- §1 lab_can v3 — external PhD: manage_cryo + request_orders
+-- §1 — withdrawn. lab_can stays at v2 (supabase-2026-09-beta-round1.sql);
+--      supabase-2026-10-beta-round4b.sql re-asserts it on databases where
+--      the first version of this file had already been run.
 -- ------------------------------------------------------------
-CREATE OR REPLACE FUNCTION lab_can(perm text)
-RETURNS boolean
-LANGUAGE sql
-SECURITY DEFINER
-SET search_path = public
-STABLE
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM lab_users u
-    WHERE u.status = 'active'
-      AND (u.auth_user_id = auth.uid()
-           OR (u.auth_user_id IS NULL AND u.email = auth.jwt() ->> 'email'))
-      AND (
-        u.is_admin = true
-        OR u.role IN ('admin', 'pi')
-        OR CASE perm
-             WHEN 'withdraw_reagents' THEN
-               u.role NOT IN ('msc', 'guest')
-             WHEN 'add_reagents' THEN
-               CASE WHEN u.affiliation = 'MiMic Lab'
-                    THEN u.role IN ('researcher', 'lab_manager', 'project_manager', 'postdoc')
-                    ELSE u.role = 'lab_manager' END
-             WHEN 'manage_cryo' THEN
-               u.role NOT IN ('msc', 'guest')          -- v3: external PhD too
-             WHEN 'request_orders' THEN
-               u.role NOT IN ('msc', 'guest')          -- v3: external PhD too
-             WHEN 'approve_orders' THEN
-               false   -- only is_admin / admin / pi (handled above)
-             ELSE false
-           END
-      )
-  );
-$$;
 
 -- ------------------------------------------------------------
 -- §2 book_series v2 — one (start, end) per day
@@ -359,8 +329,8 @@ ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS favorite_instrument_ids text[] NO
 -- ------------------------------------------------------------
 -- Checks
 -- ------------------------------------------------------------
--- §1: lab_can v3 in place → true
-SELECT prosrc LIKE '%v3: external PhD too%' AS lab_can_v3 FROM pg_proc WHERE proname = 'lab_can';
+-- §1 withdrawn: lab_can must NOT carry the v3 marker → false
+SELECT prosrc LIKE '%v3: external PhD too%' AS lab_can_v3_present FROM pg_proc WHERE proname = 'lab_can';
 -- §2: exactly one book_series, with numeric[] hours → 1 row
 SELECT oid::regprocedure AS book_series_signature FROM pg_proc WHERE proname = 'book_series';
 -- §3: new chaining code present → true
