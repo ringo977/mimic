@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2, CalendarDays, Rows3 } from 'lucide-react';
+import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2, CalendarDays, Rows3, Star } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
   validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories } from '@/data/lab-data';
-import type { Booking, Instrument, LabUser, BookingSettings } from '@/data/lab-data';
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays } from '@/data/lab-data';
+import type { Booking, Instrument, LabUser, BookingSettings, SeriesMode } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
+import MultiDayFields from './MultiDayFields';
 
 const INSTRUMENT_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#a855f7'];
 
@@ -103,7 +104,7 @@ type DragState =
   | { kind: 'resize-top' | 'resize-bottom'; booking: Booking; date: string; colTop: number; lowStart: number; lowEnd: number; start: number; end: number; moved: boolean };
 
 function BookingModal({ state, onClose }: { state: ModalState; onClose: () => void }) {
-  const { user, users, permissions, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, removeBookingSeries, approveBooking, canManageAllBookings } = useLabContext();
+  const { user, users, permissions, bookings, instruments, bookingSettings, addBooking, updateBooking, removeBooking, addBookingSeries, removeBookingSeries, approveBooking, canManageAllBookings } = useLabContext();
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
   const step = bookingSettings.slotMinutes / 60;
   const todayStr = new Date().toLocaleDateString('en-CA');
@@ -126,6 +127,10 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   const [busy, setBusy] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [newEnd, setNewEnd] = useState<number>(existing?.endHour ?? 0);
+  // Multi-day series (instruments with policy.multiDay), new bookings only
+  const [bookUntil, setBookUntil] = useState('');
+  const [skipWeekends, setSkipWeekends] = useState(true);
+  const [seriesMode, setSeriesMode] = useState<SeriesMode>('continuous');
 
   // In-progress booking owned by the user: end time can still be adjusted,
   // but never earlier than now. (Works on touch devices too, where the
@@ -158,7 +163,17 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   const needsApproval = !isManager && bookingNeedsApproval(policy, startHour, endHour, bookingSettings);
   // Approvers of pending bookings: booking managers and the instrument responsible.
   const canApprove = isManager || (!!inst?.responsibleUserId && inst.responsibleUserId === user.id);
-  const endOptions = [...slots.filter(s => s > startHour + EPS), bookingSettings.openEndHour];
+  const seriesDays = !existing && policy?.multiDay
+    ? buildSeriesDays({ from: date, until: bookUntil, startHour, endHour, skipWeekends, mode: seriesMode, settings: bookingSettings })
+    : [];
+  const isSeries = seriesDays.length > 1;
+  // In a continuous series the end hour belongs to the LAST day, so it may be earlier than the start.
+  const continuousSeries = isSeries && seriesMode === 'continuous';
+  const firstStart = isSeries ? seriesDays[0].startHour : startHour;
+  const firstEnd = isSeries ? seriesDays[0].endHour : endHour;
+  const seriesConflictDay = isSeries
+    ? seriesDays.find(d => isSlotFull(bookings, inst, instrumentId, d.date, d.startHour, d.endHour))?.date : undefined;
+  const endOptions = [...slots.filter(s => continuousSeries ? s > bookingSettings.openStartHour + EPS : s > startHour + EPS), bookingSettings.openEndHour];
 
   // Fixed-slot instruments: snap the form to a real slot as soon as one is picked
   useEffect(() => {
@@ -176,18 +191,35 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     setError('');
     if (!existing && !permissions.canBook) { setError('Your role does not allow booking instruments.'); return; }
     if (!instrumentId) { setError('Select an instrument.'); return; }
-    if (endHour <= startHour) { setError('End time must be after start time.'); return; }
+    if (firstEnd <= firstStart) { setError('End time must be after start time.'); return; }
     if (!isManager && isPastDate) { setError('Cannot book a date in the past.'); return; }
-    if (!isManager && !isBookableTime(policy, date, startHour, endHour, todayStr, nowHour)) {
+    if (!isManager && !isBookableTime(policy, date, firstStart, firstEnd, todayStr, nowHour)) {
       setError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time in the past.'); return;
     }
-    if (conflict(startHour, endHour)) { setError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
+    if (conflict(firstStart, firstEnd)) { setError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
     if (!isManager) {
       const policyError = validateBookingPolicy({
-        instrument: inst, bookings, userId: user.id, role: user.role, date, startHour, endHour,
+        instrument: inst, bookings, userId: user.id, role: user.role, date, startHour: firstStart, endHour: firstEnd,
         today: todayStr, ignoreId: existing?.id,
       });
       if (policyError) { setError(policyError); return; }
+    }
+    if (isSeries) {
+      if (!isManager) {
+        for (const d of seriesDays) {
+          if (lastBookableDate && d.date > lastBookableDate) { setError(`${formatDate(d.date)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
+          const err = validateBookingPolicy({ instrument: inst, bookings, userId: user.id, role: user.role, date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
+          if (err) { setError(`${formatDate(d.date)}: ${err}`); return; }
+        }
+      }
+      if (seriesConflictDay) { setError(`${formatDate(seriesConflictDay)} is already taken at these hours.`); return; }
+      setBusy(true);
+      // All-or-nothing on the server (RLS + policy trigger on every day).
+      const err = await addBookingSeries({ instrumentId, days: seriesDays, notes });
+      setBusy(false);
+      if (err) { setError(`Series refused — nothing was booked. ${err}`); return; }
+      onClose();
+      return;
     }
     setBusy(true);
     const fresh = await fetchBookingsForSlot(instrumentId, date);
@@ -411,17 +443,17 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
           ) : (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start{continuousSeries ? <span className="text-gray-400 font-normal"> (first day)</span> : ''}</label>
               <select
                 value={startHour}
-                onChange={e => { const v = Number(e.target.value); setStartHour(v); if (endHour <= v) setEndHour(Math.min(v + step, bookingSettings.openEndHour)); }}
+                onChange={e => { const v = Number(e.target.value); setStartHour(v); if (!continuousSeries && endHour <= v) setEndHour(Math.min(v + step, bookingSettings.openEndHour)); }}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
               >
                 {slots.map(h => <option key={h} value={h}>{formatTime(h)}{isWorkingHour(h, bookingSettings) ? '' : ' (extra)'}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">End</label>
+              <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">End{continuousSeries ? <span className="text-gray-400 font-normal"> (last day)</span> : ''}</label>
               <select
                 value={endHour}
                 onChange={e => setEndHour(Number(e.target.value))}
@@ -433,7 +465,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
           </div>
           )}
 
-          {!fixedSlots && isExtraHours(startHour, endHour, bookingSettings) && (
+          {!fixedSlots && !continuousSeries && isExtraHours(startHour, endHour, bookingSettings) && (
             <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
               <Moon size={13} /> Outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
               {needsApproval && <span className="font-semibold"> The booking will be pending until the instrument responsible authorizes it.</span>}
@@ -462,16 +494,26 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
             />
           </div>
 
+          {!existing && policy?.multiDay && !fixedSlots && (
+            <MultiDayFields
+              from={date} until={bookUntil} onUntil={setBookUntil}
+              skipWeekends={skipWeekends} onSkipWeekends={setSkipWeekends}
+              mode={seriesMode} onMode={setSeriesMode}
+              days={seriesDays} conflictDay={seriesConflictDay}
+              maxUntil={!isManager ? lastBookableDate : ''} startHour={startHour} endHour={endHour} settings={bookingSettings}
+            />
+          )}
+
           {error && <div className="bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-manrope">{error}</div>}
 
           <div className="flex gap-2">
             {existing && <button onClick={() => { setEditing(false); setError(''); }} className="px-4 py-3 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200 transition-colors">Back</button>}
             <button
               onClick={save}
-              disabled={busy || endHour <= startHour || !instrumentId}
+              disabled={busy || firstEnd <= firstStart || !instrumentId || Boolean(seriesConflictDay)}
               className="flex-1 py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {busy ? 'Checking availability…' : existing ? 'Save changes' : needsApproval ? 'Request booking' : 'Confirm booking'}
+              {busy ? (isSeries ? 'Booking every day…' : 'Checking availability…') : existing ? 'Save changes' : isSeries ? `Book ${seriesDays.length} days` : needsApproval ? 'Request booking' : 'Confirm booking'}
             </button>
           </div>
         </div>
@@ -518,11 +560,13 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const todayStr = localDateStr(now);
   const nowHour = now.getHours() + now.getMinutes() / 60;
   const [dayOffset, setDayOffset] = useState(0);
+  // 'All' | '★' (my favourites) | a category name
   const [category, setCategory] = useState<string>('All');
   const [preset, setPreset] = useState<RangePreset>('open');
   const [onlyBooked, setOnlyBooked] = useState(false);
   const [modal, setModal] = useState<ModalState | null>(null);
   const isMobile = useMediaQuery('(max-width: 640px)');
+  const { favoriteInstrumentIds } = useLabContext();
 
   const day = useMemo(() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + dayOffset); return d; }, [dayOffset]);
   const ds = localDateStr(day);
@@ -549,10 +593,10 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   }, [instruments]);
 
   const rows = useMemo(() => instruments
-    .filter(i => category === 'All' || i.category === category)
+    .filter(i => category === 'All' || (category === '★' ? favoriteInstrumentIds.includes(i.id) : i.category === category))
     .filter(i => !onlyBooked || bookedIds.has(i.id))
     .sort((a, b) => categories.indexOf(a.category) - categories.indexOf(b.category) || a.name.localeCompare(b.name)),
-    [instruments, category, onlyBooked, bookedIds, categories]);
+    [instruments, category, onlyBooked, bookedIds, categories, favoriteInstrumentIds]);
 
   const colorOf = useMemo(() => {
     const map = new Map<string, string>();
@@ -606,13 +650,16 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
 
       {/* Category filter */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
-        {['All', ...categories].map(c => (
+        {['All', '★', ...categories].map(c => (
           <button
             key={c}
             onClick={() => setCategory(c)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${category === c ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all flex items-center gap-1 ${
+              category === c ? (c === '★' ? 'bg-amber-400 text-white' : 'bg-[#102C53] text-white')
+                : c === '★' ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            title={c === '★' ? 'My favourite instruments (star them on the Instruments page)' : undefined}
           >
-            {c === 'All' ? 'All categories' : c}
+            {c === '★' ? <><Star size={12} fill={category === '★' ? 'currentColor' : 'none'} /> Favourites{favoriteInstrumentIds.length ? ` (${favoriteInstrumentIds.length})` : ''}</> : c === 'All' ? 'All categories' : c}
           </button>
         ))}
         <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500 font-manrope whitespace-nowrap cursor-pointer pl-2">

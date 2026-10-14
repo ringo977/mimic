@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import {
   Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
   Instrument, BookingPolicy, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
+  SeriesDay,
 } from '@/data/lab-data';
 
 // ============================================================
@@ -374,19 +375,23 @@ function mapBooking(r: BookingRow): Booking {
 }
 
 /**
- * Multi-day booking: one row per date, same hours, all-or-nothing (RPC
- * book_series, scripts/supabase-2026-09-booking-series.sql). RLS and the
- * policy trigger run on every row as the caller; the error names the day
- * that was refused.
+ * Multi-day booking: one row per date with its own hours, all-or-nothing
+ * (RPC book_series v2, scripts/supabase-2026-10-beta-round4.sql). RLS and
+ * the policy trigger run on every row as the caller; the error names the
+ * day that was refused.
  */
-export async function createBookingSeries(args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }):
+export async function createBookingSeries(args: { instrumentId: string; days: SeriesDay[]; notes: string }):
   Promise<{ bookings: Booking[] | null; error?: string }> {
   const { data, error } = await supabase.rpc('book_series', {
-    p_instrument_id: args.instrumentId, p_dates: args.dates, p_start_hour: args.startHour, p_end_hour: args.endHour, p_notes: args.notes,
+    p_instrument_id: args.instrumentId,
+    p_dates: args.days.map(d => d.date),
+    p_start_hours: args.days.map(d => d.startHour),
+    p_end_hours: args.days.map(d => d.endHour),
+    p_notes: args.notes,
   });
   if (error) {
     if (/book_series/.test(error.message) && /(not find|does not exist|schema cache)/i.test(error.message)) {
-      return { bookings: null, error: 'Multi-day bookings are not enabled on this database yet (run scripts/supabase-2026-09-booking-series.sql).' };
+      return { bookings: null, error: 'Multi-day bookings need the latest database update (run scripts/supabase-2026-10-beta-round4.sql).' };
     }
     return { bookings: null, error: cleanDbError(error.message) };
   }

@@ -21,6 +21,7 @@ export interface SupabaseLabUser {
   training_bio_done?: boolean | null;
   training_bio_date?: string | null;
   certified_at?: Record<string, string> | null;
+  favorite_instrument_ids?: string[] | null;
   created_at?: string;
 }
 
@@ -45,10 +46,14 @@ function toLabUser(row: SupabaseLabUser): LabUser {
     trainingBioDone: row.training_bio_done ?? false,
     trainingBioDate: row.training_bio_date || undefined,
     certifiedAt: row.certified_at || undefined,
+    favoriteInstrumentIds: row.favorite_instrument_ids || [],
   };
 }
 
-function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at'> {
+// favorite_instrument_ids is deliberately NOT part of this row: it is the
+// user's own list, saved only through saveMyFavoriteInstruments(), so an
+// admin editing the profile never overwrites it with a stale copy.
+function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at' | 'favorite_instrument_ids'> {
   return {
     id: u.id,
     email: u.email,
@@ -151,6 +156,19 @@ export async function updateLabUser(u: LabUser): Promise<{ ok: boolean; error?: 
 
   if (error) {
     console.error('Failed to update user:', error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** Own favourites only (RLS: own row; the column is not a management field). */
+export async function saveMyFavoriteInstruments(userId: string, ids: string[]): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('lab_users')
+    .update({ favorite_instrument_ids: ids })
+    .eq('id', userId);
+  if (error) {
+    console.error('Failed to save favourites:', error.message);
     return { ok: false, error: error.message };
   }
   return { ok: true };

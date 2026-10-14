@@ -35,6 +35,8 @@ export interface LabUser {
    * records the date of the training (the authorisation file has one).
    */
   certifiedAt?: Record<string, string>;
+  /** Personal favourites (star on the instrument cards). Own-row field, not managed by admins. */
+  favoriteInstrumentIds?: string[];
 }
 
 export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
@@ -215,7 +217,28 @@ export function evaluateAbsenceRequest(
       return req.type === 'sick' ? { status: 'auto_approved', reasons: [] } : (reasons.length ? { status: 'pending', reasons } : { status: 'auto_approved', reasons: [] });
 
     case 'day_off': {
+      // The request is judged together with the user's own leave right
+      // before / after it (day off or vacation; weekends do not break the
+      // chain), so N single-day requests in a row count like one of N days.
+      // Same rule server-side: absence_auto_approve_ok v2.
+      const myLeave = others.filter(a => a.userId === req.userId && (a.type === 'day_off' || a.type === 'vacation'));
+      const covers = (a: Absence, d: string) => a.startDate <= d && a.endDate >= d;
+      let blockStart = req.startDate, blockEnd = req.endDate;
+      for (;;) {
+        let p = addDaysStr(blockStart, -1); while (!isWorkingDay(p)) p = addDaysStr(p, -1);
+        const hit = myLeave.filter(a => covers(a, p)).map(a => a.startDate).sort()[0];
+        if (!hit || hit >= blockStart) break;
+        blockStart = hit;
+      }
+      for (;;) {
+        let n = addDaysStr(blockEnd, 1); while (!isWorkingDay(n)) n = addDaysStr(n, 1);
+        const hit = myLeave.filter(a => covers(a, n)).map(a => a.endDate).sort().reverse()[0];
+        if (!hit || hit <= blockEnd) break;
+        blockEnd = hit;
+      }
+      const blockDays = workingDaysCovered(blockStart, blockEnd);
       if (days > settings.autoApproveMaxDays) reasons.push(`Longer than ${settings.autoApproveMaxDays} working days — use "Vacation" or get approval.`);
+      else if (blockDays > settings.autoApproveMaxDays) reasons.push(`Together with your days off next to it (${blockStart} → ${blockEnd}) this makes ${blockDays} consecutive working days — more than ${settings.autoApproveMaxDays} need approval.`);
       const notice = workingDaysOfNotice(todayStr, req.startDate);
       if (notice < settings.noticeDaysShort) reasons.push(`Less than ${settings.noticeDaysShort} working days of notice (${notice}).`);
       break;
@@ -775,6 +798,52 @@ export function canAccessStock(user: Pick<LabUser, 'id' | 'role' | 'isAdmin'>, r
   return (r.responsibleUserIds ?? []).includes(user.id);
 }
 
+/**
+ * Who may RESTOCK a reagent: anyone with canAddReagents, plus the
+ * responsibles of that reagent whatever their role (a PhD looking after
+ * the PDMS kits). Server rule: adjust_reagent_stock v6.
+ */
+export function canRestockReagent(user: Pick<LabUser, 'id'>, canAddReagents: boolean, r: Reagent): boolean {
+  return canAddReagents || (r.responsibleUserIds ?? []).includes(user.id);
+}
+
+// ============================================================
+// Multi-day booking series
+// ============================================================
+
+export type SeriesMode = 'continuous' | 'same';
+export interface SeriesDay { date: string; startHour: number; endHour: number }
+
+/**
+ * The days of a series from `from` to `until` (inclusive), one entry per
+ * booked day. `continuous` (default for Mech / pumps / laptop): first day
+ * from startHour to the end of the bookable day, full days in between, last
+ * day from the start of the bookable day to endHour. `same`: startHour →
+ * endHour every day. Returns [] when there is no series (until ≤ from).
+ */
+export function buildSeriesDays(args: {
+  from: string; until: string; startHour: number; endHour: number;
+  skipWeekends: boolean; mode: SeriesMode; settings: BookingSettings;
+}): SeriesDay[] {
+  const { from, until, startHour, endHour, skipWeekends, mode, settings } = args;
+  if (!until || until <= from) return [];
+  const dates: string[] = [];
+  for (let i = 0; dates.length <= 31; i++) {
+    const ds = addDaysStr(from, i);
+    if (ds > until) break;
+    if (skipWeekends && !isWorkingDay(ds)) continue;
+    dates.push(ds);
+  }
+  if (dates.length < 2) return [];
+  const last = dates.length - 1;
+  return dates.map((date, i) => {
+    if (mode === 'same') return { date, startHour, endHour };
+    if (i === 0) return { date, startHour, endHour: settings.openEndHour };
+    if (i === last) return { date, startHour: settings.openStartHour, endHour };
+    return { date, startHour: settings.openStartHour, endHour: settings.openEndHour };
+  });
+}
+
 /** Shelf a reagent sits on: its own value, else the shelf of its box. */
 export function reagentShelf(r: Reagent, boxes: StorageBox[]): number | undefined {
   if (r.shelf != null) return r.shelf;
@@ -1183,9 +1252,11 @@ export const externalRolePermissions: Record<UserRole, typeof rolePermissions[Us
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Post-Doc',
   },
+  // Beta round 4: DEIB / POLIMI / external PhDs work in the lab like the
+  // MiMic ones — own vials and purchase requests included (lab_can v3).
   phd: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'PhD Student',
   },

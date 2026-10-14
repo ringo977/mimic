@@ -5,7 +5,7 @@ import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerato
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
-import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
+import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, canRestockReagent, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
   const { user, users, permissions, reagents, withdrawReagent, addReagentStock, prepareWorkingSolution, storageUnits, storageBoxes } = useLabContext();
@@ -30,6 +30,8 @@ export default function ReagentsPage() {
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
+  // Who may restock: add_reagents roles, plus the responsibles of that item (PDMS kits kept by a PhD)
+  const canRestock = (r: Reagent) => canRestockReagent(user, permissions.canAddReagents, r);
   const accessibleStocks = useMemo(() => reagents.filter(r => r.kind === 'stock' && canAccessStock(user, r)), [reagents, user]);
   const canPrepare = permissions.canWithdrawReagents && permissions.canAddReagents && accessibleStocks.length > 0;
   const responsibleNames = (r: Reagent) => (r.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || '?');
@@ -137,7 +139,7 @@ export default function ReagentsPage() {
           reagents={reagents} storageUnits={storageUnits} storageBoxes={storageBoxes}
           selectedUnitId={selectedUnitId} onSelectUnit={setSelectedUnitId}
           search={search} onSearch={setSearch}
-          canWithdraw={permissions.canWithdrawReagents} canAdd={permissions.canAddReagents}
+          canWithdraw={permissions.canWithdrawReagents} canAdd={canRestock}
           canTake={canTake}
           onWithdraw={id => { setModal({ type: 'withdraw', reagentId: id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
           onAdd={id => { setModal({ type: 'add', reagentId: id }); setAmountStr('1'); }}
@@ -284,10 +286,11 @@ export default function ReagentsPage() {
                   <Lock size={12} /> Responsibles only
                 </span>
               ))}
-              {permissions.canAddReagents && (
+              {canRestock(r) && (
                 <button
                   onClick={() => { setModal({ type: 'add', reagentId: r.id }); setAmountStr('1'); }}
                   className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium font-manrope hover:bg-emerald-100 transition-colors"
+                  title={permissions.canAddReagents ? 'Restock' : 'Restock (you are a responsible of this item)'}
                 >
                   <Plus size={12} /> Restock
                 </button>
@@ -513,7 +516,7 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
   search: string;
   onSearch: (s: string) => void;
   canWithdraw: boolean;
-  canAdd: boolean;
+  canAdd: (r: Reagent) => boolean;
   canTake: (r: Reagent) => boolean;
   onWithdraw: (id: string) => void;
   onAdd: (id: string) => void;
@@ -553,7 +556,7 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
         {canWithdraw && (canTake(r)
           ? <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>
           : <span className="p-1 rounded bg-gray-50 text-gray-400 cursor-not-allowed" title="Stock reserved to its responsibles"><Lock size={11} /></span>)}
-        {canAdd && <button onClick={() => onAdd(r.id)} className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Restock"><Plus size={11} /></button>}
+        {canAdd(r) && <button onClick={() => onAdd(r.id)} className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Restock"><Plus size={11} /></button>}
       </div>
     );
   };

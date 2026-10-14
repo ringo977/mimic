@@ -7,9 +7,9 @@ import {
   rolePermissions, externalRolePermissions,
   generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
-  defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta,
+  defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
 } from '@/data/lab-data';
-import { fetchLabUsers, insertLabUser, updateLabUser, deleteLabUser } from '@/lib/supabase-users';
+import { fetchLabUsers, insertLabUser, updateLabUser, deleteLabUser, saveMyFavoriteInstruments } from '@/lib/supabase-users';
 import {
   fetchInstruments, upsertInstrument, deleteInstrument,
   fetchLocations, upsertLocation, deleteLocation,
@@ -40,9 +40,12 @@ interface LabContextType {
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
   updateBooking: (b: Booking) => void;
   removeBooking: (id: string) => void;
-  /** Multi-day booking (one row per date, all-or-nothing). Resolves to an error message, or null on success. */
-  addBookingSeries: (args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }) => Promise<string | null>;
+  /** Multi-day booking (one row per day, each with its own hours, all-or-nothing). Resolves to an error message, or null on success. */
+  addBookingSeries: (args: { instrumentId: string; days: SeriesDay[]; notes: string }) => Promise<string | null>;
   removeBookingSeries: (seriesId: string) => void;
+  /** Personal favourite instruments (star on the cards). */
+  favoriteInstrumentIds: string[];
+  toggleFavoriteInstrument: (instrumentId: string) => void;
   /** Approve a pending booking (instrument responsible or booking manager). */
   approveBooking: (id: string) => void;
   bookingSettings: BookingSettings;
@@ -285,14 +288,26 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     track(deleteBooking(id), 'Booking cancellation');
   }, [user, addLogEntry, track]);
 
-  const addBookingSeries = useCallback(async (args: { instrumentId: string; dates: string[]; startHour: number; endHour: number; notes: string }): Promise<string | null> => {
+  const addBookingSeries = useCallback(async (args: { instrumentId: string; days: SeriesDay[]; notes: string }): Promise<string | null> => {
     // No optimistic rows: the server decides all-or-nothing and the status of each day.
     const { bookings: saved, error } = await createBookingSeries(args);
     if (!saved) return error || 'unknown error';
     setBookings(prev => [...prev.filter(b => !saved.some(s => s.id === b.id)), ...saved]);
-    addLogEntry({ userId: user.id, userName: user.name, action: `Booked ${args.instrumentId} for ${saved.length} days`, category: 'booking', details: `${args.dates[0]} → ${args.dates[args.dates.length - 1]} ${formatTime(args.startHour)}-${formatTime(args.endHour)}` });
+    const first = args.days[0], last = args.days[args.days.length - 1];
+    addLogEntry({ userId: user.id, userName: user.name, action: `Booked ${args.instrumentId} for ${saved.length} days`, category: 'booking', details: `${first.date} ${formatTime(first.startHour)} → ${last.date} ${formatTime(last.endHour)}` });
     return null;
   }, [user, addLogEntry]);
+
+  // ---- Favourite instruments (own row, no log line: personal preference) ----
+  const [favoriteInstrumentIds, setFavoriteInstrumentIds] = useState<string[]>(user.favoriteInstrumentIds ?? []);
+  useEffect(() => { setFavoriteInstrumentIds(user.favoriteInstrumentIds ?? []); }, [user.favoriteInstrumentIds]);
+  const toggleFavoriteInstrument = useCallback((instrumentId: string) => {
+    const next = favoriteInstrumentIds.includes(instrumentId)
+      ? favoriteInstrumentIds.filter(x => x !== instrumentId)
+      : [...favoriteInstrumentIds, instrumentId];
+    setFavoriteInstrumentIds(next);
+    track(saveMyFavoriteInstruments(user.id, next).then(r => r.ok), 'Favourites');
+  }, [favoriteInstrumentIds, user.id, track]);
 
   const removeBookingSeries = useCallback((seriesId: string) => {
     let removed: Booking[] = [];
@@ -587,6 +602,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
         return { ...base, canAdmin: base.canAdmin || user.isAdmin };
       })(), currentPage, setCurrentPage,
       bookings, addBooking, updateBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries,
+      favoriteInstrumentIds, toggleFavoriteInstrument,
       bookingSettings, updateBookingSettings,
       canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
       absences, addAbsence, updateAbsence, removeAbsence,

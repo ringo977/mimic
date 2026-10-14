@@ -72,6 +72,11 @@
 --        occupied slot or swap two vials; checked once at commit)
 --      then supabase-2026-09-booking-series.sql  (bookings.series_id + book_series() RPC:
 --        multi-day bookings as one transaction; SECURITY INVOKER, RLS + policy trigger per row)
+--      then supabase-2026-10-beta-round4.sql     (14/10 tester feedback: lab_can v3 —
+--        external PhDs get cryo + wishlist; book_series v2 with hours per day
+--        (drops the v1 signature); absence_auto_approve_ok v2 — days off chained
+--        with adjacent own leave; adjust_reagent_stock v6 — responsibles may
+--        restock; lab_users.favorite_instrument_ids)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -129,6 +134,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   abbreviation            text,
   auth_user_id            uuid,   -- linked auth.users.id (tighten.sql)
   certified_at            jsonb,   -- { certificationId: YYYY-MM-DD } training dates
+  favorite_instrument_ids text[] NOT NULL DEFAULT '{}'::text[],   -- 2026-10-beta-round4.sql: own favourites (self-editable)
   CONSTRAINT lab_users_affiliation_check
     CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'External'::text]))),   -- 2026-09-roles.sql
   CONSTRAINT lab_users_role_check

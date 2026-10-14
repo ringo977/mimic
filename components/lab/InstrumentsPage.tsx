@@ -1,21 +1,25 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays, CalendarRange, CalendarX2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, Moon, Hourglass, CheckCircle2, Users, CalendarDays, CalendarRange, CalendarX2, Star } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, peakSeats, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy } from '@/data/lab-data';
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, buildSeriesDays, SeriesMode } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
+import MultiDayFields from './MultiDayFields';
 
 const EPS = 1e-9;
 
 export default function InstrumentsPage() {
-  const { user, permissions, bookings, addBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings } = useLabContext();
+  const { user, permissions, bookings, addBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries, instruments: mockInstruments, locations, users, bookingSettings, canManageAllBookings, favoriteInstrumentIds, toggleFavoriteInstrument } = useLabContext();
   const canBook = permissions.canBook; // guests: read-only calendar (also enforced server-side by RLS)
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const categories = useMemo(() => ['All', ...Array.from(new Set(mockInstruments.map(i => i.category)))], [mockInstruments]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  // Personal favourites (star on the cards): a filter on top of type / room
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const isFavorite = (id: string) => favoriteInstrumentIds.includes(id);
   // locationId is authoritative; the location text is a copy that goes stale on rename
   const locName = (i: { locationId?: string; location?: string }) =>
     locations.find(l => l.id === i.locationId)?.name || i.location || '—';
@@ -32,9 +36,10 @@ export default function InstrumentsPage() {
   const [bookStartHour, setBookStartHour] = useState(bookingSettings.workStartHour);
   const [bookEndHour, setBookEndHour] = useState(bookingSettings.workStartHour + 1);
   const [bookNotes, setBookNotes] = useState('');
-  // Multi-day series (instruments with policy.multiDay): last day, weekends on/off
+  // Multi-day series (instruments with policy.multiDay): last day, weekends on/off, shape
   const [bookUntil, setBookUntil] = useState('');
   const [skipWeekends, setSkipWeekends] = useState(true);
+  const [seriesMode, setSeriesMode] = useState<SeriesMode>('continuous');
   const [bookError, setBookError] = useState('');
   const [booking, setBooking] = useState(false);
   const [search, setSearch] = useState('');
@@ -57,10 +62,11 @@ export default function InstrumentsPage() {
       const matchCat = selectedCategory === 'All' || i.category === selectedCategory;
       const matchLoc = selectedLocation === 'All' || locName(i) === selectedLocation;
       const matchSearch = !search || i.name.toLowerCase().includes(search.toLowerCase());
-      return matchCat && matchLoc && matchSearch;
+      const matchFav = !onlyFavorites || favoriteInstrumentIds.includes(i.id);
+      return matchCat && matchLoc && matchSearch && matchFav;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedLocation, search, mockInstruments, locations]);
+  }, [selectedCategory, selectedLocation, search, mockInstruments, locations, onlyFavorites, favoriteInstrumentIds]);
 
   const instrument = mockInstruments.find(i => i.id === selectedInstrument);
   const dayBookings = bookings.filter(b => b.instrumentId === selectedInstrument && b.date === selectedDate);
@@ -115,58 +121,53 @@ export default function InstrumentsPage() {
     setBookNotes('');
     setBookUntil('');
     setSkipWeekends(true);
+    setSeriesMode('continuous');
     setBookError('');
     setShowBookingModal(true);
   };
 
-  // Dates of the series being composed in the form (selected date → until), or [] for a single day
-  const seriesDates = (() => {
-    if (!policy?.multiDay || !bookUntil || bookUntil <= selectedDate) return [];
-    const out: string[] = [];
-    for (let i = 0; out.length <= 31; i++) {
-      const ds = addDaysStr(selectedDate, i);
-      if (ds > bookUntil) break;
-      const dow = new Date(ds + 'T12:00:00').getDay();
-      if (skipWeekends && (dow === 0 || dow === 6)) continue;
-      out.push(ds);
-    }
-    return out;
-  })();
-  const isSeries = seriesDates.length > 1;
-  // First day of the series (after the selected one) that is already full at these hours
+  // Days of the series being composed in the form (selected date → until, each with its hours), or [] for a single day
+  const seriesDays = policy?.multiDay
+    ? buildSeriesDays({ from: selectedDate, until: bookUntil, startHour: bookStartHour, endHour: bookEndHour, skipWeekends, mode: seriesMode, settings: bookingSettings })
+    : [];
+  const isSeries = seriesDays.length > 1;
+  // Hours actually booked on the selected (first) day: the form's hours, or the series' first day
+  const firstStart = isSeries ? seriesDays[0].startHour : bookStartHour;
+  const firstEnd = isSeries ? seriesDays[0].endHour : bookEndHour;
+  // First day of the series that is already full at its hours
   const seriesConflictDay = isSeries
-    ? seriesDates.find(ds => selectedInstrument && isSlotFull(bookings, instrument, selectedInstrument, ds, bookStartHour, bookEndHour)) : undefined;
+    ? seriesDays.find(d => selectedInstrument && isSlotFull(bookings, instrument, selectedInstrument, d.date, d.startHour, d.endHour))?.date : undefined;
 
   const handleBook = async () => {
     if (!selectedInstrument || !isCertified || !canBook) return;
     setBookError('');
-    if (bookEndHour <= bookStartHour) { setBookError('End time must be after start time.'); return; }
+    if (firstEnd <= firstStart) { setBookError('End time must be after start time.'); return; }
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
-    if (!canManageAllBookings && !isBookableTime(policy, selectedDate, bookStartHour, bookEndHour, todayStr, nowHour)) {
+    if (!canManageAllBookings && !isBookableTime(policy, selectedDate, firstStart, firstEnd, todayStr, nowHour)) {
       setBookError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time slot in the past.'); return;
     }
-    if (hasConflict(bookStartHour, bookEndHour)) { setBookError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
+    if (hasConflict(firstStart, firstEnd)) { setBookError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
     if (!canManageAllBookings) {
       const policyError = validateBookingPolicy({
         instrument, bookings, userId: user.id, role: user.role, date: selectedDate,
-        startHour: bookStartHour, endHour: bookEndHour, today: todayStr,
+        startHour: firstStart, endHour: firstEnd, today: todayStr,
       });
       if (policyError) { setBookError(policyError); return; }
     }
 
     if (isSeries) {
-      if (seriesDates.length > 31) { setBookError('A series covers at most 31 days.'); return; }
+      if (seriesDays.length > 31) { setBookError('A series covers at most 31 days.'); return; }
       if (!canManageAllBookings) {
-        for (const ds of seriesDates) {
-          if (lastBookableDate && ds > lastBookableDate) { setBookError(`${formatDate(ds)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
-          const err = validateBookingPolicy({ instrument, bookings, userId: user.id, role: user.role, date: ds, startHour: bookStartHour, endHour: bookEndHour, today: todayStr });
-          if (err) { setBookError(`${formatDate(ds)}: ${err}`); return; }
+        for (const d of seriesDays) {
+          if (lastBookableDate && d.date > lastBookableDate) { setBookError(`${formatDate(d.date)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
+          const err = validateBookingPolicy({ instrument, bookings, userId: user.id, role: user.role, date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
+          if (err) { setBookError(`${formatDate(d.date)}: ${err}`); return; }
         }
       }
       if (seriesConflictDay) { setBookError(`${formatDate(seriesConflictDay)} is already taken at these hours.`); return; }
       setBooking(true);
       // All-or-nothing on the server (RLS + policy trigger on every day).
-      const err = await addBookingSeries({ instrumentId: selectedInstrument, dates: seriesDates, startHour: bookStartHour, endHour: bookEndHour, notes: bookNotes });
+      const err = await addBookingSeries({ instrumentId: selectedInstrument, days: seriesDays, notes: bookNotes });
       setBooking(false);
       if (err) { setBookError(`Series refused — nothing was booked. ${err}`); return; }
       setShowBookingModal(false);
@@ -223,6 +224,15 @@ export default function InstrumentsPage() {
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 font-manrope w-16 shrink-0">Type</span>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <button
+                onClick={() => setOnlyFavorites(v => !v)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all flex items-center gap-1 ${
+                  onlyFavorites ? 'bg-amber-400 text-white' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                }`}
+                title={favoriteInstrumentIds.length ? 'Only my favourites' : 'Star an instrument to add it to your favourites'}
+              >
+                <Star size={12} fill={onlyFavorites ? 'currentColor' : 'none'} /> Favourites{favoriteInstrumentIds.length ? ` (${favoriteInstrumentIds.length})` : ''}
+              </button>
               {categories.map(cat => (
                 <button
                   key={cat}
@@ -255,24 +265,42 @@ export default function InstrumentsPage() {
         </div>
 
         {filteredInstruments.length === 0 && (
-          <p className="text-center py-10 text-sm text-gray-400 font-manrope">No instrument matches these filters.</p>
+          <p className="text-center py-10 text-sm text-gray-400 font-manrope">
+            {onlyFavorites && favoriteInstrumentIds.length === 0 ? 'No favourites yet — open an instrument and click its star, or use the star on each card.' : 'No instrument matches these filters.'}
+          </p>
         )}
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredInstruments.map(inst => {
             const certified = !inst.requiresCertification || user.certifications.includes(inst.id);
             const todayBookings = bookings.filter(b => b.instrumentId === inst.id && b.date === todayStr);
+            const fav = isFavorite(inst.id);
             return (
-              <button
+              <div
                 key={inst.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedInstrument(inst.id)}
-                className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all text-left"
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedInstrument(inst.id); } }}
+                className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all text-left cursor-pointer"
               >
                 <div className="flex items-start justify-between mb-2">
                   <span className="text-2xl">{inst.icon}</span>
-                  {inst.requiresCertification && !certified && (
-                    <Lock size={14} className="text-red-400" />
-                  )}
+                  <span className="flex items-center gap-1.5">
+                    {inst.requiresCertification && !certified && (
+                      <Lock size={14} className="text-red-400" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); toggleFavoriteInstrument(inst.id); }}
+                      className={`p-1 -m-1 rounded-lg transition-colors ${fav ? 'text-amber-400 hover:text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
+                      title={fav ? 'Remove from favourites' : 'Add to favourites'}
+                      aria-label={fav ? 'Remove from favourites' : 'Add to favourites'}
+                      aria-pressed={fav}
+                    >
+                      <Star size={15} fill={fav ? 'currentColor' : 'none'} />
+                    </button>
+                  </span>
                 </div>
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope">{inst.name}</h3>
                 <p className="text-xs text-gray-500 font-manrope mt-0.5">{inst.description}</p>
@@ -291,7 +319,7 @@ export default function InstrumentsPage() {
                     {certified ? 'Certified' : 'Certification Required'}
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
@@ -300,7 +328,9 @@ export default function InstrumentsPage() {
   }
 
   // ── Selected instrument: calendar + timeline ──
-  const endOptions = [...slots.filter(s => s > bookStartHour + EPS), bookingSettings.openEndHour];
+  // In a continuous series the end hour belongs to the LAST day, so it may be earlier than the start.
+  const continuousSeries = isSeries && seriesMode === 'continuous';
+  const endOptions = [...slots.filter(s => continuousSeries ? s > bookingSettings.openStartHour + EPS : s > bookStartHour + EPS), bookingSettings.openEndHour];
 
   return (
     <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-4">
@@ -312,6 +342,18 @@ export default function InstrumentsPage() {
           <div className="flex items-center gap-2">
             <span className="text-xl">{instrument?.icon}</span>
             <h1 className="text-lg font-bold text-gray-900 font-manrope">{instrument?.name}</h1>
+            {instrument && (
+              <button
+                type="button"
+                onClick={() => toggleFavoriteInstrument(instrument.id)}
+                className={`p-1 rounded-lg transition-colors ${isFavorite(instrument.id) ? 'text-amber-400 hover:text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
+                title={isFavorite(instrument.id) ? 'Remove from favourites' : 'Add to favourites'}
+                aria-label={isFavorite(instrument.id) ? 'Remove from favourites' : 'Add to favourites'}
+                aria-pressed={isFavorite(instrument.id)}
+              >
+                <Star size={16} fill={isFavorite(instrument.id) ? 'currentColor' : 'none'} />
+              </button>
+            )}
           </div>
           <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument ? locName(instrument) : ''} &middot; {instrument?.description}</p>
           {instrument?.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{instrument.manufacturer}{instrument.model ? ` ${instrument.model}` : ''}{instrument.serialNumber ? ` · S/N ${instrument.serialNumber}` : ''}</p>}
@@ -734,17 +776,17 @@ export default function InstrumentsPage() {
               ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start Time</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Start Time{continuousSeries ? <span className="text-gray-400 font-normal"> (first day)</span> : ''}</label>
                   <select
                     value={bookStartHour}
-                    onChange={e => { const v = Number(e.target.value); setBookStartHour(v); if (bookEndHour <= v) setBookEndHour(Math.min(v + step, bookingSettings.openEndHour)); }}
+                    onChange={e => { const v = Number(e.target.value); setBookStartHour(v); if (!continuousSeries && bookEndHour <= v) setBookEndHour(Math.min(v + step, bookingSettings.openEndHour)); }}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
                   >
                     {slots.map(h => <option key={h} value={h}>{formatTime(h)}{isWorkingHour(h, bookingSettings) ? '' : ' (extra)'}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">End Time</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">End Time{continuousSeries ? <span className="text-gray-400 font-normal"> (last day)</span> : ''}</label>
                   <select
                     value={bookEndHour}
                     onChange={e => setBookEndHour(Number(e.target.value))}
@@ -756,7 +798,7 @@ export default function InstrumentsPage() {
               </div>
               )}
 
-              {!fixedSlots && isExtraHours(bookStartHour, bookEndHour, bookingSettings) && (
+              {!fixedSlots && !continuousSeries && isExtraHours(bookStartHour, bookEndHour, bookingSettings) && (
                 <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
                   <Moon size={13} className="shrink-0" />
                   <span>This booking is outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
@@ -781,32 +823,16 @@ export default function InstrumentsPage() {
               </div>
 
               {policy?.multiDay && (
-                <div className="bg-gray-50 rounded-xl p-3 space-y-2">
-                  <label className="block text-xs font-medium text-gray-700 font-manrope">Repeat every day until <span className="text-gray-400 font-normal">(optional — same hours each day)</span></label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
-                      type="date"
-                      value={bookUntil}
-                      min={addDaysStr(selectedDate, 1)}
-                      max={lastBookableDate || addDaysStr(selectedDate, 31)}
-                      onChange={e => setBookUntil(e.target.value)}
-                      className="px-3 py-2 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none"
-                    />
-                    <label className="flex items-center gap-1.5 text-xs text-gray-600 font-manrope cursor-pointer">
-                      <input type="checkbox" checked={skipWeekends} onChange={e => setSkipWeekends(e.target.checked)} className="rounded" /> Skip weekends
-                    </label>
-                    {bookUntil && <button onClick={() => setBookUntil('')} className="text-xs text-gray-400 hover:text-gray-600 font-manrope">clear</button>}
-                  </div>
-                  {isSeries && (
-                    <p className={`text-[11px] font-manrope ${seriesConflictDay ? 'text-red-600' : 'text-gray-500'}`}>
-                      {seriesDates.length} bookings, {formatDate(seriesDates[0])} → {formatDate(seriesDates[seriesDates.length - 1])}, {formatTime(bookStartHour)}–{formatTime(bookEndHour)} each day.
-                      {seriesConflictDay ? ` ${formatDate(seriesConflictDay)} is already taken.` : ' Either every day is booked or none.'}
-                    </p>
-                  )}
-                </div>
+                <MultiDayFields
+                  from={selectedDate} until={bookUntil} onUntil={setBookUntil}
+                  skipWeekends={skipWeekends} onSkipWeekends={setSkipWeekends}
+                  mode={seriesMode} onMode={setSeriesMode}
+                  days={seriesDays} conflictDay={seriesConflictDay}
+                  maxUntil={lastBookableDate} startHour={bookStartHour} endHour={bookEndHour} settings={bookingSettings}
+                />
               )}
 
-              {(bookError || hasConflict(bookStartHour, bookEndHour)) && (
+              {(bookError || hasConflict(firstStart, firstEnd)) && (
                 <div className="bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-manrope">
                   {bookError || (capacity > 1 ? `All ${capacity} seats are taken in this time range.` : 'Time conflict! This slot is already booked.')}
                 </div>
@@ -814,10 +840,10 @@ export default function InstrumentsPage() {
 
               <button
                 onClick={handleBook}
-                disabled={booking || hasConflict(bookStartHour, bookEndHour) || bookEndHour <= bookStartHour || Boolean(seriesConflictDay)}
+                disabled={booking || hasConflict(firstStart, firstEnd) || firstEnd <= firstStart || Boolean(seriesConflictDay)}
                 className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {booking ? (isSeries ? 'Booking every day…' : 'Checking availability…') : isSeries ? `Book ${seriesDates.length} days` : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
+                {booking ? (isSeries ? 'Booking every day…' : 'Checking availability…') : isSeries ? `Book ${seriesDays.length} days` : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
               </button>
             </div>
           </div>

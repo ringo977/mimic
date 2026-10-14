@@ -68,7 +68,10 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
     const kind: ReagentKind = form.kind ?? 'item';
     const clean: Reagent = {
       ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
-      kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: kind === 'stock' ? (form.responsibleUserIds ?? []) : [],
+      // Responsibles on any kind (beta round 4): on a stock they are the only
+      // ones who may take from it; on every kind they may restock it even
+      // without canAddReagents (PDMS kits looked after by a PhD).
+      kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: form.responsibleUserIds ?? [],
     };
     if (initial) {
       // Quantities move only through Withdraw / Restock (logged, atomic RPC).
@@ -183,21 +186,24 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
                    : 'Plain consumable (kits, plasticware, antibodies…). No access restriction.'}
                 </p>
               </Field>
-              {form.kind === 'stock' && (
-                <Field label="Responsible (1–2 people)">
-                  <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    {(form.responsibleUserIds ?? []).map(id => {
-                      const u = users.find(x => x.id === id);
-                      return <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#102C53] text-white text-[11px] font-manrope">{u?.name || id}<button type="button" onClick={() => setForm({ ...form, responsibleUserIds: (form.responsibleUserIds ?? []).filter(x => x !== id) })} className="hover:text-red-200" aria-label="Remove"><X size={11} /></button></span>;
-                    })}
-                    {!(form.responsibleUserIds ?? []).length && <span className="text-[11px] text-amber-600 font-manrope">Nobody yet — only admin/PI/lab manager will be able to take from this stock.</span>}
-                  </div>
-                  <select value="" onChange={e => { const id = e.target.value; if (id && !(form.responsibleUserIds ?? []).includes(id)) setForm({ ...form, responsibleUserIds: [...(form.responsibleUserIds ?? []), id] }); }} className={inputCls}>
-                    <option value="">+ add a responsible…</option>
-                    {activeUsers.filter(u => !(form.responsibleUserIds ?? []).includes(u.id)).map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
-                  </select>
-                </Field>
-              )}
+              <Field label={form.kind === 'stock' ? 'Responsible (1–2 people)' : 'Responsible (optional)'}>
+                <div className="flex flex-wrap gap-1.5 mb-1.5">
+                  {(form.responsibleUserIds ?? []).map(id => {
+                    const u = users.find(x => x.id === id);
+                    return <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#102C53] text-white text-[11px] font-manrope">{u?.name || id}<button type="button" onClick={() => setForm({ ...form, responsibleUserIds: (form.responsibleUserIds ?? []).filter(x => x !== id) })} className="hover:text-red-200" aria-label="Remove"><X size={11} /></button></span>;
+                  })}
+                  {!(form.responsibleUserIds ?? []).length && (
+                    <span className={`text-[11px] font-manrope ${form.kind === 'stock' ? 'text-amber-600' : 'text-gray-400'}`}>
+                      {form.kind === 'stock' ? 'Nobody yet — only admin/PI/lab manager will be able to take from this stock.' : 'Nobody — only roles with “add reagents” can restock it.'}
+                    </span>
+                  )}
+                </div>
+                <select value="" onChange={e => { const id = e.target.value; if (id && !(form.responsibleUserIds ?? []).includes(id)) setForm({ ...form, responsibleUserIds: [...(form.responsibleUserIds ?? []), id] }); }} className={inputCls}>
+                  <option value="">+ add a responsible…</option>
+                  {activeUsers.filter(u => !(form.responsibleUserIds ?? []).includes(u.id)).map(u => <option key={u.id} value={u.id}>{u.name} ({u.abbreviation})</option>)}
+                </select>
+                <p className="text-[10px] text-gray-400 font-manrope mt-1">Responsibles may restock this item whatever their role (e.g. the PhD who keeps the PDMS kits){form.kind === 'stock' ? ', and are the only ones who may take from a stock' : ''}.</p>
+              </Field>
               {form.kind === 'working' && (
                 <Field label="Prepared from stock">
                   <select value={form.derivedFromId || ''} onChange={e => setForm({ ...form, derivedFromId: e.target.value || undefined })} className={inputCls}>
@@ -208,9 +214,9 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
               )}
             </div>
           ) : (
-            (form.kind ?? 'item') !== 'item' && (
+            ((form.kind ?? 'item') !== 'item' || (form.responsibleUserIds ?? []).length > 0) && (
               <p className="text-[11px] text-gray-400 font-manrope">
-                {reagentKindLabel[form.kind ?? 'item']}{form.kind === 'stock' && (form.responsibleUserIds ?? []).length ? ` — responsible: ${(form.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || id).join(', ')}` : ''}. Classification and responsibles are set by the lab manager.
+                {reagentKindLabel[form.kind ?? 'item']}{(form.responsibleUserIds ?? []).length ? ` — responsible: ${(form.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || id).join(', ')}` : ''}. Classification and responsibles are set by the lab manager.
               </p>
             )
           )}
