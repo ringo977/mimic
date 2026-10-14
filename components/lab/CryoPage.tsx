@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes, History } from 'lucide-react';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
@@ -72,11 +72,25 @@ export default function CryoPage() {
 
   const rackLabel = (r?: number) => (r ? unit?.rackLabels?.[r - 1] : undefined);
 
-  /** Vials in a box: by box_id, with a fallback on the legacy rack/box coordinates */
-  const vialsInBox = (b: { id: string; storageUnitId: string; rack?: number; number: number }) =>
-    cryoVials.filter(v => v.boxId
-      ? v.boxId === b.id
-      : v.storageUnitId === b.storageUnitId && v.rack === (b.rack || 0) && v.box === b.number);
+  /** Vials grouped per box once per inventory change — by box_id, with a
+   *  fallback on the legacy rack/box coordinates. The box buttons, the rack
+   *  counters and "Find space" all read from here instead of filtering the
+   *  whole inventory for every box on every render (slow with many vials). */
+  const vialsByBox = useMemo(() => {
+    const m = new Map<string, typeof cryoVials>();
+    for (const v of cryoVials) {
+      const k = v.boxId || `${v.storageUnitId}|${v.rack || 0}|${v.box}`;
+      const arr = m.get(k);
+      if (arr) arr.push(v); else m.set(k, [v]);
+    }
+    return m;
+  }, [cryoVials]);
+  const EMPTY: typeof cryoVials = useMemo(() => [], []);
+  const vialsInBox = (b: { id: string; storageUnitId: string; rack?: number; number: number }) => {
+    const byId = vialsByBox.get(b.id);
+    const legacy = vialsByBox.get(`${b.storageUnitId}|${b.rack || 0}|${b.number}`);
+    return byId && legacy ? [...byId, ...legacy] : byId ?? legacy ?? EMPTY;
+  };
 
   const findMinCells = parseCells(findCells) || 0;
   const findActive = Boolean(findLine) || findPassage !== '' || Boolean(findUser) || findMinCells > 0;
@@ -102,13 +116,8 @@ export default function CryoPage() {
     setSelectedVial(v.id);
   };
 
-  const boxVials = useMemo(
-    () => box
-      ? cryoVials.filter(v => v.boxId
-          ? v.boxId === box.id
-          : v.storageUnitId === box.storageUnitId && v.rack === (box.rack || 0) && v.box === box.number)
-      : [],
-    [box, cryoVials]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const boxVials = useMemo(() => box ? vialsInBox(box) : EMPTY, [box, vialsByBox]);
   // Colours are per box: cell types keep their fixed colour, every other
   // name gets a distinct colour within this box (≤ 25 or 81 names).
   // One colour per cell line across the WHOLE inventory (same colour in every
@@ -747,7 +756,15 @@ export default function CryoPage() {
 // ============================================================
 type VialSortKey = 'cellLine' | 'passage' | 'cells' | 'storage' | 'position' | 'userName' | 'date';
 
-function VialInventory() {
+// Rows rendered before "Show more": the full inventory can run to thousands
+// of vials, and rendering them all made every click on the page above
+// (unit, rack, box, vial) re-lay out the whole table — scrolling stuttered
+// for a moment after each selection (tester report, Oct 2026).
+const INVENTORY_PAGE = 100;
+
+// memo: the table depends only on context, so a selection change in the
+// box view above must not re-render it.
+const VialInventory = memo(function VialInventory() {
   const { user, cryoVials, removeCryoVial, storageUnits, storageBoxes, permissions, cellTypes } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   // Mirror of the cryo_vials_delete RLS policy: anyone with manage_cryo
@@ -757,14 +774,17 @@ function VialInventory() {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<VialSortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
+  const [limit, setLimit] = useState(INVENTORY_PAGE);
 
   const toggleSort = (key: VialSortKey) => {
     if (sortKey === key) { setSortAsc(!sortAsc); } else { setSortKey(key); setSortAsc(true); }
   };
 
-  const getUnitName = (id: string) => { const u = storageUnits.find(s => s.id === id); return u ? `${storageUnitTypes[u.type]?.icon || ''} ${u.name}` : id; };
+  const unitNames = useMemo(() => new Map(storageUnits.map(u => [u.id, `${storageUnitTypes[u.type]?.icon || ''} ${u.name}`])), [storageUnits]);
+  const boxById = useMemo(() => new Map(storageBoxes.map(b => [b.id, b])), [storageBoxes]);
+  const getUnitName = (id: string) => unitNames.get(id) ?? id;
   const getPositionStr = (v: typeof cryoVials[0]) =>
-    boxPositionLabel(storageBoxes.find(b => b.id === v.boxId), v.row, v.col);
+    boxPositionLabel(v.boxId ? boxById.get(v.boxId) : undefined, v.row, v.col);
 
   const filtered = useMemo(() => {
     let list = [...cryoVials];
@@ -793,7 +813,8 @@ function VialInventory() {
     });
     return list;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cryoVials, search, sortKey, sortAsc]);
+  }, [cryoVials, search, sortKey, sortAsc, unitNames, boxById]);
+  const shown = filtered.length > limit ? filtered.slice(0, limit) : filtered;
   // Same rule as the box view: fixed colour for cell types, distinct per-view colour for the rest.
   const lineColors = useMemo(() => viewCellLineColors(cryoVials.map(v => v.cellLine), cellTypes), [cryoVials, cellTypes]);
   const getCellLineColor = (cellLine: string) => lineColors.get(cellLine) || cellLineColor(cellLine, cellTypes);
@@ -814,7 +835,7 @@ function VialInventory() {
         <h2 className="text-sm font-semibold text-gray-900 font-manrope whitespace-nowrap">All Vials ({cryoVials.length})</h2>
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
+          <input value={search} onChange={e => { setSearch(e.target.value); setLimit(INVENTORY_PAGE); }}
             placeholder="Search cell line, person, notes, cells (1M)..."
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
         </div>
@@ -848,7 +869,7 @@ function VialInventory() {
             {permissions.canManageCryo && <th className="px-3 py-2.5 text-right font-semibold text-gray-700"></th>}
           </tr></thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map(v => (
+            {shown.map(v => (
               <tr key={v.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-gray-900">
                   <span className="inline-flex items-center gap-1.5">
@@ -876,7 +897,19 @@ function VialInventory() {
           </tbody>
         </table>
       </div>
+      {filtered.length > shown.length && (
+        <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap items-center gap-3 text-xs font-manrope">
+          <span className="text-gray-500">Showing {shown.length} of {filtered.length}</span>
+          <button onClick={() => setLimit(l => l + INVENTORY_PAGE * 2)}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">
+            Show {Math.min(INVENTORY_PAGE * 2, filtered.length - shown.length)} more
+          </button>
+          <button onClick={() => setLimit(filtered.length)} className="text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline">
+            Show all
+          </button>
+        </div>
+      )}
       <ConfirmDialog />
     </div>
   );
-}
+});
