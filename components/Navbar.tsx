@@ -23,7 +23,7 @@ export default function Navbar() {
   return (
     <>
       {/* Mobile Top Bar - Logo Poli (only mobile) */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
+      <div className="xl:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
         <div className="flex items-center h-12 px-4">
           <img
             src={`${siteBasePath}/images/logos/Logotipo_POLIMI_Blu.png`}
@@ -38,7 +38,7 @@ export default function Navbar() {
 
       {/* Main Header - Frosting Effect */}
       <header 
-        className="fixed top-0 lg:top-0 top-12 left-0 right-0 z-40 bg-white/90 backdrop-blur-md shadow-sm"
+        className="fixed top-0 xl:top-0 top-12 left-0 right-0 z-40 bg-white/90 backdrop-blur-md shadow-sm"
         role="banner"
         style={{
           backdropFilter: 'blur(10px)',
@@ -46,7 +46,7 @@ export default function Navbar() {
         }}
       >
         <nav 
-          className="max-w-screen-2xl mx-auto px-6 lg:px-78"
+          className="max-w-screen-2xl mx-auto px-6 xl:px-8"
           aria-label="Main navigation"
         >
           <div className="flex items-center justify-between h-20">
@@ -55,22 +55,24 @@ export default function Navbar() {
               {/* Desktop: Logo combo PoliMi + MiMic */}
               <Link 
                 href="/" 
-                className="hidden lg:flex items-center hover:opacity-80 transition-opacity"
+                className="hidden xl:flex shrink-0 items-center hover:opacity-80 transition-opacity"
                 aria-label="Homepage MiMic Laboratory"
               >
+                {/* shrink-0 + fixed height: the logo must never be squeezed
+                    by the nav links (it was distorted on iPad landscape). */}
                 <img
                   src={`${siteBasePath}/images/logos/Logo_POLIMI_Bandiera_blu_trasp.png`}
                   alt="MiMic Laboratory - Politecnico di Milano"
                   width={1200}
                   height={158}
-                  className="h-14 w-auto"
+                  className="h-12 2xl:h-14 w-auto shrink-0"
                 />
               </Link>
 
               {/* Mobile: Logo MiMic solo */}
               <Link 
                 href="/" 
-                className="lg:hidden flex items-center hover:opacity-80 transition-opacity"
+                className="xl:hidden flex items-center hover:opacity-80 transition-opacity"
                 aria-label="Homepage MiMic Laboratory"
               >
                 <img
@@ -84,19 +86,19 @@ export default function Navbar() {
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-1">
+            <div className="hidden xl:flex items-center space-x-1">
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-polimi-blue-heritage hover:text-polimi-bright-blue hover:bg-polimi-bright-blue/10 px-4 py-2 rounded-md transition-all duration-200 font-manrope font-medium text-sm"
+                  className="text-polimi-blue-heritage hover:text-polimi-bright-blue hover:bg-polimi-bright-blue/10 px-3 2xl:px-4 py-2 rounded-md transition-all duration-200 font-manrope font-medium text-sm whitespace-nowrap"
                 >
                   {link.label}
                 </Link>
               ))}
               <Link
                 href="/lab"
-                className="flex items-center gap-1.5 ml-2 px-4 py-2 bg-polimi-blue-heritage text-white rounded-lg hover:bg-polimi-blue-heritage/90 transition-all duration-200 font-manrope font-medium text-sm"
+                className="flex shrink-0 items-center gap-1.5 ml-2 px-4 py-2 bg-polimi-blue-heritage text-white rounded-lg hover:bg-polimi-blue-heritage/90 transition-all duration-200 font-manrope font-medium text-sm whitespace-nowrap"
               >
                 <FlaskConical size={15} />
                 Lab Login
@@ -106,7 +108,7 @@ export default function Navbar() {
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="lg:hidden text-polimi-blue-heritage hover:text-polimi-bright-blue transition-colors p-2"
+              className="xl:hidden text-polimi-blue-heritage hover:text-polimi-bright-blue transition-colors p-2"
               aria-label={isOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={isOpen}
               aria-controls="mobile-menu"
@@ -117,7 +119,7 @@ export default function Navbar() {
 
           {/* Mobile Navigation */}
           {isOpen && (
-            <div id="mobile-menu" className="lg:hidden pb-6 animate-in fade-in slide-in-from-top-2 duration-200" onKeyDown={(e) => { if (e.key === 'Escape') setIsOpen(false); }}>
+            <div id="mobile-menu" className="xl:hidden pb-6 animate-in fade-in slide-in-from-top-2 duration-200" onKeyDown={(e) => { if (e.key === 'Escape') setIsOpen(false); }}>
               <div className="flex flex-col space-y-2">
                 {navLinks.map((link) => (
                   <Link

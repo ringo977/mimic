@@ -124,7 +124,7 @@ export default function RootLayout({
         />
         <GridBackground />
         <Navbar />
-        <main id="main-content" tabIndex={-1} className="min-h-screen pt-32 lg:pt-20 outline-none">
+        <main id="main-content" tabIndex={-1} className="min-h-screen pt-32 xl:pt-20 outline-none">
           {children}
         </main>
         <Footer />
