@@ -18,6 +18,10 @@
  * Key: Supabase → Project Settings → API → service_role (Reveal). It bypasses
  * RLS: use it only here, on your machine, and never paste it anywhere else.
  * Add --dry-run to see what would happen without creating anything.
+ *
+ * Fixing a wrong address (password unchanged; also update lab_users.email):
+ *
+ *   node scripts/create-lab-accounts.mjs --rename old@x.it=new@y.it [--rename ...]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
@@ -27,9 +31,32 @@ const URL = process.env.SUPABASE_URL || 'https://vfruyyrpriymhmelgidr.supabase.c
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const file = process.argv.find(a => a.endsWith('.csv'));
 const dry = process.argv.includes('--dry-run');
+const renames = process.argv.flatMap((a, i) => a === '--rename' && process.argv[i + 1] ? [process.argv[i + 1]] : [])
+  .map(s => s.split('=').map(x => x.trim().toLowerCase())).filter(([o, n]) => o && n);
 
-if (!file) { console.error('usage: node scripts/create-lab-accounts.mjs <list.csv> [--dry-run]'); process.exit(1); }
+if (!file && !renames.length) { console.error('usage: node scripts/create-lab-accounts.mjs <list.csv> [--dry-run] | --rename old=new'); process.exit(1); }
 if (!KEY && !dry) { console.error('SUPABASE_SERVICE_ROLE_KEY is not set (see the header of this script)'); process.exit(1); }
+
+if (renames.length) {
+  const sb = createClient(URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const byEmail = new Map();
+  for (let page = 1; ; page++) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw error;
+    for (const u of data.users) byEmail.set((u.email || '').toLowerCase(), u);
+    if (data.users.length < 200) break;
+  }
+  for (const [oldEmail, newEmail] of renames) {
+    const u = byEmail.get(oldEmail);
+    if (!u) { console.log(`not found: ${oldEmail}`); continue; }
+    if (byEmail.has(newEmail)) { console.log(`already taken: ${newEmail}`); continue; }
+    if (u.last_sign_in_at) console.log(`note: ${oldEmail} has already signed in — the lab_users row is linked by id, only the login email changes`);
+    const { error } = await sb.auth.admin.updateUserById(u.id, { email: newEmail, email_confirm: true });
+    console.log(error ? `FAILED ${oldEmail}: ${error.message}` : `renamed ${oldEmail} -> ${newEmail}`);
+  }
+  console.log('\nnow run in the SQL editor, for each one:\n  UPDATE lab_users SET email = \'new\' WHERE lower(email) = \'old\';');
+  process.exit(0);
+}
 
 // Temporary password that satisfies the app rule (8+, upper, lower, digit)
 // and is easy to read aloud / type on a phone: no 0/O, 1/l/I.
