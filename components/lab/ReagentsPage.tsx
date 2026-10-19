@@ -117,6 +117,7 @@ export default function ReagentsPage() {
   };
 
   const isExpiringSoon = (r: typeof reagents[0]) => {
+    if (!r.expiryDate) return false;   // most imported items have no expiry on record
     const days = (new Date(r.expiryDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
     return days < 60;
   };
@@ -255,9 +256,11 @@ export default function ReagentsPage() {
                 const label = reagentPlaceLabel(r, storageUnits, storageBoxes);
                 return su ? `${storageUnitTypes[su.type]?.icon || ''} ${label}` : label;
               })()}</span>
-              <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
-                Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
-              </span>
+              {r.expiryDate && (
+                <span className={isExpiringSoon(r) ? 'text-red-500 font-medium' : ''}>
+                  Exp: {new Date(r.expiryDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}
+                </span>
+              )}
               {r.lot && <span className="font-mono">lot {r.lot}</span>}
               {r.owner && <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{r.owner}</span>}
             </div>
