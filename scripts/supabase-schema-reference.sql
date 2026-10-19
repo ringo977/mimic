@@ -79,6 +79,10 @@
 --      then supabase-2026-10-beta-round4b.sql    (lab_can re-asserted at v2 — the
 --        external-PhD widening was withdrawn; record_row_history v2 ignores
 --        favourites-only updates of lab_users)
+--      then supabase-2026-10-census-stefania.sql (data only: Stefania's physical
+--        count of 19/10 — 120 consumable quantities/units/expiries, owners of
+--        the −80 °C box, 6 vials removed, 8 added. Only needed when restoring
+--        from a backup older than that date; a later backup already has it)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
