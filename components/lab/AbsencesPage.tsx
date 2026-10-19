@@ -36,6 +36,21 @@ function absenceRangeLabel(a: Absence): string {
     : range;
 }
 
+// Approval card: say plainly what is being asked ("Day off — Tuesday 21 Oct 2026"),
+// not the policy category the form uses ("Day(s) off (1–2 days)").
+const REQUEST_LABEL: Record<AbsenceType, string> = {
+  hours: 'Short leave', day_off: 'Day off', vacation: 'Vacation', smart_working: 'Smart working', sick: 'Sick leave', trip: 'Trip / conference',
+};
+const withWeekday = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+function requestWhen(a: Absence): string {
+  if (a.startDate === a.endDate) {
+    const day = withWeekday(a.startDate);
+    return a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined
+      ? `${day}, ${formatTime(a.startHour)}–${formatTime(a.endHour)}` : day;
+  }
+  return `${withWeekday(a.startDate)} → ${withWeekday(a.endDate)}`;
+}
+
 export default function AbsencesPage() {
   const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences, bookingSettings } = useLabContext();
   const [showForm, setShowForm] = useState(false);
@@ -116,13 +131,34 @@ export default function AbsencesPage() {
           <div className="space-y-2.5">
             {pending.map(a => {
               const Icon = TYPE_ICONS[a.type];
+              const days = workingDaysCovered(a.startDate, a.endDate);
+              const fullDay = absenceTypeMeta[a.type].fullDay && a.type !== 'smart_working';
+              // Context the approver usually has to look up by hand
+              const alsoOut = fullDay ? Array.from(new Set(visibleAbsences
+                .filter(o => o.id !== a.id && o.userId !== a.userId && absenceTypeMeta[o.type].fullDay && o.type !== 'smart_working')
+                .filter(o => o.startDate <= a.endDate && o.endDate >= a.startDate)
+                .map(o => `${o.userName} (${absenceTypeMeta[o.type].short})`))) : [];
+              let swInMonth = 0;
+              if (a.type === 'smart_working') {
+                const m = a.startDate.slice(0, 7);
+                visibleAbsences.filter(o => o.userId === a.userId && o.type === 'smart_working').forEach(o => {
+                  for (let cur = o.startDate; cur <= o.endDate; cur = addDaysStr(cur, 1)) if (cur.slice(0, 7) === m && isWorkingDay(cur)) swInMonth++;
+                });
+              }
+              const monthName = new Date(a.startDate + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' });
               return (
                 <div key={a.id} className="border border-gray-100 rounded-xl p-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: absenceTypeMeta[a.type].color }}><Icon size={14} /></span>
+                  <div className="flex flex-wrap items-start gap-2.5">
+                    <span className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0" style={{ backgroundColor: absenceTypeMeta[a.type].color }}><Icon size={15} /></span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 font-manrope">{a.userName} · {absenceTypeMeta[a.type].label}</p>
-                      <p className="text-xs text-gray-500 font-manrope">{absenceRangeLabel(a)} ({workingDaysCovered(a.startDate, a.endDate)} working day{workingDaysCovered(a.startDate, a.endDate) !== 1 ? 's' : ''}, requested {formatDate(a.requestedAt.split('T')[0])})</p>
+                      <p className="text-sm text-gray-900 font-manrope"><strong>{a.userName}</strong> asks for</p>
+                      <p className="text-sm font-semibold font-manrope mt-0.5" style={{ color: absenceTypeMeta[a.type].color }}>{REQUEST_LABEL[a.type]} <span className="text-gray-900">— {requestWhen(a)}</span></p>
+                      <p className="text-xs text-gray-500 font-manrope mt-1">
+                        {days} working day{days !== 1 ? 's' : ''} · requested {formatDate(a.requestedAt.split('T')[0])}
+                        {a.type === 'smart_working' && <> · smart working in {monthName}: <strong>{swInMonth}/{absenceSettings.swMonthlyCap}</strong> including this</>}
+                        {alsoOut.length > 0 && <> · also out: {alsoOut.join(', ')}</>}
+                        {fullDay && alsoOut.length === 0 && <> · nobody else out</>}
+                      </p>
                     </div>
                     {rejecting?.id !== a.id && (
                       <div className="flex gap-1.5">
@@ -131,9 +167,9 @@ export default function AbsencesPage() {
                       </div>
                     )}
                   </div>
-                  {a.flags && <p className="text-[11px] text-amber-700 font-manrope mt-2 flex items-start gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-0.5" />{a.flags}</p>}
-                  {a.handover && <p className="text-[11px] text-gray-600 font-manrope mt-1"><strong>Handover:</strong> {a.handover}</p>}
-                  {a.notes && <p className="text-[11px] text-gray-500 font-manrope mt-1">{a.notes}</p>}
+                  {a.notes && <p className="text-xs text-gray-700 font-manrope mt-2"><strong>Reason:</strong> {a.notes}</p>}
+                  {a.handover && <p className="text-xs text-gray-700 font-manrope mt-1"><strong>Handover:</strong> {a.handover}</p>}
+                  {a.flags && <p className="text-[11px] text-amber-700 font-manrope mt-2 flex items-start gap-1.5"><AlertTriangle size={12} className="shrink-0 mt-0.5" /><span><strong>Why it needs your approval:</strong> {a.flags}</span></p>}
                   {rejecting?.id === a.id && (
                     <div className="flex gap-2 mt-2">
                       <input autoFocus value={rejecting.note} onChange={e => setRejecting({ id: a.id, note: e.target.value })} placeholder="Reason (optional)…"
