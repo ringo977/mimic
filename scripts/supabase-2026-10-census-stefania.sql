@@ -14,6 +14,8 @@
 --      box but not in the list added (only into empty slots).
 --      NOT inserted (1, slot still declared occupied — ask Stefania):
 --        Box 1 · F9 hCF AXOL D8 P8 ACA/AMA
+--   §3 (added 19/10 after Stefania's answer, run separately): F9 is
+--      hCF AXOL D8 P8 ACA/AMA, the C2C12 PLA P21 there is gone.
 -- ============================================================
 BEGIN;
 SET CONSTRAINTS ALL DEFERRED;
@@ -260,3 +262,27 @@ SELECT count(*) AS census_log_lines FROM log_entries WHERE user_name LIKE 'Stefa
 -- §2: the −80 box as it is now (expect 52 vials; no 'Unknown'; A3 = A549, D9 = HT-29)
 SELECT chr(65 + "row") || (col + 1) AS slot, cell_line, passage, date, user_name
 FROM   cryo_vials WHERE box_id = 'sb-su-1790513907855-6-b1' ORDER BY "row", col;
+
+-- ------------------------------------------------------------
+-- §3 F9 (Stefania, 19/10): hCF AXOL D8 P8 ACA/AMA replaces C2C12 PLA P21.
+--    Idempotent; run on its own after §1–§2.
+-- ------------------------------------------------------------
+BEGIN;
+DELETE FROM cryo_vials
+WHERE  box_id = 'sb-su-1790513907855-6-b1' AND "row" = 5 AND col = 8 AND cell_line ILIKE 'C2C12%';
+
+INSERT INTO cryo_vials (id, cell_line, passage, date, user_id, user_name, storage_unit_id, rack, box, "row", col, notes, box_id)
+SELECT 'cv-' || left(md5('sb-su-1790513907855-6-b1|5|8|hCF AXOL D8|8'), 12),
+       'hCF AXOL D8', 8, '', u.id, 'Alessandro Cacioppo / Alberto Mantegazza',
+       'su-1790513907855-6', 0, 1, 5, 8,
+       'hCF AXOL D8 P8 — found by SBR, inventory 10/2026 (slot previously listed as C2C12 PLA P21, confirmed gone)',
+       'sb-su-1790513907855-6-b1'
+FROM   lab_users u
+WHERE  lower(u.name) = 'alessandro cacioppo'
+AND    NOT EXISTS (SELECT 1 FROM cryo_vials x WHERE x.box_id = 'sb-su-1790513907855-6-b1' AND x."row" = 5 AND x.col = 8)
+ON CONFLICT (id) DO NOTHING;
+COMMIT;
+
+-- §3 check (expect 1 row: F9 · hCF AXOL D8 · 8 · Alessandro Cacioppo / Alberto Mantegazza)
+SELECT chr(65 + "row") || (col + 1) AS slot, cell_line, passage, user_name
+FROM   cryo_vials WHERE box_id = 'sb-su-1790513907855-6-b1' AND "row" = 5 AND col = 8;
