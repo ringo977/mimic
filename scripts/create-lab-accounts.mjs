@@ -85,13 +85,21 @@ async function existingEmails() {
 }
 
 const have = await existingEmails();
+// Since supabase-2026-10-self-signup.sql every account creation must quote the
+// member's registration code (lab_signup_codes); the service role can read it.
+async function signupCode(email) {
+  if (dry) return '';
+  const { data } = await supabase.from('lab_users').select('id, lab_signup_codes(code)').ilike('email', email).maybeSingle();
+  const c = data?.lab_signup_codes;
+  return (Array.isArray(c) ? c[0]?.code : c?.code) || '';
+}
 const created = [], skipped = [], failed = [];
 for (const p of people) {
   if (have.has(p.email)) { skipped.push(p); continue; }
   const password = tempPassword();
   if (dry) { created.push({ ...p, password: '(dry run)' }); continue; }
   const { error } = await supabase.auth.admin.createUser({
-    email: p.email, password, email_confirm: true, user_metadata: { name: p.name },
+    email: p.email, password, email_confirm: true, user_metadata: { name: p.name, signup_code: await signupCode(p.email) },
   });
   if (error) failed.push({ ...p, error: error.message }); else created.push({ ...p, password });
 }

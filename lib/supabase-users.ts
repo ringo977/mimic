@@ -186,3 +186,14 @@ export async function deleteLabUser(id: string): Promise<{ ok: boolean; error?: 
   }
   return { ok: true };
 }
+
+/**
+ * One-time registration code of a member who has not created their login
+ * yet (table lab_signup_codes, RLS: admins and the member's supervisor).
+ * null = no code visible (already signed up, or not yours to see).
+ */
+export async function fetchSignupCode(userId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('lab_signup_codes').select('code').eq('user_id', userId).maybeSingle();
+  if (error || !data) return null;
+  return data.code as string;
+}

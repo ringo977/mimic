@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Mail, Hash, CalendarDays, UserCheck, Award, FolderKanban, CheckCircle2, Circle, GraduationCap } from 'lucide-react';
 import { LabUser, Project, Certification, rolePermissions, generateAbbreviation, formatDate, SUPERVISED_ROLES } from '@/data/lab-data';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
+import { fetchSignupCode } from '@/lib/supabase-users';
 
 // Person card shown when clicking a name. Used by the admin Users tab
 // (showSensitive: person code) and by the members' directory (without it).
@@ -18,6 +19,10 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
 }) {
   const supervisor = users.find(x => x.id === u.supervisorId);
   const supervises = users.filter(x => x.supervisorId === u.id && x.status !== 'alumni');
+  // Registration code of a member who has not created their login yet.
+  // RLS returns it only to admins and to the member's supervisor.
+  const [signupCode, setSignupCode] = useState<string | null>(null);
+  useEffect(() => { let on = true; fetchSignupCode(u.id).then(c => { if (on) setSignupCode(c); }); return () => { on = false; }; }, [u.id]);
   const isAlumni = u.status === 'alumni';
   const myProjects = u.projects.map(id => projects.find(p => p.id === id)?.name || id);
   const myCerts = u.certifications.map(id => ({
@@ -58,6 +63,12 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
           <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
             <p className="text-gray-700 flex items-center gap-2"><Mail size={14} className="text-gray-400 shrink-0" /><a href={`mailto:${u.email}`} className="hover:underline truncate">{u.email}</a></p>
             {showSensitive && u.personCode && <p className="text-gray-700 flex items-center gap-2"><Hash size={14} className="text-gray-400 shrink-0" />Person code: <span className="font-mono">{u.personCode}</span></p>}
+            {signupCode && !isAlumni && (
+              <p className="text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 flex items-center gap-2">
+                <Hash size={14} className="text-amber-500 shrink-0" />
+                <span>No login yet. Registration code for &ldquo;Create account&rdquo;: <span className="font-mono font-bold tracking-widest">{signupCode}</span></span>
+              </p>
+            )}
             {period && <p className="text-gray-700 flex items-center gap-2"><CalendarDays size={14} className="text-gray-400 shrink-0" />{period}</p>}
             {SUPERVISED_ROLES.includes(u.role) && (
               <p className="text-gray-700 flex items-center gap-2"><UserCheck size={14} className="text-gray-400 shrink-0" />

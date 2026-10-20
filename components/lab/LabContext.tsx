@@ -79,7 +79,7 @@ interface LabContextType {
   log: LogEntry[];
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
   users: LabUser[];
-  addUser: (u: LabUser) => void | Promise<void>;
+  addUser: (u: LabUser) => Promise<boolean>;
   updateUser: (u: LabUser) => void | Promise<void>;
   removeUser: (id: string) => void | Promise<void>;
   addNewReagent: (r: Reagent) => void;
@@ -493,9 +493,10 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const addUser = useCallback(async (u: LabUser) => {
     const { user: result, error } = await insertLabUser(u);
     // No optimistic insert: a failed save must not leave a ghost user in the list.
-    if (!result) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return; }
+    if (!result) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return false; }
     setUsers(prev => [...prev, result]);
     addLogEntry({ userId: user.id, userName: user.name, action: `Added user ${u.name}`, category: 'auth', details: `${u.role}, ${u.email}` });
+    return true;
   }, [user, addLogEntry]);
 
   const updateUser = useCallback(async (u: LabUser) => {

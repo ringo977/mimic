@@ -34,29 +34,64 @@ import AuthShell from './AuthShell';
 // Login Screen — Email + Password
 // ============================================================
 function LoginScreen({ authError }: { authError?: string }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setInfo('');
 
     // Clear any stale session on THIS device only (a global sign-out would
     // also revoke the user's sessions on their other devices).
     await supabase.auth.signOut({ scope: 'local' });
 
+    if (mode === 'signup') {
+      // Self-service account for someone already registered by a supervisor
+      // or admin (lab_users row). Server side, trg_lab_signup_guard rejects
+      // any other e-mail; lab_email_registered() is only there to give a
+      // readable message before that happens.
+      const pwdError = validatePassword(password);
+      if (pwdError) { setError(pwdError); setLoading(false); return; }
+      if (password !== confirm) { setError('The two passwords do not match.'); setLoading(false); return; }
+      const { data: check, error: checkError } = await supabase.rpc('lab_signup_precheck', { p_email: email, p_code: code });
+      if (!checkError && check && check !== 'ok') {
+        setError(check === 'unknown' ? 'This e-mail is not registered in the Lab Manager yet. Ask your supervisor (or the lab admin) to add you, then come back here.'
+          : check === 'has_account' ? 'An account with this e-mail already exists: sign in, or use "Forgot password?".'
+          : 'The registration code is wrong. It is the 6-character code your supervisor received when adding you.');
+        setLoading(false); return;
+      }
+      const { data, error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: { signup_code: code.trim().toUpperCase() } } });
+      if (signUpError) {
+        const m = signUpError.message;
+        if (/already registered|already exists/i.test(m)) setError('An account with this e-mail already exists: sign in, or use "Forgot password?".');
+        else if (/Database error/i.test(m)) setError('E-mail not registered or registration code wrong. Check with your supervisor.');
+        else if (/signups? not allowed/i.test(m)) setError('Account creation is disabled at the moment. Contact the lab admin.');
+        else setError(m);
+      } else if (!data.session) {
+        // Only when e-mail confirmation is switched on in Supabase
+        setInfo('Almost done: open the confirmation e-mail we just sent you, then sign in here.');
+        setMode('signin');
+      }
+      // With a session the onAuthStateChange handler takes over (claim_lab_user, MFA…)
+      setLoading(false);
+      return;
+    }
+
     // NOTE: membership in lab_users is validated AFTER authentication, in the
     // onAuthStateChange handler (resolveLabUser). With RLS enabled, lab_users is
     // not readable while signed out, so we must NOT pre-check it here.
-    // Public sign-ups are disabled in Supabase: accounts are created by the
-    // lab admin (Dashboard → Authentication → Add user / Send invitation).
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       if (signInError.message.includes('Invalid login')) {
-        setError('Invalid email or password. If you never received credentials, contact the lab admin.');
+        setError('Invalid email or password. New to the Lab Manager? Use "Create account" below.');
       } else {
         setError(signInError.message);
       }
@@ -69,13 +104,26 @@ function LoginScreen({ authError }: { authError?: string }) {
   return (
     <AuthShell>
       <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-6 text-sm font-manrope font-semibold">
+          <button type="button" onClick={() => { setMode('signin'); setError(''); setInfo(''); }}
+            className={`flex-1 py-2 ${mode === 'signin' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>Sign in</button>
+          <button type="button" onClick={() => { setMode('signup'); setError(''); setInfo(''); }}
+            className={`flex-1 py-2 ${mode === 'signup' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>Create account</button>
+        </div>
         <p className="text-center text-sm text-gray-600 mb-6 font-manrope">
-          Sign in with your credentials.
+          {mode === 'signin'
+            ? 'Sign in with your credentials.'
+            : 'First time here? Use the e-mail and the registration code your supervisor gave you, and choose a password.'}
         </p>
 
         {displayError && (
           <div className="bg-red-50 text-red-600 text-sm px-4 py-2.5 rounded-xl font-manrope mb-5">
             {displayError}
+          </div>
+        )}
+        {info && !displayError && (
+          <div className="bg-green-50 text-green-700 text-sm px-4 py-2.5 rounded-xl font-manrope mb-5">
+            {info}
           </div>
         )}
 
@@ -98,35 +146,67 @@ function LoginScreen({ authError }: { authError?: string }) {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder={mode === 'signup' ? 'Choose a password' : 'Enter your password'}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
               required
               disabled={loading}
             />
+            {mode === 'signup' && <p className="text-[11px] text-gray-400 mt-1 font-manrope">{PASSWORD_HINT}</p>}
           </div>
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-manrope">Registration code</label>
+              <input
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase())}
+                placeholder="6 characters, e.g. A3F9C1"
+                maxLength={6}
+                autoComplete="one-time-code"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm tracking-widest uppercase"
+                required
+                disabled={loading}
+              />
+            </div>
+          )}
+          {mode === 'signup' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5 font-manrope">Repeat password</label>
+              <input
+                type="password"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                autoComplete="new-password"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4DC9FF] focus:border-transparent outline-none transition-all font-manrope text-sm"
+                required
+                disabled={loading}
+              />
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading}
             className="w-full py-3.5 bg-[#102C53] text-white rounded-xl font-semibold hover:bg-[#1a3d6e] transition-colors font-manrope flex items-center justify-center gap-2 disabled:opacity-50"
           >
             <Lock className="w-4 h-4" />
-            {loading ? 'Please wait...' : 'Sign in'}
+            {loading ? 'Please wait...' : mode === 'signup' ? 'Create account' : 'Sign in'}
           </button>
         </form>
 
-        <div className="mt-5 pt-4 border-t border-gray-100 text-center">
-          <Link
-            href="/lab/reset-password"
-            className="text-xs text-gray-500 hover:text-[#102C53] font-manrope font-medium transition-colors inline-block"
-          >
-            Forgot password?
-          </Link>
-        </div>
+        {mode === 'signin' && (
+          <div className="mt-5 pt-4 border-t border-gray-100 text-center">
+            <Link
+              href="/lab/reset-password"
+              className="text-xs text-gray-500 hover:text-[#102C53] font-manrope font-medium transition-colors inline-block"
+            >
+              Forgot password?
+            </Link>
+          </div>
+        )}
 
         <div className="mt-3">
           <p className="text-xs text-gray-400 text-center font-manrope">
-            Access is restricted to authorized lab members.<br />
-            Accounts are created by the lab admin — contact us to get access.
+            Access is restricted to lab members registered by a supervisor or the lab admin.
           </p>
         </div>
       </div>

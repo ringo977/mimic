@@ -83,6 +83,12 @@
 --        count of 19/10 — 120 consumable quantities/units/expiries, owners of
 --        the −80 °C box, 6 vials removed, 8 added. Only needed when restoring
 --        from a backup older than that date; a later backup already has it)
+--      then supabase-2026-10-self-signup.sql     (lab_users_insert v2 — supervisors
+--        add msc/guest rows; lab_signup_codes + guard trigger on auth.users so
+--        "Create account" on the login page works only for a registered e-mail
+--        with its code; lab_signup_precheck(); auth account deleted when a
+--        member is deleted or archived as alumni. Needs dashboard: sign-ups ON,
+--        confirm e-mail OFF)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
