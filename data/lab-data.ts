@@ -46,6 +46,10 @@ export const SUPERVISOR_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_m
 
 // Roles that require a supervisor to be assigned.
 export const SUPERVISED_ROLES: UserRole[] = ['msc', 'guest'];
+// Roles that may register any member except admins and PIs (Users → "Add member").
+// Server rule: lab_can_add_members() / lab_users_insert v3 (self-signup.sql).
+export const MEMBER_MANAGER_ROLES: UserRole[] = ['admin', 'pi', 'lab_manager', 'project_manager'];
+export const ADDABLE_ROLES: UserRole[] = ['researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
 
 // ============================================================
 // Absences (policy: docs/policy-assenze.html)

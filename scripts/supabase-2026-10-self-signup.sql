@@ -7,7 +7,9 @@
 --   1. supervisors (PI, researcher, lab manager, project manager, postdoc,
 --      PhD — SUPERVISOR_ROLES in lab-data.ts) may add MSc students and
 --      guests themselves (Users page → "Add student"); the row is created
---      with themselves as supervisor, no admin flag, status active;
+--      with themselves as supervisor, no admin flag, status active.
+--      PIs, lab managers and project managers (MEMBER_MANAGER_ROLES) may
+--      add any role except admin/PI, choosing the supervisor ("Add member");
 --   2. the person then creates their own password on the login page
 --      ("Create account") quoting the e-mail AND a 6-character registration
 --      code that the app showed to whoever added them. A trigger on
@@ -53,18 +55,40 @@ $$;
 REVOKE EXECUTE ON FUNCTION lab_can_add_students() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION lab_can_add_students() TO authenticated;
 
+-- Lab / project managers and PIs register any member except admins and
+-- PIs (visiting PhDs, postdocs, …), with any supervisor — without needing
+-- the Admin Panel. (Mirror: MEMBER_MANAGER_ROLES in lab-data.ts.)
+CREATE OR REPLACE FUNCTION lab_can_add_members()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM lab_users
+    WHERE id = current_lab_user_id()
+      AND status = 'active'
+      AND role IN ('admin', 'pi', 'lab_manager', 'project_manager')
+  );
+$$;
+REVOKE EXECUTE ON FUNCTION lab_can_add_members() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION lab_can_add_members() TO authenticated;
+
 DROP POLICY IF EXISTS "lab_users_insert" ON lab_users;
 CREATE POLICY "lab_users_insert" ON lab_users
   FOR INSERT TO authenticated
   WITH CHECK (
     is_lab_admin()
     OR (
-      lab_can_add_students()
-      AND role IN ('msc', 'guest')
-      AND coalesce(is_admin, false) = false
+      coalesce(is_admin, false) = false
       AND coalesce(status, 'active') = 'active'
-      AND supervisor_id = current_lab_user_id()
       AND auth_user_id IS NULL
+      AND (
+        (lab_can_add_members() AND role NOT IN ('admin', 'pi'))
+        OR
+        (lab_can_add_students() AND role IN ('msc', 'guest') AND supervisor_id = current_lab_user_id())
+      )
     )
   );
 
@@ -219,7 +243,7 @@ CREATE TRIGGER trg_lab_drop_auth_on_alumni
 -- expect: all true
 SELECT
   EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'lab_users' AND policyname = 'lab_users_insert'
-          AND with_check LIKE '%lab_can_add_students%')                              AS insert_policy_v2,
+          AND with_check LIKE '%lab_can_add_members%')                               AS insert_policy_v3,
   EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_lab_signup_guard')            AS guard_present,
   EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'lab_signup_precheck')               AS precheck_present,
   EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_lab_issue_signup_code')       AS codes_issued,

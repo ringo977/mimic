@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { Search, Mail, UserCheck, UserPlus, X, CheckCircle2 } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import UserDetailModal from './UserDetailModal';
-import { LabUser, UserRole, UserAffiliation, rolePermissions, generateAbbreviation, generateId, formatDate, SUPERVISED_ROLES, SUPERVISOR_ROLES } from '@/data/lab-data';
+import { LabUser, UserRole, UserAffiliation, rolePermissions, generateAbbreviation, generateId, formatDate, SUPERVISED_ROLES, SUPERVISOR_ROLES, MEMBER_MANAGER_ROLES, ADDABLE_ROLES } from '@/data/lab-data';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { fetchSignupCode } from '@/lib/supabase-users';
 
@@ -23,7 +23,8 @@ export default function TeamPage() {
   // Supervisors register their own students/guests; the server policy
   // (lab_users_insert v2) only lets them insert msc/guest rows with
   // themselves as supervisor. Admins use the Admin Panel for everything else.
-  const canAddStudents = permissions.canAdmin || SUPERVISOR_ROLES.includes(user.role);
+  const canAddMembers = permissions.canAdmin || MEMBER_MANAGER_ROLES.includes(user.role);
+  const canAddStudents = canAddMembers || SUPERVISOR_ROLES.includes(user.role);
 
   const activeCount = users.filter(u => (u.status || 'active') === 'active').length;
   const alumniCount = users.length - activeCount;
@@ -51,7 +52,7 @@ export default function TeamPage() {
           </div>
           {canAddStudents && (
             <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#102C53] text-white rounded-lg text-xs font-semibold font-manrope hover:bg-[#1a3d6e]">
-              <UserPlus size={14} /> Add student
+              <UserPlus size={14} /> {canAddMembers ? 'Add member' : 'Add student'}
             </button>
           )}
         </div>
@@ -60,6 +61,8 @@ export default function TeamPage() {
       {adding && (
         <AddStudentModal
           supervisor={user}
+          anyRole={canAddMembers}
+          supervisors={users.filter(u => (u.status || 'active') === 'active' && SUPERVISOR_ROLES.includes(u.role))}
           existingEmails={users.map(u => u.email.toLowerCase())}
           onClose={() => setAdding(false)}
           onAdd={addUser}
@@ -140,8 +143,10 @@ export default function TeamPage() {
 // "Add student": a supervisor registers an MSc student or a guest.
 // The person then creates their own password on the login page.
 // ------------------------------------------------------------
-function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
+function AddStudentModal({ supervisor, anyRole, supervisors, existingEmails, onClose, onAdd }: {
   supervisor: LabUser;
+  anyRole: boolean;          // managers: any role except admin/PI, any supervisor
+  supervisors: LabUser[];
   existingEmails: string[];
   onClose: () => void;
   onAdd: (u: LabUser) => Promise<boolean>;
@@ -150,6 +155,7 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('msc');
+  const [supervisorId, setSupervisorId] = useState<string>(supervisor.id);
   const [affiliation, setAffiliation] = useState<UserAffiliation>('MiMic Lab');
   const [startDate, setStartDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [endDate, setEndDate] = useState('');
@@ -165,7 +171,8 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
     const u: LabUser = {
       id: generateId(), name: name.trim(), email: em, abbreviation: generateAbbreviation(name.trim()),
       role, affiliation, isAdmin: false, certifications: [], projects: [], status: 'active',
-      supervisorId: supervisor.id, startDate: startDate || undefined, endDate: endDate || undefined,
+      supervisorId: anyRole ? (supervisorId || undefined) : supervisor.id,
+      startDate: startDate || undefined, endDate: endDate || undefined,
     };
     const ok = await onAdd(u);
     if (!ok) { setError('Not saved: the server refused the insert (see the red banner). Ask the lab admin.'); return; }
@@ -177,8 +184,8 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
       <div ref={panelRef} role="dialog" aria-modal="true" aria-label="Add student" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 outline-none" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-base font-bold text-gray-900 font-manrope">Add a student or guest</h2>
-            <p className="text-xs text-gray-500 font-manrope">Supervised by you ({supervisor.name}). They choose their own password afterwards.</p>
+            <h2 className="text-base font-bold text-gray-900 font-manrope">{anyRole ? 'Add a lab member' : 'Add a student or guest'}</h2>
+            <p className="text-xs text-gray-500 font-manrope">{anyRole ? 'Any role except Admin and PI.' : `Supervised by you (${supervisor.name}).`} They choose their own password afterwards.</p>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
         </div>
@@ -210,7 +217,7 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs font-medium text-gray-600 font-manrope">Role
                 <select value={role} onChange={e => setRole(e.target.value as UserRole)} className={`${inputCls} mt-1`}>
-                  {SUPERVISED_ROLES.map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}
+                  {(anyRole ? ADDABLE_ROLES : SUPERVISED_ROLES).map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}
                 </select>
               </label>
               <label className="block text-xs font-medium text-gray-600 font-manrope">Affiliation
@@ -219,6 +226,14 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
                 </select>
               </label>
             </div>
+            {anyRole && (
+              <label className="block text-xs font-medium text-gray-600 font-manrope">Supervisor{SUPERVISED_ROLES.includes(role) ? '' : ' (optional)'}
+                <select value={supervisorId} onChange={e => setSupervisorId(e.target.value)} className={`${inputCls} mt-1`} required={SUPERVISED_ROLES.includes(role)}>
+                  {!SUPERVISED_ROLES.includes(role) && <option value="">— none —</option>}
+                  {supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-xs font-medium text-gray-600 font-manrope">Start
                 <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`${inputCls} mt-1`} />
@@ -227,7 +242,7 @@ function AddStudentModal({ supervisor, existingEmails, onClose, onAdd }: {
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`${inputCls} mt-1`} />
               </label>
             </div>
-            <p className="text-[11px] text-gray-400 font-manrope">MSc students can book instruments and see the inventory; guests can only look. Trainings and certifications are granted later by the lab manager or an admin.</p>
+            <p className="text-[11px] text-gray-400 font-manrope">{anyRole ? 'Visiting PhD students are registered as PhD Student with affiliation External.' : 'MSc students can book instruments and see the inventory; guests can only look.'} Trainings and certifications are granted later by the lab manager or an admin.</p>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200">Cancel</button>
               <button type="submit" className="flex-1 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e]">Register</button>
