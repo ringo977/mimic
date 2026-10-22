@@ -77,6 +77,26 @@ export interface Absence {
   decisionNote?: string;
 }
 
+// Half-day smart working: a single day with one of these two slots in
+// start_hour/end_hour. Weighs 0.5 on the monthly cap (server: absence_auto_approve_ok v3).
+export type HalfDay = 'am' | 'pm';
+export const SW_HALF_DAY_HOURS: Record<HalfDay, { start: number; end: number; label: string }> = {
+  am: { start: 9, end: 13, label: 'morning' },
+  pm: { start: 14, end: 18, label: 'afternoon' },
+};
+export function absenceHalfDay(a: Pick<Absence, 'type' | 'startHour' | 'endHour'>): HalfDay | null {
+  if (a.type !== 'smart_working' || a.startHour === undefined || a.endHour === undefined) return null;
+  return a.startHour < 13 ? 'am' : 'pm';
+}
+/** Working days an absence weighs: 0.5 for a half-day smart working, else the covered working days. */
+export function absenceWorkingDays(a: Pick<Absence, 'type' | 'startDate' | 'endDate' | 'startHour' | 'endHour'>): number {
+  return absenceHalfDay(a) ? 0.5 : workingDaysCovered(a.startDate, a.endDate);
+}
+export function formatWorkingDays(n: number): string {
+  if (n === 0.5) return 'half a working day';
+  return `${n} working day${n !== 1 ? 's' : ''}`;
+}
+
 export const absenceTypeMeta: Record<AbsenceType, { label: string; short: string; color: string; fullDay: boolean }> = {
   hours:         { label: 'Short leave (hours)',   short: 'Hours', color: '#64748b', fullDay: false },
   day_off:       { label: 'Day(s) off (1–2 days)', short: 'Off',   color: '#f59e0b', fullDay: true },
@@ -183,7 +203,7 @@ export function isActiveAbsence(a: Absence): boolean { return ACTIVE_STATUSES.in
  * the requester and the approver see exactly why.
  */
 export function evaluateAbsenceRequest(
-  req: Pick<Absence, 'userId' | 'type' | 'startDate' | 'endDate'>,
+  req: Pick<Absence, 'userId' | 'type' | 'startDate' | 'endDate'> & Partial<Pick<Absence, 'startHour' | 'endHour'>>,
   existing: Absence[],
   settings: AbsenceSettings,
   todayStr: string,
@@ -266,18 +286,20 @@ export function evaluateAbsenceRequest(
       if (mySW.some(a => a.endDate === prevWork || a.startDate === nextWork)) {
         reasons.push('Adjacent to another smart working day (consecutive days need approval).');
       }
-      // Monthly cap (count both months if the range spans two)
+      // Monthly cap (count both months if the range spans two); half days weigh 0.5
       const months = new Set([req.startDate.slice(0, 7), req.endDate.slice(0, 7)]);
+      const reqWeight = absenceHalfDay({ type: 'smart_working', startHour: req.startHour, endHour: req.endHour }) ? 0.5 : 1;
       for (const month of Array.from(months)) {
         let used = 0;
         mySW.forEach(a => {
+          const w = absenceHalfDay(a) ? 0.5 : 1;
           for (let cur = a.startDate; cur <= a.endDate; cur = addDaysStr(cur, 1)) {
-            if (cur.slice(0, 7) === month && isWorkingDay(cur)) used++;
+            if (cur.slice(0, 7) === month && isWorkingDay(cur)) used += w;
           }
         });
         let requested = 0;
         for (let cur = req.startDate; cur <= req.endDate; cur = addDaysStr(cur, 1)) {
-          if (cur.slice(0, 7) === month && isWorkingDay(cur)) requested++;
+          if (cur.slice(0, 7) === month && isWorkingDay(cur)) requested += reqWeight;
         }
         if (used + requested > settings.swMonthlyCap) {
           reasons.push(`Monthly smart working cap exceeded (${used} used + ${requested} requested > ${settings.swMonthlyCap}).`);

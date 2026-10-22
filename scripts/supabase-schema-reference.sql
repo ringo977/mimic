@@ -89,6 +89,9 @@
 --        with its code; lab_signup_precheck(); auth account deleted when a
 --        member is deleted or archived as alumni. Needs dashboard: sign-ups ON,
 --        confirm e-mail OFF)
+--      then supabase-2026-10-sw-half-day.sql     (absence_auto_approve_ok v3 with
+--        start_hour: half-day smart working weighs 0.5 on the monthly cap;
+--        protect_absence_status passes NEW.start_hour)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old

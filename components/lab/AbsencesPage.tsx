@@ -4,8 +4,9 @@ import { useState, useMemo } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight, Clock, CalendarOff, Sun, Laptop, Thermometer, Plane, CheckCircle2, XCircle, AlertTriangle, Trash2, ClipboardList, CalendarDays, CalendarRange } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import {
-  Absence, AbsenceType, absenceTypeMeta, evaluateAbsenceRequest, isActiveAbsence,
+  Absence, AbsenceType, HalfDay, absenceTypeMeta, evaluateAbsenceRequest, isActiveAbsence,
   workingDaysCovered, workingDaysOfNotice, addDaysStr, isWorkingDay,
+  absenceHalfDay, absenceWorkingDays, formatWorkingDays, SW_HALF_DAY_HOURS,
   formatDate, formatTime, buildBookingSlots, generateAbbreviation,
 } from '@/data/lab-data';
 
@@ -31,9 +32,16 @@ function StatusBadge({ status }: { status: Absence['status'] }) {
 
 function absenceRangeLabel(a: Absence): string {
   const range = a.startDate === a.endDate ? formatDate(a.startDate) : `${formatDate(a.startDate)} → ${formatDate(a.endDate)}`;
+  const half = absenceHalfDay(a);
+  if (half) return `${range} (${SW_HALF_DAY_HOURS[half].label})`;
   return a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined
     ? `${range}, ${formatTime(a.startHour)}–${formatTime(a.endHour)}`
     : range;
+}
+// Chip text in the calendars: "SW" or "SW am" / "SW pm"
+function absenceShort(a: Absence): string {
+  const half = absenceHalfDay(a);
+  return half ? `SW ${half}` : absenceTypeMeta[a.type].short;
 }
 
 // Approval card: say plainly what is being asked ("Day off — Tuesday 21 Oct 2026"),
@@ -45,6 +53,8 @@ const withWeekday = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString(
 function requestWhen(a: Absence): string {
   if (a.startDate === a.endDate) {
     const day = withWeekday(a.startDate);
+    const half = absenceHalfDay(a);
+    if (half) return `${day}, ${SW_HALF_DAY_HOURS[half].label} only`;
     return a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined
       ? `${day}, ${formatTime(a.startHour)}–${formatTime(a.endHour)}` : day;
   }
@@ -97,8 +107,9 @@ export default function AbsencesPage() {
   const swUsedThisMonth = useMemo(() => {
     let n = 0;
     visibleAbsences.filter(a => a.userId === user.id && a.type === 'smart_working').forEach(a => {
+      const w = absenceHalfDay(a) ? 0.5 : 1;
       for (let cur = a.startDate; cur <= a.endDate; cur = addDaysStr(cur, 1)) {
-        if (cur.slice(0, 7) === today.slice(0, 7) && isWorkingDay(cur)) n++;
+        if (cur.slice(0, 7) === today.slice(0, 7) && isWorkingDay(cur)) n += w;
       }
     });
     return n;
@@ -131,7 +142,7 @@ export default function AbsencesPage() {
           <div className="space-y-2.5">
             {pending.map(a => {
               const Icon = TYPE_ICONS[a.type];
-              const days = workingDaysCovered(a.startDate, a.endDate);
+              const days = absenceWorkingDays(a);
               const fullDay = absenceTypeMeta[a.type].fullDay && a.type !== 'smart_working';
               // Context the approver usually has to look up by hand
               const alsoOut = fullDay ? Array.from(new Set(visibleAbsences
@@ -142,7 +153,8 @@ export default function AbsencesPage() {
               if (a.type === 'smart_working') {
                 const m = a.startDate.slice(0, 7);
                 visibleAbsences.filter(o => o.userId === a.userId && o.type === 'smart_working').forEach(o => {
-                  for (let cur = o.startDate; cur <= o.endDate; cur = addDaysStr(cur, 1)) if (cur.slice(0, 7) === m && isWorkingDay(cur)) swInMonth++;
+                  const w = absenceHalfDay(o) ? 0.5 : 1;
+                  for (let cur = o.startDate; cur <= o.endDate; cur = addDaysStr(cur, 1)) if (cur.slice(0, 7) === m && isWorkingDay(cur)) swInMonth += w;
                 });
               }
               const monthName = new Date(a.startDate + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long' });
@@ -154,7 +166,7 @@ export default function AbsencesPage() {
                       <p className="text-sm text-gray-900 font-manrope"><strong>{a.userName}</strong> asks for</p>
                       <p className="text-sm font-semibold font-manrope mt-0.5" style={{ color: absenceTypeMeta[a.type].color }}>{REQUEST_LABEL[a.type]} <span className="text-gray-900">— {requestWhen(a)}</span></p>
                       <p className="text-xs text-gray-500 font-manrope mt-1">
-                        {days} working day{days !== 1 ? 's' : ''} · requested {formatDate(a.requestedAt.split('T')[0])}
+                        {formatWorkingDays(days)} · requested {formatDate(a.requestedAt.split('T')[0])}
                         {a.type === 'smart_working' && <> · smart working in {monthName}: <strong>{swInMonth}/{absenceSettings.swMonthlyCap}</strong> including this</>}
                         {alsoOut.length > 0 && <> · also out: {alsoOut.join(', ')}</>}
                         {fullDay && alsoOut.length === 0 && <> · nobody else out</>}
@@ -231,10 +243,10 @@ export default function AbsencesPage() {
                     const u = users.find(x => x.id === a.userId);
                     return (
                       <div key={a.id}
-                        title={`${a.userName} — ${absenceTypeMeta[a.type].label}${a.type === 'hours' && a.startHour !== undefined ? ` ${formatTime(a.startHour)}–${formatTime(a.endHour || 0)}` : ''}${isPending ? ' (awaiting approval)' : ''}`}
+                        title={`${a.userName} — ${absenceTypeMeta[a.type].label}${absenceHalfDay(a) ? ` (${SW_HALF_DAY_HOURS[absenceHalfDay(a)!].label})` : a.type === 'hours' && a.startHour !== undefined ? ` ${formatTime(a.startHour)}–${formatTime(a.endHour || 0)}` : ''}${isPending ? ' (awaiting approval)' : ''}`}
                         className={`px-1 py-0.5 rounded text-[9px] font-bold font-manrope text-white truncate leading-tight ${isPending ? 'opacity-50 border border-dashed border-white' : ''}`}
                         style={{ backgroundColor: absenceTypeMeta[a.type].color }}>
-                        {u?.abbreviation || generateAbbreviation(a.userName)} · {absenceTypeMeta[a.type].short}
+                        {u?.abbreviation || generateAbbreviation(a.userName)} · {absenceShort(a)}
                       </div>
                     );
                   })}
@@ -302,17 +314,20 @@ function RequestModal({ onClose }: { onClose: () => void }) {
   const [endHour, setEndHour] = useState(bookingSettings.workStartHour + 2);
   const [notes, setNotes] = useState('');
   const [handover, setHandover] = useState('');
+  const [swHalf, setSwHalf] = useState<HalfDay | 'full'>('full');
   const [error, setError] = useState('');
   const slots = useMemo(() => buildBookingSlots(bookingSettings), [bookingSettings]);
 
-  const singleDay = type === 'hours';
+  const half: HalfDay | null = type === 'smart_working' && swHalf !== 'full' ? swHalf : null;
+  const singleDay = type === 'hours' || half !== null;
   const effEnd = singleDay ? startDate : endDate < startDate ? startDate : endDate;
-  const days = workingDaysCovered(startDate, effEnd);
+  const reqHours = half ? SW_HALF_DAY_HOURS[half] : type === 'hours' ? { start: startHour, end: endHour } : null;
+  const days = half ? 0.5 : workingDaysCovered(startDate, effEnd);
   const needsHandover = days > absenceSettings.autoApproveMaxDays && absenceTypeMeta[type].fullDay && type !== 'sick' && type !== 'smart_working';
 
   const evalRes = useMemo(
-    () => evaluateAbsenceRequest({ userId: user.id, type, startDate, endDate: effEnd }, absences, absenceSettings, today),
-    [user.id, type, startDate, effEnd, absences, absenceSettings, today],
+    () => evaluateAbsenceRequest({ userId: user.id, type, startDate, endDate: effEnd, startHour: reqHours?.start, endHour: reqHours?.end }, absences, absenceSettings, today),
+    [user.id, type, startDate, effEnd, reqHours?.start, reqHours?.end, absences, absenceSettings, today],
   );
 
   const pickType = (t: AbsenceType) => {
@@ -326,14 +341,14 @@ function RequestModal({ onClose }: { onClose: () => void }) {
     if (!startDate) { setError('Pick a date.'); return; }
     if (type !== 'sick' && startDate < today) { setError('Only sick leave can be recorded retroactively.'); return; }
     if (!singleDay && effEnd < startDate) { setError('End date must be on or after the start date.'); return; }
-    if (singleDay && endHour <= startHour) { setError('End time must be after start time.'); return; }
+    if (type === 'hours' && endHour <= startHour) { setError('End time must be after start time.'); return; }
     if (type === 'vacation' && days < 3) { setError('"Vacation" is for absences of 3 working days or more — for 1–2 days use "Day off".'); return; }
     if (needsHandover && !handover.trim()) { setError('Absences longer than 2 days require a handover (who covers cultures, bookings, deadlines).'); return; }
     addAbsence({
       userId: user.id, userName: user.name, type,
       startDate, endDate: effEnd,
-      startHour: singleDay ? startHour : undefined,
-      endHour: singleDay ? endHour : undefined,
+      startHour: reqHours?.start,
+      endHour: reqHours?.end,
       notes: notes.trim() || undefined,
       handover: handover.trim() || undefined,
       status: evalRes.status,
@@ -366,6 +381,15 @@ function RequestModal({ onClose }: { onClose: () => void }) {
             })}
           </div>
 
+          {type === 'smart_working' && (
+            <div className="flex rounded-xl border border-gray-200 overflow-hidden text-xs font-manrope font-semibold">
+              {([['full', 'Whole day'], ['am', 'Morning (9–13)'], ['pm', 'Afternoon (14–18)']] as [HalfDay | 'full', string][]).map(([v, label]) => (
+                <button key={v} type="button" onClick={() => setSwHalf(v)}
+                  className={`flex-1 py-2 ${swHalf === v ? 'bg-[#3b82f6] text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>{label}</button>
+              ))}
+            </div>
+          )}
+
           <div className={`grid ${singleDay ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">{singleDay ? 'Date' : 'From'}</label>
@@ -383,7 +407,7 @@ function RequestModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          {singleDay && (
+          {type === 'hours' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">From</label>
@@ -402,8 +426,8 @@ function RequestModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {!singleDay && days > 0 && (
-            <p className="text-[11px] text-gray-500 font-manrope -mt-1">{days} working day{days !== 1 ? 's' : ''} · notice: {workingDaysOfNotice(today, startDate)} working day{workingDaysOfNotice(today, startDate) !== 1 ? 's' : ''}</p>
+          {type !== 'hours' && days > 0 && (
+            <p className="text-[11px] text-gray-500 font-manrope -mt-1">{formatWorkingDays(days)} · notice: {workingDaysOfNotice(today, startDate)} working day{workingDaysOfNotice(today, startDate) !== 1 ? 's' : ''}</p>
           )}
 
           {needsHandover && (
@@ -463,7 +487,8 @@ function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, 
   const abbr = (a: Absence) => users.find(u => u.id === a.userId)?.abbreviation || generateAbbreviation(a.userName);
   const perDay = days.map(ds => {
     const all = absencesOn(ds);
-    return { ds, fullDay: all.filter(a => a.type !== 'hours'), hourly: all.filter(a => a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined) };
+    const timed = (a: Absence) => a.startHour !== undefined && a.endHour !== undefined && (a.type === 'hours' || absenceHalfDay(a));
+    return { ds, fullDay: all.filter(a => !timed(a)), hourly: all.filter(timed) };
   });
   const maxFull = Math.max(1, ...perDay.map(d => d.fullDay.length));
 
@@ -495,7 +520,7 @@ function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, 
                   <div key={a.id} title={`${a.userName} — ${absenceTypeMeta[a.type].label}${a.status === 'pending' ? ' (awaiting approval)' : ''}`}
                     className={`px-1 py-0.5 rounded text-[9px] font-bold font-manrope text-white truncate leading-tight ${a.status === 'pending' ? 'opacity-50 border border-dashed border-white' : ''}`}
                     style={{ backgroundColor: absenceTypeMeta[a.type].color }}>
-                    {abbr(a)} · {absenceTypeMeta[a.type].short}
+                    {abbr(a)} · {absenceShort(a)}
                   </div>
                 ))}
               </div>
