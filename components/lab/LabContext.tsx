@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
   StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings, CellType,
@@ -131,6 +131,10 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const [log, setLog] = useState<LogEntry[]>([]);
   const [users, setUsers] = useState<LabUser[]>([]);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
+  // Instrument name for log lines (ref: the booking callbacks must not re-create on every instruments change)
+  const instrumentsRef = useRef<Instrument[]>([]);
+  instrumentsRef.current = instruments;
+  const instName = useCallback((id: string) => instrumentsRef.current.find(i => i.id === id)?.name || id, []);
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [storageUnits, setStorageUnits] = useState<StorageUnit[]>([]);
   const [storageBoxes, setStorageBoxes] = useState<StorageBox[]>([]);
@@ -253,7 +257,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       setBookings(prev => prev.filter(x => x.id !== full.id));
       setSyncError(`Booking refused by the server: ${error || 'unknown error'}`);
     }).catch(() => setSyncError('Booking: the change was NOT saved to the server. Check your connection, then reload and retry.'));
-    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}${b.status === 'pending' ? ' (pending authorization)' : ''}` });
+    addLogEntry({ userId: b.userId, userName: b.userName, action: `Booked ${instName(b.instrumentId)}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}${b.status === 'pending' ? ' (pending authorization)' : ''}` });
   }, [addLogEntry]);
 
   const updateBooking = useCallback((b: Booking) => {
@@ -264,7 +268,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       if (before) { const bk = before; setBookings(prev => prev.map(x => x.id === bk.id ? bk : x)); }
       setSyncError(`Booking update refused by the server: ${error || 'unknown error'}`);
     }).catch(() => setSyncError('Booking update: the change was NOT saved to the server. Check your connection, then reload and retry.'));
-    addLogEntry({ userId: user.id, userName: user.name, action: `Updated ${b.instrumentId}`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
+    addLogEntry({ userId: user.id, userName: user.name, action: `Updated ${instName(b.instrumentId)} booking`, category: 'booking', details: `${b.date} ${formatTime(b.startHour)}-${formatTime(b.endHour)}` });
   }, [user, addLogEntry]);
 
   const approveBooking = useCallback((id: string) => {
@@ -276,13 +280,13 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       return saved;
     });
     track(p, 'Booking authorization');
-    if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Authorized booking on ${bk.instrumentId}`, category: 'booking', details: `${bk.userName} — ${bk.date} ${formatTime(bk.startHour)}-${formatTime(bk.endHour)}` });
+    if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Authorized booking on ${instName(bk.instrumentId)}`, category: 'booking', details: `${bk.userName} — ${bk.date} ${formatTime(bk.startHour)}-${formatTime(bk.endHour)}` });
   }, [bookings, user, addLogEntry, track]);
 
   const removeBooking = useCallback((id: string) => {
     setBookings(prev => {
       const bk = prev.find(b => b.id === id);
-      if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${bk.instrumentId}`, category: 'booking', details: bk.date });
+      if (bk) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${instName(bk.instrumentId)} booking`, category: 'booking', details: bk.date });
       return prev.filter(b => b.id !== id);
     });
     track(deleteBooking(id), 'Booking cancellation');
@@ -294,7 +298,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     if (!saved) return error || 'unknown error';
     setBookings(prev => [...prev.filter(b => !saved.some(s => s.id === b.id)), ...saved]);
     const first = args.days[0], last = args.days[args.days.length - 1];
-    addLogEntry({ userId: user.id, userName: user.name, action: `Booked ${args.instrumentId} for ${saved.length} days`, category: 'booking', details: `${first.date} ${formatTime(first.startHour)} → ${last.date} ${formatTime(last.endHour)}` });
+    addLogEntry({ userId: user.id, userName: user.name, action: `Booked ${instName(args.instrumentId)} for ${saved.length} days`, category: 'booking', details: `${first.date} ${formatTime(first.startHour)} → ${last.date} ${formatTime(last.endHour)}` });
     return null;
   }, [user, addLogEntry]);
 
@@ -317,7 +321,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       return ids;
     });
     track(p, 'Series cancellation');
-    if (removed.length > 0) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${removed[0].instrumentId} series`, category: 'booking', details: `${removed.length} days from ${removed[0].date}` });
+    if (removed.length > 0) addLogEntry({ userId: user.id, userName: user.name, action: `Cancelled ${instName(removed[0].instrumentId)} series`, category: 'booking', details: `${removed.length} days from ${removed[0].date}` });
   }, [user, addLogEntry, track]);
 
   const updateBookingSettings = useCallback((s: BookingSettings) => {
