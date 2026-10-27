@@ -32,8 +32,11 @@ export default function WishlistPage() {
   // price-only once it has been approved/ordered (quotes arrive late).
   const [editing, setEditing] = useState<WishlistItem | null>(null);
   const isOwn = (w: WishlistItem) => w.requestedBy === user.id;
-  const canFullEdit = (w: WishlistItem) => w.status !== 'delivered' && (permissions.canApproveOrders || (isOwn(w) && w.status === 'pending'));
-  const canEditPrice = (w: WishlistItem) => w.status !== 'delivered' && w.status !== 'rejected' && (permissions.canApproveOrders || isOwn(w));
+  // Approve / reject is a PI decision (canApproveOrders); placing the order and
+  // stocking the delivery is procurement work, open to the Lab Manager too.
+  const canHandle = permissions.canApproveOrders || permissions.canHandleOrders;
+  const canFullEdit = (w: WishlistItem) => w.status !== 'delivered' && (canHandle || (isOwn(w) && w.status === 'pending'));
+  const canEditPrice = (w: WishlistItem) => w.status !== 'delivered' && w.status !== 'rejected' && (canHandle || isOwn(w));
   const canDelete = (w: WishlistItem) => user.isAdmin || user.role === 'admin' || (isOwn(w) && w.status === 'pending');
   const priceOnly = !!editing && !canFullEdit(editing);
   const [filter, setFilter] = useState<FilterStatus>('all');
@@ -163,7 +166,8 @@ export default function WishlistPage() {
     }
 
     // Update wishlist item with stocking info (links it to the reagent)
-    updateWishlistStatus(stockItem, 'delivered', user.name, { stockedToReagentId: stockedReagentId || undefined, stockedToStorageUnitId: stockUnitId || undefined });
+    // approvedBy stays the PI who approved it (the server refuses a change by non-approvers)
+    updateWishlistStatus(stockItem, 'delivered', undefined, { stockedToReagentId: stockedReagentId || undefined, stockedToStorageUnitId: stockUnitId || undefined });
     setStockItem(null);
   };
 
@@ -303,7 +307,7 @@ export default function WishlistPage() {
                 </button>
               </div>
             )}
-            {permissions.canApproveOrders && item.status === 'approved' && (
+            {canHandle && item.status === 'approved' && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <button
                   onClick={() => updateWishlistStatus(item.id, 'ordered')}
@@ -313,7 +317,7 @@ export default function WishlistPage() {
                 </button>
               </div>
             )}
-            {permissions.canApproveOrders && item.status === 'ordered' && (
+            {canHandle && item.status === 'ordered' && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <button
                   onClick={() => openStockModal(item.id)}

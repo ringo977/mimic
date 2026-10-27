@@ -1203,7 +1203,8 @@ export const rolePermissions: Record<UserRole, {
   canAddReagents: boolean;
   canManageCryo: boolean;
   canRequestOrders: boolean;
-  canApproveOrders: boolean;
+  canApproveOrders: boolean;   // approve / reject purchase requests (PI decision)
+  canHandleOrders: boolean;    // mark approved items as ordered, then delivered → stock
   canViewLog: boolean;
   canViewDatabase: boolean;
   canExportData: boolean;
@@ -1213,55 +1214,55 @@ export const rolePermissions: Record<UserRole, {
 }> = {
   admin: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: true,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: true, canHandleOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
     canUploadManuals: true, canAdmin: true, label: 'Administrator',
   },
   pi: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: true,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: true, canHandleOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
     canUploadManuals: true, canAdmin: true, label: 'Principal Investigator',
   },
   researcher: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: true, canViewDatabase: true, canExportData: true,
     canUploadManuals: true, canAdmin: false, label: 'Researcher',
   },
   lab_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
     canUploadManuals: true, canAdmin: false, label: 'Lab Manager',
   },
   project_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: true, canViewDatabase: false, canExportData: true,
     canUploadManuals: true, canAdmin: false, label: 'Project Manager',
   },
   postdoc: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: true, canViewDatabase: false, canExportData: false,
     canUploadManuals: true, canAdmin: false, label: 'Post-Doc',
   },
   phd: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'PhD Student',
   },
   msc: {
     canBook: true, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'MSc Student',
   },
   guest: {
     canBook: false, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Guest',
   },
@@ -1273,25 +1274,25 @@ export const externalRolePermissions: Record<UserRole, typeof rolePermissions[Us
   pi: { ...rolePermissions.pi },
   researcher: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Researcher',
   },
   lab_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: true, canViewDatabase: false, canExportData: false,
     canUploadManuals: true, canAdmin: false, label: 'Lab Manager',
   },
   project_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Project Manager',
   },
   postdoc: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false,
+    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Post-Doc',
   },
@@ -1299,19 +1300,19 @@ export const externalRolePermissions: Record<UserRole, typeof rolePermissions[Us
   // lab day by day is registered with affiliation "MiMic Lab" instead.
   phd: {
     canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'PhD Student',
   },
   msc: {
     canBook: true, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'MSc Student',
   },
   guest: {
     canBook: false, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false,
+    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
     canViewLog: false, canViewDatabase: false, canExportData: false,
     canUploadManuals: false, canAdmin: false, label: 'Guest',
   },

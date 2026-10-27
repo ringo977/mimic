@@ -92,6 +92,11 @@
 --      then supabase-2026-10-sw-half-day.sql     (absence_auto_approve_ok v3 with
 --        start_hour: half-day smart working weighs 0.5 on the monthly cap;
 --        protect_absence_status passes NEW.start_hour)
+--      then supabase-2026-10-wishlist-roles.sql  (lab_can v4: approve_orders is
+--        role admin/pi only — the Admin flag no longer grants it — and the new
+--        handle_orders for the MiMic lab_manager; is_lab_order_handler();
+--        protect_wishlist_status v2 lets handlers do approved→ordered→delivered;
+--        wishlist_items_update v3)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
