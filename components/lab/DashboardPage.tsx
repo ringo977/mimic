@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, CalendarPlus, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2, CalendarDays, Rows3, Star } from 'lucide-react';
+import { Calendar, CalendarPlus, CalendarOff, FlaskConical, Snowflake, ShoppingCart, BookOpen, AlertTriangle, Clock, Award, Download, FileText, ChevronLeft, ChevronRight, X, XCircle, Pencil, Trash2, Plus, Moon, MapPin, User as UserIcon, Hourglass, CheckCircle2, CalendarDays, Rows3, Star } from 'lucide-react';
 import { useLabContext } from './LabContext';
+import AbsenceStatusBadge from './AbsenceStatusBadge';
 import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
   validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays } from '@/data/lab-data';
-import type { Booking, Instrument, LabUser, BookingSettings, SeriesMode } from '@/data/lab-data';
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays,
+  absenceTypeMeta, absenceRequestLabel, absenceWhenLabel } from '@/data/lab-data';
+import type { Booking, Instrument, LabUser, BookingSettings, SeriesMode, Absence } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 import MultiDayFields from './MultiDayFields';
 
@@ -1141,6 +1143,90 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   );
 }
 
+// Home notices on the user's own absence requests: every request still waiting,
+// plus approvals/rejections of the last 30 days until the user dismisses them
+// (dismissals are remembered per browser). Approvers also get a one-line
+// reminder of how many requests wait for them.
+const SEEN_DECISIONS_KEY = 'mimic-lab-seen-absence-decisions';
+const decisionKey = (a: Absence) => `${a.id}:${a.status}:${a.decidedAt || ''}`;
+
+function AbsenceNotices({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const { user, users, absences, canApproveAbsences } = useLabContext();
+  const [seen, setSeen] = useState<Set<string>>(new Set());
+  const storageKey = `${SEEN_DECISIONS_KEY}-${user.id}`;
+  useEffect(() => {
+    try { const raw = localStorage.getItem(storageKey); setSeen(new Set(raw ? (JSON.parse(raw) as string[]) : [])); } catch { /* private mode */ }
+  }, [storageKey]);
+  const dismiss = (a: Absence) => {
+    const next = new Set(seen); next.add(decisionKey(a));
+    setSeen(next);
+    try { localStorage.setItem(storageKey, JSON.stringify(Array.from(next))); } catch { /* ignore */ }
+  };
+
+  const today = todayStr();
+  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+  const mine = absences
+    .filter(a => a.userId === user.id)
+    .filter(a => a.status === 'pending'
+      ? a.endDate >= today
+      : (a.status === 'approved' || a.status === 'rejected') && !!a.decidedAt && a.decidedAt >= cutoff && !seen.has(decisionKey(a)))
+    .sort((a, b) => (a.status === 'pending' ? 1 : 0) - (b.status === 'pending' ? 1 : 0) || a.startDate.localeCompare(b.startDate));
+  const approverNames = users.filter(u => u.status !== 'alumni' && (u.isAdmin || u.role === 'admin' || u.role === 'pi')).map(u => u.name.split(' ')[0]);
+  const waitingForMe = canApproveAbsences ? absences.filter(a => a.status === 'pending').length : 0;
+  if (mine.length === 0 && waitingForMe === 0) return null;
+
+  const decidedOn = (iso?: string) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+
+  return (
+    <div className="space-y-3">
+      {waitingForMe > 0 && (
+        <button onClick={() => onNavigate('absences')} className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3 text-left flex items-center gap-3 hover:bg-amber-100/70 transition-colors">
+          <Hourglass size={16} className="text-amber-700 shrink-0" />
+          <span className="flex-1 text-sm text-amber-900 font-manrope"><strong>{waitingForMe}</strong> absence request{waitingForMe !== 1 ? 's' : ''} awaiting your approval</span>
+          <span className="text-xs font-semibold text-amber-800 font-manrope">Review →</span>
+        </button>
+      )}
+      {mine.length > 0 && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-2">
+              <CalendarOff size={16} className="text-[#102C53]" /> Your absence requests
+            </h2>
+            <button onClick={() => onNavigate('absences')} className="text-xs font-semibold text-[#102C53] font-manrope hover:underline">Open Absences →</button>
+          </div>
+          <div className="space-y-2">
+            {mine.map(a => (
+              <div key={a.id} className={`flex flex-wrap items-start gap-2.5 rounded-xl px-3 py-2.5 border ${a.status === 'rejected' ? 'bg-red-50/60 border-red-100' : a.status === 'approved' ? 'bg-green-50/60 border-green-100' : 'bg-amber-50/60 border-amber-100'}`}>
+                <span className="w-7 h-7 rounded-lg shrink-0 mt-0.5 flex items-center justify-center text-white" style={{ backgroundColor: absenceTypeMeta[a.type].color }}>
+                  {a.status === 'approved' ? <CheckCircle2 size={14} /> : a.status === 'rejected' ? <XCircle size={14} /> : <Hourglass size={14} />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 font-manrope">{absenceRequestLabel[a.type]} <span className="font-normal text-gray-700">— {absenceWhenLabel(a)}</span></p>
+                  {a.status === 'pending' && (
+                    <p className="text-xs text-amber-800 font-manrope mt-0.5">Not evaluated yet{approverNames.length ? ` — waiting for ${approverNames.join(' or ')}` : ''}.{a.flags ? ` ${a.flags}` : ''}</p>
+                  )}
+                  {a.status === 'approved' && (
+                    <p className="text-xs text-green-800 font-manrope mt-0.5">Approved by {a.decidedBy || 'an approver'}{a.decidedAt ? ` on ${decidedOn(a.decidedAt)}` : ''}.{a.decisionNote ? ` ${a.decisionNote}` : ''}</p>
+                  )}
+                  {a.status === 'rejected' && (
+                    <p className="text-xs text-red-700 font-manrope mt-0.5">Rejected by {a.decidedBy || 'an approver'}{a.decidedAt ? ` on ${decidedOn(a.decidedAt)}` : ''}{a.decisionNote ? `: ${a.decisionNote}` : '.'}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <AbsenceStatusBadge status={a.status} />
+                  {a.status !== 'pending' && (
+                    <button onClick={() => dismiss(a)} title="Got it — hide this notice" aria-label="Dismiss notice" className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white/80"><X size={14} /></button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getInitials(name: string, abbreviation?: string): string {
   if (abbreviation) return abbreviation;
   const parts = name.trim().split(/\s+/);
@@ -1209,6 +1295,8 @@ export default function DashboardPage({ onNavigate }: Props) {
           </div>
         </div>
       </div>
+
+      <AbsenceNotices onNavigate={onNavigate} />
 
       {/* Action Badges Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

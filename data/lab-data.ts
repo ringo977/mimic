@@ -97,6 +97,23 @@ export function formatWorkingDays(n: number): string {
   return `${n} working day${n !== 1 ? 's' : ''}`;
 }
 
+// Plain wording for a request ("Day off — Tuesday 21 Oct 2026"), used by the
+// approval cards and the Home notices; not the policy category of the form.
+export const absenceRequestLabel: Record<AbsenceType, string> = {
+  hours: 'Short leave', day_off: 'Day off', vacation: 'Vacation', smart_working: 'Smart working', sick: 'Sick leave', trip: 'Trip / conference',
+};
+const withWeekday = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+export function absenceWhenLabel(a: Pick<Absence, 'type' | 'startDate' | 'endDate' | 'startHour' | 'endHour'>): string {
+  if (a.startDate === a.endDate) {
+    const day = withWeekday(a.startDate);
+    const half = absenceHalfDay(a);
+    if (half) return `${day}, ${SW_HALF_DAY_HOURS[half].label} only`;
+    return a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined
+      ? `${day}, ${formatTime(a.startHour)}–${formatTime(a.endHour)}` : day;
+  }
+  return `${withWeekday(a.startDate)} → ${withWeekday(a.endDate)}`;
+}
+
 export const absenceTypeMeta: Record<AbsenceType, { label: string; short: string; color: string; fullDay: boolean }> = {
   hours:         { label: 'Short leave (hours)',   short: 'Hours', color: '#64748b', fullDay: false },
   day_off:       { label: 'Day(s) off (1–2 days)', short: 'Off',   color: '#f59e0b', fullDay: true },

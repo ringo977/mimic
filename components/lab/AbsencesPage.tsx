@@ -3,12 +3,16 @@
 import { useState, useMemo } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight, Clock, CalendarOff, Sun, Laptop, Thermometer, Plane, CheckCircle2, XCircle, AlertTriangle, Trash2, ClipboardList, CalendarDays, CalendarRange } from 'lucide-react';
 import { useLabContext } from './LabContext';
+import AbsenceStatusBadge from './AbsenceStatusBadge';
 import {
   Absence, AbsenceType, HalfDay, absenceTypeMeta, evaluateAbsenceRequest, isActiveAbsence,
   workingDaysCovered, workingDaysOfNotice, addDaysStr, isWorkingDay,
   absenceHalfDay, absenceWorkingDays, formatWorkingDays, SW_HALF_DAY_HOURS,
+  absenceRequestLabel, absenceWhenLabel,
   formatDate, formatTime, buildBookingSlots, generateAbbreviation,
 } from '@/data/lab-data';
+
+const StatusBadge = AbsenceStatusBadge;
 
 const TYPE_ICONS: Record<AbsenceType, typeof Clock> = {
   hours: Clock, day_off: CalendarOff, vacation: Sun, smart_working: Laptop, sick: Thermometer, trip: Plane,
@@ -17,18 +21,6 @@ const TYPE_ICONS: Record<AbsenceType, typeof Clock> = {
 const TYPE_ORDER: AbsenceType[] = ['hours', 'day_off', 'vacation', 'smart_working', 'sick', 'trip'];
 
 function todayStr(): string { return new Date().toLocaleDateString('en-CA'); }
-
-function StatusBadge({ status }: { status: Absence['status'] }) {
-  const map: Record<Absence['status'], { label: string; cls: string }> = {
-    pending:       { label: 'Awaiting approval', cls: 'bg-amber-50 text-amber-700' },
-    auto_approved: { label: 'Auto-approved',     cls: 'bg-green-50 text-green-700' },
-    approved:      { label: 'Approved',          cls: 'bg-green-50 text-green-700' },
-    rejected:      { label: 'Rejected',          cls: 'bg-red-50 text-red-600' },
-    cancelled:     { label: 'Cancelled',         cls: 'bg-gray-100 text-gray-500' },
-  };
-  const m = map[status];
-  return <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-manrope whitespace-nowrap ${m.cls}`}>{m.label}</span>;
-}
 
 function absenceRangeLabel(a: Absence): string {
   const range = a.startDate === a.endDate ? formatDate(a.startDate) : `${formatDate(a.startDate)} → ${formatDate(a.endDate)}`;
@@ -44,22 +36,10 @@ function absenceShort(a: Absence): string {
   return half ? `SW ${half}` : absenceTypeMeta[a.type].short;
 }
 
-// Approval card: say plainly what is being asked ("Day off — Tuesday 21 Oct 2026"),
-// not the policy category the form uses ("Day(s) off (1–2 days)").
-const REQUEST_LABEL: Record<AbsenceType, string> = {
-  hours: 'Short leave', day_off: 'Day off', vacation: 'Vacation', smart_working: 'Smart working', sick: 'Sick leave', trip: 'Trip / conference',
-};
-const withWeekday = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-function requestWhen(a: Absence): string {
-  if (a.startDate === a.endDate) {
-    const day = withWeekday(a.startDate);
-    const half = absenceHalfDay(a);
-    if (half) return `${day}, ${SW_HALF_DAY_HOURS[half].label} only`;
-    return a.type === 'hours' && a.startHour !== undefined && a.endHour !== undefined
-      ? `${day}, ${formatTime(a.startHour)}–${formatTime(a.endHour)}` : day;
-  }
-  return `${withWeekday(a.startDate)} → ${withWeekday(a.endDate)}`;
-}
+// Approval card wording ("Day off — Tuesday 21 Oct 2026") is shared with the
+// Home notices: absenceRequestLabel / absenceWhenLabel in lab-data.
+const REQUEST_LABEL = absenceRequestLabel;
+const requestWhen = absenceWhenLabel;
 
 export default function AbsencesPage() {
   const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences, bookingSettings } = useLabContext();
