@@ -122,7 +122,8 @@
         {
           "title": "3D Brain Models",
           "text": "We develop three-dimensional brain-on-chip platforms that recapitulate key features of brain tissue architecture, including cellular heterogeneity and spatial organisation. By integrating neurons, astrocytes, and microglia within microfluidic devices, these models enable the study of neurodegenerative processes, neuroinflammation, and the evaluation of neuroprotective compounds in a physiologically relevant context.",
-          "image": "/images/research/brain-3d.jpg"
+          "image": "/images/research/brain-3d.jpg",
+          "video": "/images/research/brain-3d.mp4"
         },
         {
           "title": "Neuronal Circuits",
