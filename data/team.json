@@ -30,7 +30,7 @@
       "role": "Scientific Project Manager",
       "email": "cecilia.palma@polimi.it",
       "bio": "PhD in Bioengineering from Politecnico di Milano, specializing in organs-on-chip for joint disorders. Currently Scientific Project Manager at MiMic Lab, coordinating national and European collaborative projects.",
-      "bioFull": "Cecilia Palma holds a PhD in Bioengineering from Politecnico di Milano, where she specialized in the development of organs-on-chip to investigate the mechanobiological mechanisms underlying joint disorders. Her doctoral research was carried out in close collaboration with clinical and industrial partners, including Ospedale Galeazzi, Istituto Europeo di Oncologia and BiomimX\u00ae, and included a visiting period at the Tissue Engineering laboratory of Universit\u00e4tsspital Basel (Switzerland).\n\nShe is currently Scientific Project Manager at MiMic Lab, where she coordinates national and European collaborative projects. She supports proposal preparation, project planning and reporting, while closely monitoring the scientific progress of the activities to ensure alignment between engineers, biologists, clinicians, and industry partners. She also contributes to outreach activities aimed at maximizing project impact.",
+      "bioFull": "Cecilia Palma holds a PhD in Bioengineering from Politecnico di Milano, where she specialized in the development of organs-on-chip to investigate the mechanobiological mechanisms underlying joint disorders. Her doctoral research was carried out in close collaboration with clinical and industrial partners, including Ospedale Galeazzi, Istituto Europeo di Oncologia and BiomimX®, and included a visiting period at the Tissue Engineering laboratory of Universitätsspital Basel (Switzerland).\n\nShe is currently Scientific Project Manager at MiMic Lab, where she coordinates national and European collaborative projects. She supports proposal preparation, project planning and reporting, while closely monitoring the scientific progress of the activities to ensure alignment between engineers, biologists, clinicians, and industry partners. She also contributes to outreach activities aimed at maximizing project impact.",
       "image": "/images/team/cecilia-palma.jpg",
       "scopusId": "57218566228",
       "orcid": "0000-0001-9517-1803"
@@ -41,7 +41,7 @@
       "role": "Assistant Professor",
       "email": "alberto.mantegazza@polimi.it",
       "bio": "Assistant Professor at DEIB, Politecnico di Milano. His research centers on Organs-on-Chip technologies and microscale fluid dynamics, with a focus on smart mechanically active platforms.",
-      "bioFull": "Alberto Mantegazza earned his B.Sc. and M.Sc. in Biomedical Engineering from Politecnico di Milano and completed his Ph.D. at the University of Bern, where he investigated red blood cell partitioning in artificial microvascular networks. He then conducted postdoctoral research at Penn State University on numerical modeling of red blood cell damage in medical devices, followed by work at Politecnico di Bari developing fluid\u2011structure\u2011interaction models for microfluidic cell\u2011sorting applications. In 2024, he joined the MiMic Lab at Politecnico di Milano as a postdoctoral fellow focusing on smart mechanically active Organs\u2011on\u2011Chip platforms. His research centers on Organs\u2011on\u2011Chip technologies and microscale fluid dynamics.",
+      "bioFull": "Alberto Mantegazza earned his B.Sc. and M.Sc. in Biomedical Engineering from Politecnico di Milano and completed his Ph.D. at the University of Bern, where he investigated red blood cell partitioning in artificial microvascular networks. He then conducted postdoctoral research at Penn State University on numerical modeling of red blood cell damage in medical devices, followed by work at Politecnico di Bari developing fluid‑structure‑interaction models for microfluidic cell‑sorting applications. In 2024, he joined the MiMic Lab at Politecnico di Milano as a postdoctoral fellow focusing on smart mechanically active Organs‑on‑Chip platforms. His research centers on Organs‑on‑Chip technologies and microscale fluid dynamics.",
       "image": "/images/team/alberto-mantegazza.jpg",
       "scopusId": "57213067936",
       "orcid": "0000-0001-5177-8240"
@@ -262,6 +262,17 @@
       "bio": "PhD candidate working on mechanically active cartilage-on-chip platforms with integrated streaming potential sensing for real-time microtissue monitoring and adaptive mechanical stimulation.",
       "bioFull": "Alessandro Rana is a PhD candidate at the Microfluidic and Biomimetic Microsystems Laboratory (MiMic Lab). He obtained his Bachelor's degree in 2023 and his Master's degree in 2026, both in Biomedical Engineering from Politecnico di Milano. During his master's thesis at the MiMic Lab, he worked on a cartilage-on-chip device designed to recapitulate the mechanical environment of articular cartilage through the controlled application of both compressive and shear stimuli, and continued this work first as a graduate research fellow and now as a PhD student.\n\nHis current research also focuses on the integration of streaming potential sensing into cartilage-on-chip platforms, to monitor the state of the microtissue in real time and let it drive the adaptive tuning of the applied mechanical stimulation.\n\nIn parallel, he works on the characterization of a microfluidic pump integrated into a bone marrow-on-chip device, to study its pumping dynamics and predict the transfer of tumor biomarkers to the downstream sensing unit.",
       "image": "/images/team/alessandro-rana.jpg",
+      "scopusId": "",
+      "orcid": ""
+    },
+    {
+      "id": 25,
+      "name": "Leonardo Cocchi",
+      "role": "PhD Student",
+      "email": "leonardo.cocchi@polimi.it",
+      "bio": "PhD student in Bioengineering working on the instrumentation and control software around organ-on-chip platforms, with a focus on their transition toward industrial use.",
+      "bioFull": "Leonardo is a PhD student in Bioengineering at Politecnico di Milano, with a background in Biomedical and Electronics Engineering. He works on the instrumentation that surrounds organ-on-chip devices, such as incubation, imaging and stimulation hardware, and on the software that controls it. For his MSc thesis he developed a platform for closed-loop mechanical stimulation of heart-on-chip models, where reinforcement learning adjusts the stimulation based on how the cardiac microtissues respond. The same work included a compact automated incubator and an imaging module designed to record the tissues during culture. His broader aim is to make organ-on-chip platforms easier to automate and scale, so they can move from research labs into industrial use.",
+      "image": "/images/team/leonardo-cocchi.jpg",
       "scopusId": "",
       "orcid": ""
     },
