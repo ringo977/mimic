@@ -275,6 +275,7 @@ function UsersTab() {
   const [viewing, setViewing] = useState<LabUser | null>(null);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
+  const [affiliationFilter, setAffiliationFilter] = useState<UserAffiliation | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'active' | 'alumni'>('active');
   const roles: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
   const affiliations: UserAffiliation[] = USER_AFFILIATIONS;
@@ -284,9 +285,10 @@ function UsersTab() {
   const filtered = useMemo(() => users.filter(u => {
     if ((u.status || 'active') !== statusFilter) return false;
     if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+    if (affiliationFilter !== 'all' && u.affiliation !== affiliationFilter) return false;
     if (search && !`${u.name} ${u.email} ${u.personCode || ''}`.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [users, statusFilter, roleFilter, search]);
+  }), [users, statusFilter, roleFilter, affiliationFilter, search]);
 
   const acc = useMemo(() => ({
     name: (u: LabUser) => u.name, email: (u: LabUser) => u.email, role: (u: LabUser) => roles.indexOf(u.role),
@@ -444,6 +446,11 @@ function UsersTab() {
             className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope bg-white outline-none">
             <option value="all">All roles</option>
             {roles.map(r => <option key={r} value={r}>{rolePermissions[r].label}</option>)}
+          </select>
+          <select value={affiliationFilter} onChange={e => setAffiliationFilter(e.target.value as UserAffiliation | 'all')}
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-xs font-manrope bg-white outline-none">
+            <option value="all">All affiliations</option>
+            {affiliations.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
           <div className="flex rounded-lg overflow-hidden border border-gray-200">
             <button onClick={() => setStatusFilter('active')} className={`px-2.5 py-1.5 text-[11px] font-medium font-manrope ${statusFilter === 'active' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>Active {activeCount}</button>
