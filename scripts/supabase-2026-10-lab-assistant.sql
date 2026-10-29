@@ -50,6 +50,25 @@ ALTER TABLE lab_users DROP CONSTRAINT IF EXISTS lab_users_affiliation_check;
 ALTER TABLE lab_users ADD CONSTRAINT lab_users_affiliation_check
   CHECK (affiliation IN ('MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'External'));
 
+-- Repair: supabase-schema-reference.sql (run by mistake on 29/10) replaced
+-- is_lab_member() and is_lab_admin() with its minimal bootstrap versions
+-- (e-mail match only, no status / auth_user_id / MFA). is_lab_admin is
+-- rebuilt in §4; is_lab_member is restored here (tighten.sql version).
+CREATE OR REPLACE FUNCTION is_lab_member()
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM lab_users
+    WHERE status = 'active'
+      AND (auth_user_id = auth.uid()
+           OR (auth_user_id IS NULL AND email = auth.jwt() ->> 'email'))
+  );
+$$;
+
 -- ------------------------------------------------------------
 -- §1 Shared certifications
 -- ------------------------------------------------------------
@@ -93,11 +112,15 @@ VALUES ('biosafety-hood-evooc', 'Biosafety hood EvOoC', 'Authorised to work in t
        ('biosafety-hood',       'Biosafety hood',       'Authorised to work in the Biosafety hoods (one certification for all of them)')
 ON CONFLICT (id) DO NOTHING;
 
--- 2c. Every hood requires its family certification
+-- 2c. Every hood requires its family certification.
+--     The SQL Editor has no JWT, so is_lab_admin() is false here and
+--     trg_protect_instrument_fields would block the change: paused for this statement.
+ALTER TABLE instruments DISABLE TRIGGER trg_protect_instrument_fields;
 UPDATE instruments
    SET requires_certification = true,
        certification_id = CASE WHEN name ~* 'evooc' THEN 'biosafety-hood-evooc' ELSE 'biosafety-hood' END
  WHERE name ~* 'biosafety hood';
+ALTER TABLE instruments ENABLE TRIGGER trg_protect_instrument_fields;
 
 -- 2d. Users: whoever held any hood of a family now holds the family
 --     certification (earliest date kept); the per-hood ids are dropped.
@@ -670,7 +693,9 @@ SELECT
   (SELECT prosrc LIKE '%project_manager%' FROM pg_proc WHERE proname = 'is_booking_manager')                               AS booking_manager_v2,
   (SELECT prosrc LIKE '%is_instrument_responsible(NEW.instrument_id);%' FROM pg_proc WHERE proname = 'enforce_booking_policy') AS booking_policy_v4,
   (SELECT prosrc LIKE '%lab_can_grant_certification%' FROM pg_proc WHERE proname = 'protect_lab_user_fields')             AS user_guard_v3,
-  (SELECT qual LIKE '%lab_is_granter%' FROM pg_policies WHERE tablename = 'lab_users' AND policyname = 'lab_users_update') AS users_update_v3;
+  (SELECT qual LIKE '%lab_is_granter%' FROM pg_policies WHERE tablename = 'lab_users' AND policyname = 'lab_users_update') AS users_update_v3,
+  (SELECT prosrc LIKE '%auth_user_id = auth.uid()%' FROM pg_proc WHERE proname = 'is_lab_member')                          AS is_lab_member_ok,
+  (SELECT prosrc LIKE '%is_aal2()%' FROM pg_proc WHERE proname = 'is_lab_admin')                                           AS is_lab_admin_mfa;
 
 -- The hoods after the migration (name, family certification, responsible)
 SELECT i.name, i.certification_id, i.requires_certification, u.name AS responsible
