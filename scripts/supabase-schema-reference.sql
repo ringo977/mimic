@@ -97,6 +97,18 @@
 --        handle_orders for the MiMic lab_manager; is_lab_order_handler();
 --        protect_wishlist_status v2 lets handlers do approved→ordered→delivered;
 --        wishlist_items_update v3)
+--      then supabase-2026-10-lab-assistant.sql   (affiliation Biomech; every
+--        non-MiMic member = MiMic msc server-side: lab_can v5, is_lab_admin v3
+--        (+ MiMic lab_manager/project_manager), is_booking_manager v2,
+--        lab_can_upload_manuals v2, lab_can_add_students/members v2;
+--        instruments.certification_id + protect_instrument_fields v2; hoods
+--        renamed "Biosafety hood" with two shared certifications
+--        biosafety-hood-evooc / biosafety-hood; enforce_booking_policy v4 and
+--        bookings_update/delete v3 (instrument responsible = manager of its
+--        bookings); lab_is_pi_or_admin, lab_can_grant_training(kind),
+--        lab_can_grant_certification(id), lab_is_granter; protect_lab_user_fields
+--        v3 + lab_users_update v3 so PhD+ mark the microfab training, Lab
+--        Manager+ the bio training, responsibles grant their certification)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -156,7 +168,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   certified_at            jsonb,   -- { certificationId: YYYY-MM-DD } training dates
   favorite_instrument_ids text[] NOT NULL DEFAULT '{}'::text[],   -- 2026-10-beta-round4.sql: own favourites (self-editable)
   CONSTRAINT lab_users_affiliation_check
-    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'External'::text]))),   -- 2026-09-roles.sql
+    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'External'::text]))),   -- 2026-10-lab-assistant.sql
   CONSTRAINT lab_users_role_check
     CHECK ((role = ANY (ARRAY['admin'::text, 'pi'::text, 'researcher'::text, 'lab_manager'::text, 'project_manager'::text, 'postdoc'::text, 'phd'::text, 'msc'::text, 'guest'::text]))),   -- 2026-09-roles.sql
   CONSTRAINT lab_users_status_check
@@ -179,6 +191,7 @@ CREATE TABLE IF NOT EXISTS instruments (
   location                   text NOT NULL DEFAULT ''::text,   -- stale copy of the name — read location_id instead
   location_id                text,
   requires_certification     boolean NOT NULL DEFAULT false,
+  certification_id           text,   -- 2026-10-lab-assistant.sql: shared certification (e.g. biosafety-hood-evooc); NULL = the instrument's own id
   description                text NOT NULL DEFAULT ''::text,
   icon                       text NOT NULL DEFAULT ''::text,
   serial_number              text,

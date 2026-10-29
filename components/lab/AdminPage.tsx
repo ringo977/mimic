@@ -17,7 +17,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   isRackBased, isShelfBased, buildBookingSlots, isWorkingHour, RackLabel, rackColorPalette, slotLabel, defaultFixedSlots, userGroups, describeBookingPolicy,
   StorageBox, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel,
   rolePermissions, generateId, generateAbbreviation, formatDate, formatTime, getRowLabels,
-  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
+  SUPERVISOR_ROLES, SUPERVISED_ROLES, isAlumni, USER_AFFILIATIONS, effectiveRole, canGrantTraining, canGrantCertification, instrumentCertId, reagentShelf, reagentDoor, reagentPlaceLabel, doorSideLabel, DoorSide,
   ReagentKind, reagentKinds, reagentKindLabel, UserGroup,
   CellType, cellTypePalette, matchCellType, cellLineColor, viewCellLineColors, cellLineAbbr,
   parseCells, formatCells,
@@ -265,7 +265,10 @@ function SortTh({ label, k, sortKey, sortAsc, toggle, align }: { label: string; 
 // Users Tab
 // ============================================================
 function UsersTab() {
-  const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications, bookings, removeBooking } = useLabContext();
+  const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications, instruments, bookings, removeBooking } = useLabContext();
+  // Trainings and certifications have their own granters (server: protect_lab_user_fields v3)
+  const mayGrant = { microfab: canGrantTraining(currentUser, 'microfab'), bio: canGrantTraining(currentUser, 'bio') };
+  const mayGrantCert = (id: string) => canGrantCertification(currentUser, id, instruments);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<LabUser | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -274,7 +277,7 @@ function UsersTab() {
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'active' | 'alumni'>('active');
   const roles: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
-  const affiliations: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'External'];
+  const affiliations: UserAffiliation[] = USER_AFFILIATIONS;
   const empty = (): LabUser => ({ id: generateId(), email: '', name: '', abbreviation: '', role: 'phd', affiliation: 'DEIB', isAdmin: false, certifications: [], projects: [], status: 'active' });
   const [form, setForm] = useState<LabUser>(empty());
 
@@ -383,7 +386,7 @@ function UsersTab() {
       let supervisorId: string | undefined;
       if (rec['Supervisor']) {
         const sup = users.find(x => x.name.toLowerCase() === rec['Supervisor'].toLowerCase() || x.email.toLowerCase() === rec['Supervisor'].toLowerCase());
-        if (sup && SUPERVISOR_ROLES.includes(sup.role)) supervisorId = sup.id;
+        if (sup && SUPERVISOR_ROLES.includes(effectiveRole(sup))) supervisorId = sup.id;
         else notes.push(`supervisor "${rec['Supervisor']}" not found or not eligible`);
       }
       const item: LabUser = {
@@ -536,7 +539,7 @@ function UsersTab() {
             <Field label="Supervisor">
               <select value={form.supervisorId || ''} onChange={e => setForm({...form, supervisorId: e.target.value || undefined})} className={inputCls}>
                 <option value="">No supervisor assigned…</option>
-                {users.filter(x => SUPERVISOR_ROLES.includes(x.role) && x.status !== 'alumni' && x.id !== form.id).map(x => (
+                {users.filter(x => SUPERVISOR_ROLES.includes(effectiveRole(x)) && x.status !== 'alumni' && x.id !== form.id).map(x => (
                   <option key={x.id} value={x.id}>{x.name} ({rolePermissions[x.role].label})</option>
                 ))}
               </select>
@@ -545,17 +548,17 @@ function UsersTab() {
           <Field label="Trainings">
             <div className="space-y-2 p-2.5 border border-gray-200 rounded-xl">
               {([
-                { label: 'Microfabrication training', done: 'trainingMicrofabDone', date: 'trainingMicrofabDate' },
-                { label: 'Biological training', done: 'trainingBioDone', date: 'trainingBioDate' },
+                { kind: 'microfab', label: 'Microfabrication training', done: 'trainingMicrofabDone', date: 'trainingMicrofabDate', who: 'any PhD and up' },
+                { kind: 'bio', label: 'Biological training', done: 'trainingBioDone', date: 'trainingBioDate', who: 'Lab Manager and up' },
               ] as const).map(t => (
-                <div key={t.done} className="flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer flex-1">
-                    <input type="checkbox" checked={!!form[t.done]}
+                <div key={t.done} className="flex items-center justify-between gap-2" title={mayGrant[t.kind] ? undefined : `Granted by ${t.who}`}>
+                  <label className={`flex items-center gap-2 flex-1 ${mayGrant[t.kind] ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
+                    <input type="checkbox" checked={!!form[t.done]} disabled={!mayGrant[t.kind]}
                       onChange={e => setForm(f => ({ ...f, [t.done]: e.target.checked, [t.date]: e.target.checked ? (f[t.date] || todayStr()) : undefined }))}
                       className="w-4 h-4 rounded border-gray-300 text-green-600" />
                     <span className="text-xs font-manrope text-gray-700">{t.label}</span>
                   </label>
-                  {form[t.done] && <input type="date" value={form[t.date] || ''} onChange={e => setForm(f => ({ ...f, [t.date]: e.target.value || undefined }))} className="px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />}
+                  {form[t.done] && <input type="date" value={form[t.date] || ''} disabled={!mayGrant[t.kind]} onChange={e => setForm(f => ({ ...f, [t.date]: e.target.value || undefined }))} className="px-2 py-1 border border-gray-200 rounded-lg text-xs font-manrope outline-none disabled:opacity-50" />}
                 </div>
               ))}
             </div>
@@ -588,12 +591,16 @@ function UsersTab() {
           </Field>
           <Field label="Certifications">
             <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto p-2 border border-gray-200 rounded-xl">
-              {certifications.map(c => (
-                <button key={c.id} type="button" onClick={() => toggleCert(c.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope transition-all ${form.certifications.includes(c.id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                  {c.name}
-                </button>
-              ))}
+              {certifications.map(c => {
+                const ok = mayGrantCert(c.id);
+                return (
+                  <button key={c.id} type="button" onClick={() => toggleCert(c.id)} disabled={!ok}
+                    title={ok ? undefined : 'Granted by the responsible of the instrument (or a PI / Admin)'}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope transition-all ${form.certifications.includes(c.id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} ${ok ? '' : 'opacity-50 cursor-not-allowed'}`}>
+                    {c.name}
+                  </button>
+                );
+              })}
             </div>
           </Field>
           {form.certifications.length > 0 && (
@@ -720,7 +727,8 @@ function ProjectsTab() {
 // Certifications Tab
 // ============================================================
 function CertificationsTab() {
-  const { certifications, addCertification, updateCertification, removeCertification, instruments, users, updateUser } = useLabContext();
+  const { certifications, addCertification, updateCertification, removeCertification, instruments, users, user: currentUser, updateUser } = useLabContext();
+  const mayGrantCert = (id: string) => canGrantCertification(currentUser, id, instruments);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Certification | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -742,7 +750,9 @@ function CertificationsTab() {
     updateUser({ ...u, certifications: newCerts });
   };
 
-  const certAcc = useMemo(() => ({ name: (c: Certification) => c.name, instrument: (c: Certification) => { const i = instruments.find(x => x.id === c.instrumentId); return i ? i.name : '— General'; }, users: (c: Certification) => users.filter(u => u.certifications.includes(c.id)).length }), [instruments, users]);
+  // Instruments unlocked by a certification: its own (id = instrument id) or those sharing it (certification_id)
+  const unlocks = useCallback((c: Certification) => instruments.filter(i => i.requiresCertification && instrumentCertId(i) === c.id), [instruments]);
+  const certAcc = useMemo(() => ({ name: (c: Certification) => c.name, instrument: (c: Certification) => unlocks(c).map(i => i.name).join(', ') || '— General', users: (c: Certification) => users.filter(u => u.certifications.includes(c.id)).length }), [unlocks, users]);
   const { sorted: sortedCerts, sortKey: cSortKey, sortAsc: cSortAsc, toggle: cToggle } = useSort(certifications, 'name', certAcc);
 
   const importSpec: ImportSpec<Certification> = {
@@ -786,12 +796,12 @@ function CertificationsTab() {
             <th className="px-3 py-2.5 text-right font-semibold text-gray-700">Actions</th>
           </tr></thead><tbody className="divide-y divide-gray-100">
             {sortedCerts.map(c => {
-              const inst = instruments.find(i => i.id === c.instrumentId);
+              const insts = unlocks(c);
               const certUsers = users.filter(u => u.certifications.includes(c.id));
               return (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-3 py-2 font-medium text-gray-900">{c.name}</td>
-                  <td className="px-3 py-2 text-gray-500">{inst ? `${inst.icon} ${inst.name}` : '— General'}</td>
+                  <td className="px-3 py-2 text-gray-500">{insts.length === 0 ? '— General' : insts.length === 1 ? `${insts[0].icon} ${insts[0].name}` : <span title={insts.map(i => i.name).join(', ')}>{insts[0].icon} {insts.length} instruments</span>}</td>
                   <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{c.description}</td>
                   <td className="px-3 py-2 text-gray-500">{certUsers.length}</td>
                   <td className="px-3 py-2 text-right"><div className="flex justify-end gap-1">
@@ -831,8 +841,8 @@ function CertificationsTab() {
                     const has = u.certifications.includes(c.id);
                     return (
                       <td key={c.id} className="px-1.5 py-2 text-center">
-                        <button onClick={() => toggleUserCert(u.id, c.id)}
-                          className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all ${has ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'}`}>
+                        <button onClick={() => toggleUserCert(u.id, c.id)} disabled={!mayGrantCert(c.id)} title={mayGrantCert(c.id) ? undefined : 'Granted by the instrument responsible (or a PI / Admin)'}
+                          className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed ${has ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'}`}>
                           {has ? <span className="text-[10px] font-bold">&#10003;</span> : <span className="text-[10px]">—</span>}
                         </button>
                       </td>
@@ -1407,6 +1417,15 @@ function InstrumentsTab() {
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={form.requiresCertification} onChange={e => setForm({ ...form, requiresCertification: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-[#102C53]" /><span className="text-sm font-manrope text-gray-700">Requires certification</span></label>
+          {form.requiresCertification && (
+            <Field label="Which certification">
+              <select value={form.certificationId || ''} onChange={e => setForm({ ...form, certificationId: e.target.value || undefined })} className={inputCls}>
+                <option value="">Its own (one certification per instrument)</option>
+                {certifications.filter(c => c.id !== form.id && !instruments.some(i => i.id === c.id)).map(c => <option key={c.id} value={c.id}>{c.name} (shared)</option>)}
+              </select>
+              <p className="text-[10px] text-gray-400 font-manrope mt-1">A shared certification covers several instruments at once (e.g. all the Biosafety hoods EvOoC). Create it in the Certifications tab without a linked instrument, then pick it here.</p>
+            </Field>
+          )}
           <button onClick={save} disabled={!form.name} className={btnPrimary}><Save size={16} /> {editing ? 'Save' : 'Add'}</button>
         </div>
       </Modal>}

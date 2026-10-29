@@ -6,7 +6,8 @@
 
 export type UserRole = 'admin' | 'pi' | 'researcher' | 'lab_manager' | 'project_manager' | 'postdoc' | 'phd' | 'msc' | 'guest';
 
-export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'External';
+export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'Biomech' | 'External';
+export const USER_AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'External'];
 
 export type UserStatus = 'active' | 'alumni';
 
@@ -40,6 +41,34 @@ export interface LabUser {
 }
 
 export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
+
+/**
+ * The role that decides what a person may do in the app. Members of other
+ * affiliations (DEIB, POLIMI, Biomech, External) are treated like a MiMic
+ * MSc student whatever their title: they book instruments and look around.
+ * The displayed role (rolePermissions[u.role].label) stays the real one.
+ * Server rule: same test inside lab_can / is_lab_admin / is_booking_manager.
+ */
+export function effectiveRole(u: Pick<LabUser, 'role' | 'affiliation'>): UserRole {
+  return u.affiliation === 'MiMic Lab' ? u.role : 'msc';
+}
+export function isMimic(u: Pick<LabUser, 'affiliation'>): boolean { return u.affiliation === 'MiMic Lab'; }
+
+// --- Trainings and certifications: who may grant them ---------------------
+// Microfabrication training: any MiMic member from PhD up.
+export const MICROFAB_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd'];
+// Biological training: Lab Manager and up (Lab Manager, Researcher, PI, Admin).
+export const BIO_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager'];
+export type TrainingKind = 'microfab' | 'bio';
+/** PI / Admin (role or flag): the only ones who grant any certification and edit everything. */
+export function isPiOrAdmin(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
+  return u.isAdmin || (isMimic(u) && (u.role === 'admin' || u.role === 'pi'));
+}
+export function canGrantTraining(actor: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>, kind: TrainingKind): boolean {
+  if (isPiOrAdmin(actor)) return true;
+  if (!isMimic(actor)) return false;
+  return (kind === 'microfab' ? MICROFAB_TRAINER_ROLES : BIO_TRAINER_ROLES).includes(actor.role);
+}
 
 // Roles senior enough to supervise MSc students and guests.
 export const SUPERVISOR_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd'];
@@ -357,6 +386,28 @@ export interface Instrument {
   nextMaintenanceDate?: string;
   bookingPolicy?: BookingPolicy;
   responsibleUserId?: string;   // who looks after the instrument
+  /**
+   * Certification that unlocks this instrument when requiresCertification is
+   * set. Defaults to the instrument's own id; several instruments may share
+   * one (all the "Biosafety hood EvOoC" share 'biosafety-hood-evooc').
+   */
+  certificationId?: string;
+}
+
+export function instrumentCertId(i: Pick<Instrument, 'id' | 'certificationId'>): string {
+  return i.certificationId || i.id;
+}
+export function isCertifiedFor(u: Pick<LabUser, 'certifications'>, i: Pick<Instrument, 'id' | 'certificationId' | 'requiresCertification'>): boolean {
+  return !i.requiresCertification || u.certifications.includes(instrumentCertId(i));
+}
+/** Who may grant a certification: PI / Admin, or the responsible of an instrument it unlocks. */
+export function canGrantCertification(actor: Pick<LabUser, 'id' | 'role' | 'affiliation' | 'isAdmin'>, certId: string, instruments: Pick<Instrument, 'id' | 'certificationId' | 'responsibleUserId'>[]): boolean {
+  if (isPiOrAdmin(actor)) return true;
+  return instruments.some(i => instrumentCertId(i) === certId && !!i.responsibleUserId && i.responsibleUserId === actor.id);
+}
+/** Responsibles manage every booking of their instrument like a booking manager. */
+export function isResponsibleOf(actor: Pick<LabUser, 'id'>, i: Pick<Instrument, 'responsibleUserId'> | undefined): boolean {
+  return !!i?.responsibleUserId && i.responsibleUserId === actor.id;
 }
 
 /**
@@ -835,9 +886,10 @@ export const reagentKindShort: Record<ReagentKind, string> = { stock: 'STOCK', w
  * manage everybody's material (admin / PI / lab manager). Mirrors the check
  * in adjust_reagent_stock() on the server.
  */
-export function canAccessStock(user: Pick<LabUser, 'id' | 'role' | 'isAdmin'>, r: Reagent): boolean {
+export function canAccessStock(user: Pick<LabUser, 'id' | 'role' | 'isAdmin' | 'affiliation'>, r: Reagent): boolean {
   if ((r.kind ?? 'item') !== 'stock') return true;
-  if (user.isAdmin || user.role === 'admin' || user.role === 'pi' || user.role === 'lab_manager') return true;
+  const role = effectiveRole(user);
+  if (user.isAdmin || role === 'admin' || role === 'pi' || role === 'lab_manager') return true;
   return (r.responsibleUserIds ?? []).includes(user.id);
 }
 
@@ -1227,20 +1279,20 @@ export const rolePermissions: Record<UserRole, {
   researcher: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: true, canViewDatabase: true, canExportData: true,
+    canViewLog: true, canViewDatabase: false, canExportData: false,
     canUploadManuals: true, canAdmin: false, label: 'Researcher',
   },
   lab_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: true,
     canViewLog: true, canViewDatabase: true, canExportData: true,
-    canUploadManuals: true, canAdmin: false, label: 'Lab Manager',
+    canUploadManuals: true, canAdmin: true, label: 'Lab Manager',
   },
   project_manager: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
     canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
     canViewLog: true, canViewDatabase: false, canExportData: true,
-    canUploadManuals: true, canAdmin: false, label: 'Project Manager',
+    canUploadManuals: true, canAdmin: true, label: 'Project Manager',
   },
   postdoc: {
     canBook: true, canWithdrawReagents: true, canAddReagents: true,
@@ -1268,55 +1320,13 @@ export const rolePermissions: Record<UserRole, {
   },
 };
 
-// Reduced permissions for non-MiMic users (DEIB, POLIMI, External)
-export const externalRolePermissions: Record<UserRole, typeof rolePermissions[UserRole]> = {
-  admin: { ...rolePermissions.admin },
-  pi: { ...rolePermissions.pi },
-  researcher: {
-    canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'Researcher',
-  },
-  lab_manager: {
-    canBook: true, canWithdrawReagents: true, canAddReagents: true,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: true, canViewDatabase: false, canExportData: false,
-    canUploadManuals: true, canAdmin: false, label: 'Lab Manager',
-  },
-  project_manager: {
-    canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'Project Manager',
-  },
-  postdoc: {
-    canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: true, canRequestOrders: true, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'Post-Doc',
-  },
-  // External PhDs: no cryo, no wishlist (lab_can v2). A PhD who works in the
-  // lab day by day is registered with affiliation "MiMic Lab" instead.
-  phd: {
-    canBook: true, canWithdrawReagents: true, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'PhD Student',
-  },
-  msc: {
-    canBook: true, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'MSc Student',
-  },
-  guest: {
-    canBook: false, canWithdrawReagents: false, canAddReagents: false,
-    canManageCryo: false, canRequestOrders: false, canApproveOrders: false, canHandleOrders: false,
-    canViewLog: false, canViewDatabase: false, canExportData: false,
-    canUploadManuals: false, canAdmin: false, label: 'Guest',
-  },
-};
+// Non-MiMic members (DEIB, POLIMI, Biomech, External) get rolePermissions.msc
+// whatever their role: see effectiveRole(). Permissions are always read as
+// rolePermissions[effectiveRole(user)].
+export function permissionsOf(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): typeof rolePermissions[UserRole] {
+  const base = rolePermissions[effectiveRole(u)];
+  return { ...base, canAdmin: base.canAdmin || u.isAdmin, label: rolePermissions[u.role].label };
+}
 
 // --- Mock Users ---
 

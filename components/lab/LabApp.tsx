@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff, BarChart3 } from 'lucide-react';
-import { LabUser, rolePermissions } from '@/data/lab-data';
+import { LabUser, rolePermissions, effectiveRole } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -578,7 +578,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
   const [showChangePwd, setShowChangePwd] = useState(false);
 
   const filteredNav = navItems.filter(item => {
-    if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(user.role)) return false;
+    if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(effectiveRole(user))) return false;
     if (!item.requiresPerm) return true;
     return (permissions as unknown as Record<string, boolean>)[item.requiresPerm];
   });
@@ -983,7 +983,8 @@ export default function LabApp() {
   if (step === 'enroll_mfa') {
     // Admins and PIs must set up 2FA — no skip allowed
     // Whoever approves or manages other people's data must have 2FA
-    const mfaRequired = user?.role === 'admin' || user?.role === 'pi' || user?.role === 'lab_manager' || user?.role === 'project_manager' || user?.isAdmin;
+    // Everyone with management rights (server: is_lab_admin / is_booking_manager need aal2)
+    const mfaRequired = !!user && (user.isAdmin || ['admin', 'pi', 'lab_manager', 'project_manager'].includes(effectiveRole(user)));
     return (
       <EnrollMFAScreen
         onEnrolled={() => updateStep('ready')}

@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
   StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings, CellType,
-  rolePermissions, externalRolePermissions,
+  rolePermissions, permissionsOf, effectiveRole, isResponsibleOf,
   generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
@@ -51,6 +51,8 @@ interface LabContextType {
   bookingSettings: BookingSettings;
   updateBookingSettings: (s: BookingSettings) => void;
   canManageAllBookings: boolean;
+  /** Booking managers everywhere; instrument responsibles on their own instrument. */
+  canManageBookingsOf: (instrumentId: string) => boolean;
   absences: Absence[];
   addAbsence: (a: Omit<Absence, 'id' | 'requestedAt'>) => void;
   updateAbsence: (a: Absence) => void;
@@ -598,22 +600,23 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   const updateLocation = useCallback((l: Location) => { setLocations(prev => prev.map(x => x.id === l.id ? l : x)); track(upsertLocation(l), `Location "${l.name}"`); }, [track]);
   const removeLocation = useCallback((id: string) => { setLocations(prev => { const l = prev.find(x => x.id === id); if (l) addLogEntry({ userId: user.id, userName: user.name, action: `Removed location ${l.name}`, category: 'auth', details: '' }); return prev.filter(x => x.id !== id); }); track(deleteLocation(id), 'Location removal'); }, [user, addLogEntry, track]);
 
+  // Server rule: is_booking_manager() — MiMic admin / PI / Lab Manager / Project Manager, or the Admin flag.
+  const canManageAllBookings = user.isAdmin || ['admin', 'pi', 'lab_manager', 'project_manager'].includes(effectiveRole(user));
+
   if (!loaded) return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-gray-50"><div className="animate-pulse text-gray-500 font-manrope">Loading Lab Manager...</div></div>;
 
   return (
     <LabContext.Provider value={{
-      user, permissions: (() => {
-        const base = user.affiliation === 'MiMic Lab' ? rolePermissions[user.role] : externalRolePermissions[user.role];
-        return { ...base, canAdmin: base.canAdmin || user.isAdmin };
-      })(), currentPage, setCurrentPage,
+      user, permissions: permissionsOf(user), currentPage, setCurrentPage,
       bookings, addBooking, updateBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries,
       favoriteInstrumentIds, toggleFavoriteInstrument,
       bookingSettings, updateBookingSettings,
-      canManageAllBookings: user.isAdmin || ['admin', 'pi', 'lab_manager'].includes(user.role),
+      canManageAllBookings,
+      canManageBookingsOf: (instrumentId: string) => canManageAllBookings || isResponsibleOf(user, instruments.find(i => i.id === instrumentId)),
       absences, addAbsence, updateAbsence, removeAbsence,
       absenceSettings, updateAbsenceSettings,
       cellTypes, updateCellTypes,
-      canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(user.role),
+      canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(effectiveRole(user)),
       reagents, withdrawReagent, addReagentStock, prepareWorkingSolution,
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,

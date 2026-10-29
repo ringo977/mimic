@@ -82,6 +82,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     maintenance_period_months: number | null;
     last_maintenance_date: string | null; next_maintenance_date: string | null;
     booking_policy: BookingPolicy | null; responsible_user_id: string | null;
+    certification_id: string | null;
   }>('instruments', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -99,6 +100,7 @@ export async function fetchInstruments(): Promise<Instrument[] | null> {
     nextMaintenanceDate: r.next_maintenance_date ?? undefined,
     bookingPolicy: r.booking_policy ?? undefined,
     responsibleUserId: r.responsible_user_id ?? undefined,
+    certificationId: r.certification_id ?? undefined,
   }));
 }
 
@@ -117,6 +119,7 @@ export async function upsertInstrument(i: Instrument) {
     next_maintenance_date: i.nextMaintenanceDate ?? null,
     booking_policy: i.bookingPolicy ?? null,
     responsible_user_id: i.responsibleUserId ?? null,
+    certification_id: i.certificationId ?? null,
   });
 }
 

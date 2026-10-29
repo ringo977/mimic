@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, M
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, peakSeats, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, buildSeriesDays, SeriesMode } from '@/data/lab-data';
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, buildSeriesDays, SeriesMode, isCertifiedFor, isResponsibleOf, effectiveRole } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 import MultiDayFields from './MultiDayFields';
 
@@ -73,7 +73,9 @@ export default function InstrumentsPage() {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysStr(selectedDate, i)), [selectedDate]);
   const weekBookings = bookings.filter(b => b.instrumentId === selectedInstrument && b.date >= weekDays[0] && b.date <= weekDays[6]);
 
-  const isCertified = instrument ? (!instrument.requiresCertification || user.certifications.includes(instrument.id)) : false;
+  const isCertified = instrument ? isCertifiedFor(user, instrument) : false;
+  // Booking managers everywhere; the responsible of this instrument on this instrument.
+  const canManage = canManageAllBookings || isResponsibleOf(user, instrument);
 
   const changeDate = (days: number) => {
     const d = new Date(selectedDate + 'T12:00:00');
@@ -92,11 +94,11 @@ export default function InstrumentsPage() {
     ? slotsUsedInWeek(bookings, selectedInstrument, user.id, selectedDate) : 0;
   const hoursUsed = policy?.maxHoursPerDay && selectedInstrument
     ? hoursUsedOnDay(bookings, selectedInstrument, user.id, selectedDate) : 0;
-  const myGroup = userGroupOf(user.role);
-  const horizon = canManageAllBookings ? undefined : policyAdvanceDays(policy, myGroup);
+  const myGroup = userGroupOf(effectiveRole(user));
+  const horizon = canManage ? undefined : policyAdvanceDays(policy, myGroup);
   const lastBookableDate = horizon !== undefined ? addDaysStr(todayStr, horizon) : '';
   const beyondHorizon = Boolean(lastBookableDate) && selectedDate > lastBookableDate;
-  const canApprove = canManageAllBookings || (!!instrument?.responsibleUserId && instrument.responsibleUserId === user.id);
+  const canApprove = canManage || (!!instrument?.responsibleUserId && instrument.responsibleUserId === user.id);
 
   // Capacity-aware conflict: an interval is blocked only when all seats are taken.
   const hasConflict = (start: number, end: number, list: typeof bookings = dayBookings) =>
@@ -108,7 +110,7 @@ export default function InstrumentsPage() {
   // Is a given slot start no longer bookable (in the past — or, when the policy
   // allows booking a slot in progress, already ended)?
   const slotIsPast = (slotStart: number) => {
-    if (canManageAllBookings) return isPastDate;
+    if (canManage) return isPastDate;
     const fs = fixedSlots?.find(s => slotStart >= s.start - EPS && slotStart < s.end - EPS);
     const end = fs ? fs.end : slotStart + step;
     return !isBookableTime(policy, selectedDate, fs ? fs.start : slotStart, end, todayStr, nowHour);
@@ -143,13 +145,13 @@ export default function InstrumentsPage() {
     setBookError('');
     if (firstEnd <= firstStart) { setBookError('End time must be after start time.'); return; }
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
-    if (!canManageAllBookings && !isBookableTime(policy, selectedDate, firstStart, firstEnd, todayStr, nowHour)) {
+    if (!canManage && !isBookableTime(policy, selectedDate, firstStart, firstEnd, todayStr, nowHour)) {
       setBookError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time slot in the past.'); return;
     }
     if (hasConflict(firstStart, firstEnd)) { setBookError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
-    if (!canManageAllBookings) {
+    if (!canManage) {
       const policyError = validateBookingPolicy({
-        instrument, bookings, userId: user.id, role: user.role, date: selectedDate,
+        instrument, bookings, userId: user.id, role: effectiveRole(user), date: selectedDate,
         startHour: firstStart, endHour: firstEnd, today: todayStr,
       });
       if (policyError) { setBookError(policyError); return; }
@@ -157,10 +159,10 @@ export default function InstrumentsPage() {
 
     if (isSeries) {
       if (seriesDays.length > 31) { setBookError('A series covers at most 31 days.'); return; }
-      if (!canManageAllBookings) {
+      if (!canManage) {
         for (const d of seriesDays) {
           if (lastBookableDate && d.date > lastBookableDate) { setBookError(`${formatDate(d.date)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
-          const err = validateBookingPolicy({ instrument, bookings, userId: user.id, role: user.role, date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
+          const err = validateBookingPolicy({ instrument, bookings, userId: user.id, role: effectiveRole(user), date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
           if (err) { setBookError(`${formatDate(d.date)}: ${err}`); return; }
         }
       }
@@ -197,7 +199,7 @@ export default function InstrumentsPage() {
       startHour: bookStartHour,
       endHour: bookEndHour,
       notes: bookNotes,
-      status: !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'pending' : 'confirmed',
+      status: !canManage && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'pending' : 'confirmed',
     });
     setBooking(false);
     setShowBookingModal(false);
@@ -272,7 +274,7 @@ export default function InstrumentsPage() {
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filteredInstruments.map(inst => {
-            const certified = !inst.requiresCertification || user.certifications.includes(inst.id);
+            const certified = isCertifiedFor(user, inst);
             const todayBookings = bookings.filter(b => b.instrumentId === inst.id && b.date === todayStr);
             const fav = isFavorite(inst.id);
             return (
@@ -490,7 +492,7 @@ export default function InstrumentsPage() {
           const raw = rangeStart + (e.clientY - r.top) / HOUR_PX;
           const h = Math.min(Math.max(snap(raw), bookingSettings.openStartHour), bookingSettings.openEndHour - step);
           const inHorizon = !lastBookableDate || ds <= lastBookableDate;
-          const past = canManageAllBookings ? ds < todayStr : !isBookableTime(policy, ds, h, Math.min(h + step, bookingSettings.openEndHour), todayStr, nowHour);
+          const past = canManage ? ds < todayStr : !isBookableTime(policy, ds, h, Math.min(h + step, bookingSettings.openEndHour), todayStr, nowHour);
           if (past || !inHorizon) return;
           setSelectedDate(ds);
           openModalAt(h);
@@ -634,7 +636,7 @@ export default function InstrumentsPage() {
                     const myBooking = bk.userId === user.id;
                     const isStart = Math.abs(bk.startHour - slot) < EPS;
                     const pending = bk.status === 'pending';
-                    const canCancel = myBooking || canManageAllBookings || (pending && canApprove);
+                    const canCancel = myBooking || canManage || (pending && canApprove);
                     return (
                       <div
                         key={bk.id}
@@ -731,8 +733,8 @@ export default function InstrumentsPage() {
                     {fixedSlots.map(s => {
                       const occupants = seatsTaken(bookings, selectedInstrument!, selectedDate, s.start, s.end);
                       const full = occupants.length >= capacity;
-                      const ended = !canManageAllBookings && !isBookableTime(policy, selectedDate, s.start, s.end, todayStr, nowHour);
-                      const blocked = (full && !canManageAllBookings) || ended;
+                      const ended = !canManage && !isBookableTime(policy, selectedDate, s.start, s.end, todayStr, nowHour);
+                      const blocked = (full && !canManage) || ended;
                       const selected = Math.abs(s.start - bookStartHour) < EPS && Math.abs(s.end - bookEndHour) < EPS;
                       return (
                         <button
@@ -802,7 +804,7 @@ export default function InstrumentsPage() {
                 <div className="bg-amber-50 text-amber-700 px-3 py-2 rounded-xl text-xs font-manrope flex items-center gap-1.5">
                   <Moon size={13} className="shrink-0" />
                   <span>This booking is outside working hours ({formatTime(bookingSettings.workStartHour)}–{formatTime(bookingSettings.workEndHour)}).
-                  {!canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) && <strong> It will be pending until the instrument responsible authorizes it.</strong>}</span>
+                  {!canManage && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) && <strong> It will be pending until the instrument responsible authorizes it.</strong>}</span>
                 </div>
               )}
 
@@ -843,7 +845,7 @@ export default function InstrumentsPage() {
                 disabled={booking || hasConflict(firstStart, firstEnd) || firstEnd <= firstStart || Boolean(seriesConflictDay)}
                 className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {booking ? (isSeries ? 'Booking every day…' : 'Checking availability…') : isSeries ? `Book ${seriesDays.length} days` : !canManageAllBookings && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
+                {booking ? (isSeries ? 'Booking every day…' : 'Checking availability…') : isSeries ? `Book ${seriesDays.length} days` : !canManage && bookingNeedsApproval(policy, bookStartHour, bookEndHour, bookingSettings) ? 'Request Booking' : 'Confirm Booking'}
               </button>
             </div>
           </div>

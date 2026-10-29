@@ -4,17 +4,17 @@ import { useState, useMemo } from 'react';
 import { Search, Mail, UserCheck, UserPlus, X, CheckCircle2 } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import UserDetailModal from './UserDetailModal';
-import { LabUser, UserRole, UserAffiliation, rolePermissions, generateAbbreviation, generateId, formatDate, SUPERVISED_ROLES, SUPERVISOR_ROLES, MEMBER_MANAGER_ROLES, ADDABLE_ROLES } from '@/data/lab-data';
+import { LabUser, UserRole, UserAffiliation, USER_AFFILIATIONS, rolePermissions, generateAbbreviation, generateId, formatDate, SUPERVISED_ROLES, SUPERVISOR_ROLES, MEMBER_MANAGER_ROLES, ADDABLE_ROLES, effectiveRole } from '@/data/lab-data';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { fetchSignupCode } from '@/lib/supabase-users';
 
 const ROLE_ORDER: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd', 'msc', 'guest'];
-const AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'External'];
+const AFFILIATIONS: UserAffiliation[] = USER_AFFILIATIONS;
 
 // Lab directory, visible to every member. Non-sensitive info only
 // (no person code — that stays in the admin panel).
 export default function TeamPage() {
-  const { user, users, projects, certifications, addUser, permissions } = useLabContext();
+  const { user, users, projects, certifications, instruments, addUser, updateUser, permissions } = useLabContext();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'active' | 'alumni'>('active');
@@ -23,8 +23,8 @@ export default function TeamPage() {
   // Supervisors register their own students/guests; the server policy
   // (lab_users_insert v2) only lets them insert msc/guest rows with
   // themselves as supervisor. Admins use the Admin Panel for everything else.
-  const canAddMembers = permissions.canAdmin || MEMBER_MANAGER_ROLES.includes(user.role);
-  const canAddStudents = canAddMembers || SUPERVISOR_ROLES.includes(user.role);
+  const canAddMembers = permissions.canAdmin || MEMBER_MANAGER_ROLES.includes(effectiveRole(user));
+  const canAddStudents = canAddMembers || SUPERVISOR_ROLES.includes(effectiveRole(user));
 
   const activeCount = users.filter(u => (u.status || 'active') === 'active').length;
   const alumniCount = users.length - activeCount;
@@ -62,7 +62,7 @@ export default function TeamPage() {
         <AddStudentModal
           supervisor={user}
           anyRole={canAddMembers}
-          supervisors={users.filter(u => (u.status || 'active') === 'active' && SUPERVISOR_ROLES.includes(u.role))}
+          supervisors={users.filter(u => (u.status || 'active') === 'active' && SUPERVISOR_ROLES.includes(effectiveRole(u)))}
           existingEmails={users.map(u => u.email.toLowerCase())}
           onClose={() => setAdding(false)}
           onAdd={addUser}
@@ -132,6 +132,7 @@ export default function TeamPage() {
           users={users}
           projects={projects}
           certifications={certifications}
+          grant={{ actor: user, instruments, onUpdate: (u) => { updateUser(u); setViewing(u); } }}
           onClose={() => setViewing(null)}
         />
       )}
@@ -242,7 +243,7 @@ function AddStudentModal({ supervisor, anyRole, supervisors, existingEmails, onC
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`${inputCls} mt-1`} />
               </label>
             </div>
-            <p className="text-[11px] text-gray-400 font-manrope">{anyRole ? 'Visiting PhD students are registered as PhD Student with affiliation External.' : 'MSc students can book instruments and see the inventory; guests can only look.'} Trainings and certifications are granted later by the lab manager or an admin.</p>
+            <p className="text-[11px] text-gray-400 font-manrope">{anyRole ? 'Visiting PhD students are registered as PhD Student with affiliation External.' : 'MSc students can book instruments and see the inventory; guests can only look.'} Trainings are granted later from their card (microfabrication by any PhD and up, biological by Lab Manager and up); certifications by the responsible of each instrument.</p>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200">Cancel</button>
               <button type="submit" className="flex-1 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e]">Register</button>

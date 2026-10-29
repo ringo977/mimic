@@ -7,7 +7,7 @@ import AbsenceStatusBadge from './AbsenceStatusBadge';
 import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
   validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr,
   policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays,
-  absenceTypeMeta, absenceRequestLabel, absenceWhenLabel } from '@/data/lab-data';
+  absenceTypeMeta, absenceRequestLabel, absenceWhenLabel, isCertifiedFor, isResponsibleOf, effectiveRole } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings, SeriesMode, Absence } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 import MultiDayFields from './MultiDayFields';
@@ -114,13 +114,14 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
 
   const existing = state.mode === 'view' ? state.booking : null;
   const isMine = existing ? existing.userId === user.id : true;
-  const isManager = canManageAllBookings;
+  const [instrumentId, setInstrumentId] = useState(existing?.instrumentId ?? (state.mode === 'create' ? state.instrumentId ?? '' : ''));
+  // Booking managers everywhere; the responsible of the chosen instrument on that instrument.
+  const isManager = canManageAllBookings || isResponsibleOf(user, instruments.find(i => i.id === (instrumentId || existing?.instrumentId)));
   const status = existing ? bookingStatus(existing, todayStr, nowHour) : 'future';
   // Full change + cancel: managers anytime; owners only on future bookings.
   const canModify = isManager || (isMine && status === 'future');
 
   const [editing, setEditing] = useState(state.mode === 'create');
-  const [instrumentId, setInstrumentId] = useState(existing?.instrumentId ?? (state.mode === 'create' ? state.instrumentId ?? '' : ''));
   const [date, setDate] = useState(existing?.date ?? (state.mode === 'create' ? state.date : todayStr));
   const [startHour, setStartHour] = useState<number>(existing?.startHour ?? (state.mode === 'create' ? state.startHour : bookingSettings.workStartHour));
   const [endHour, setEndHour] = useState<number>(existing?.endHour ?? (state.mode === 'create' ? (state.endHour ?? Math.min(state.startHour + 1, bookingSettings.openEndHour)) : bookingSettings.workStartHour + 1));
@@ -148,7 +149,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     onClose();
   };
 
-  const bookableInstruments = instruments.filter(i => !i.requiresCertification || user.certifications.includes(i.id) || i.id === instrumentId);
+  const bookableInstruments = instruments.filter(i => isCertifiedFor(user, i) || i.id === instrumentId);
   const inst = instruments.find(i => i.id === (instrumentId || existing?.instrumentId));
   // Instruments with their own rules (the PDMS hood: fixed slots, weekly quota)
   const policy = inst?.bookingPolicy;
@@ -158,7 +159,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     ? slotsUsedInWeek(bookings, inst.id, user.id, date, existing?.id) : 0;
   const hoursUsed = policy?.maxHoursPerDay && inst
     ? hoursUsedOnDay(bookings, inst.id, user.id, date, existing?.id) : 0;
-  const myGroup = userGroupOf(user.role);
+  const myGroup = userGroupOf(effectiveRole(user));
   const horizon = policyAdvanceDays(policy, myGroup);
   const lastBookableDate = horizon !== undefined ? addDaysStr(todayStr, horizon) : '';
   const isPastDate = date < todayStr;
@@ -201,7 +202,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     if (conflict(firstStart, firstEnd)) { setError(capacity > 1 ? `All ${capacity} seats are taken in that time range.` : 'Time conflict with an existing booking.'); return; }
     if (!isManager) {
       const policyError = validateBookingPolicy({
-        instrument: inst, bookings, userId: user.id, role: user.role, date, startHour: firstStart, endHour: firstEnd,
+        instrument: inst, bookings, userId: user.id, role: effectiveRole(user), date, startHour: firstStart, endHour: firstEnd,
         today: todayStr, ignoreId: existing?.id,
       });
       if (policyError) { setError(policyError); return; }
@@ -210,7 +211,7 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
       if (!isManager) {
         for (const d of seriesDays) {
           if (lastBookableDate && d.date > lastBookableDate) { setError(`${formatDate(d.date)} is beyond your booking horizon (until ${formatDate(lastBookableDate)}).`); return; }
-          const err = validateBookingPolicy({ instrument: inst, bookings, userId: user.id, role: user.role, date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
+          const err = validateBookingPolicy({ instrument: inst, bookings, userId: user.id, role: effectiveRole(user), date: d.date, startHour: d.startHour, endHour: d.endHour, today: todayStr });
           if (err) { setError(`${formatDate(d.date)}: ${err}`); return; }
         }
       }
@@ -764,7 +765,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
   view: CalendarView; onViewChange: (v: CalendarView) => void;
 }) {
-  const { updateBooking, canManageAllBookings } = useLabContext();
+  const { updateBooking, canManageBookingsOf } = useLabContext();
   const [weekOffset, setWeekOffset] = useState(0);
   const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
   const [preset, setPreset] = useState<RangePreset>('open');
@@ -841,7 +842,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   const ceilSlot = (h: number) => Math.min(Math.ceil((h - EPS) / slotStep) * slotStep, maxH);
   // Lowest start/end a NON-manager may drag a booking to. Managers (admins) are free.
   const dragBounds = (ev: Booking) => {
-    const free = canManageAllBookings || ev.date !== todayStr;
+    const free = canManageBookingsOf(ev.instrumentId) || ev.date !== todayStr;
     const low = free ? minH : ceilSlot(nowHour);
     return { lowStart: low, lowEnd: low };
   };
@@ -879,9 +880,10 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
         let date = d.date, lowStart = d.lowStart, lowEnd = d.lowEnd;
         const colEl = document.elementsFromPoint(e.clientX, e.clientY).find(el => el.hasAttribute('data-daycol'));
         const overDate = colEl?.getAttribute('data-daycol');
-        if (overDate && overDate !== d.date && (canManageAllBookings || overDate >= todayStr)) {
+        const mgr = canManageBookingsOf(d.booking.instrumentId);
+        if (overDate && overDate !== d.date && (mgr || overDate >= todayStr)) {
           date = overDate;
-          const low = canManageAllBookings || overDate !== todayStr ? minH : ceilSlot(nowHour);
+          const low = mgr || overDate !== todayStr ? minH : ceilSlot(nowHour);
           lowStart = low; lowEnd = low;
         }
         const ns = clamp(snap(raw - d.grab), lowStart, maxH - d.dur);
@@ -912,8 +914,8 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
       if (pol?.slots?.length && !pol.slots.some(s => Math.abs(s.start - d.start) < EPS && Math.abs(s.end - d.end) < EPS)) {
         setDropError(`${inst?.name || 'This instrument'} is bookable only in its fixed slots.`); return;
       }
-      if (!canManageAllBookings) {
-        const err = validateBookingPolicy({ instrument: inst, bookings, userId: b.userId, role: user.role, date: d.date, startHour: d.start, endHour: d.end, today: todayStr, ignoreId: b.id });
+      if (!canManageBookingsOf(b.instrumentId)) {
+        const err = validateBookingPolicy({ instrument: inst, bookings, userId: b.userId, role: effectiveRole(user), date: d.date, startHour: d.start, endHour: d.end, today: todayStr, ignoreId: b.id });
         if (err) { setDropError(err); return; }
       }
       updateBooking({ ...b, date: d.date, startHour: d.start, endHour: d.end });
@@ -1067,7 +1069,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
                     const pending = ev.status === 'pending';
                     // Full drag (move + both edges): managers always; owners only on future
                     // bookings. On mobile everything is tap-to-open (drag fights scrolling).
-                    const fullDrag = !isMobile && (canManageAllBookings || (isMine && status === 'future'));
+                    const fullDrag = !isMobile && (canManageBookingsOf(ev.instrumentId) || (isMine && status === 'future'));
                     // In-progress bookings owned by the user: only the END can be dragged.
                     const endOnly = !isMobile && !fullDrag && isMine && status === 'current';
                     const draggingThis = !!drag && drag.kind !== 'create' && drag.booking.id === ev.id;
