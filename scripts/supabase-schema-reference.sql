@@ -109,7 +109,12 @@
 --        lab_can_grant_certification(id), lab_is_granter; protect_lab_user_fields
 --        v3 + lab_users_update v3 so PhD+ mark the microfab training, Lab
 --        Manager+ the bio training, responsibles grant their certification)
---      then supabase-2026-10-biomimx.sql        (affiliation BiomimX in the CHECK)
+--      then supabase-2026-10-biomimx.sql        (affiliation BiomimX in the CHECK;
+--        lab_effective_role(affiliation, role): MiMic → role, BiomimX → phd,
+--        else msc, used by lab_can v6, is_lab_admin v4, is_booking_manager v3,
+--        lab_can_upload_manuals v3, can_access_stock v3, add_students/members
+--        v3, lab_is_pi_or_admin v2, lab_can_grant_training v2,
+--        enforce_booking_policy v5)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old

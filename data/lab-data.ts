@@ -43,14 +43,18 @@ export interface LabUser {
 export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
 
 /**
- * The role that decides what a person may do in the app. Members of other
- * affiliations (DEIB, POLIMI, Biomech, BiomimX, External) are treated like a MiMic
- * MSc student whatever their title: they book instruments and look around.
+ * The role that decides what a person may do in the app.
+ *   · MiMic Lab: the real role.
+ *   · BiomimX (spin-off, in the lab every day): a MiMic PhD, whatever the title.
+ *   · DEIB, POLIMI, Biomech, External: a MiMic MSc student — they book
+ *     instruments and look around.
  * The displayed role (rolePermissions[u.role].label) stays the real one.
- * Server rule: same test inside lab_can / is_lab_admin / is_booking_manager.
+ * Server rule: lab_effective_role(affiliation, role) in lab-assistant / biomimx SQL.
  */
 export function effectiveRole(u: Pick<LabUser, 'role' | 'affiliation'>): UserRole {
-  return u.affiliation === 'MiMic Lab' ? u.role : 'msc';
+  if (u.affiliation === 'MiMic Lab') return u.role;
+  if (u.affiliation === 'BiomimX') return 'phd';
+  return 'msc';
 }
 export function isMimic(u: Pick<LabUser, 'affiliation'>): boolean { return u.affiliation === 'MiMic Lab'; }
 
@@ -62,12 +66,11 @@ export const BIO_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_
 export type TrainingKind = 'microfab' | 'bio';
 /** PI / Admin (role or flag): the only ones who grant any certification and edit everything. */
 export function isPiOrAdmin(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
-  return u.isAdmin || (isMimic(u) && (u.role === 'admin' || u.role === 'pi'));
+  return u.isAdmin || ['admin', 'pi'].includes(effectiveRole(u));
 }
 export function canGrantTraining(actor: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>, kind: TrainingKind): boolean {
   if (isPiOrAdmin(actor)) return true;
-  if (!isMimic(actor)) return false;
-  return (kind === 'microfab' ? MICROFAB_TRAINER_ROLES : BIO_TRAINER_ROLES).includes(actor.role);
+  return (kind === 'microfab' ? MICROFAB_TRAINER_ROLES : BIO_TRAINER_ROLES).includes(effectiveRole(actor));
 }
 
 // Roles senior enough to supervise MSc students and guests.
@@ -1320,7 +1323,7 @@ export const rolePermissions: Record<UserRole, {
   },
 };
 
-// Non-MiMic members (DEIB, POLIMI, Biomech, BiomimX, External) get rolePermissions.msc
+// Non-MiMic members get rolePermissions.msc (BiomimX: rolePermissions.phd)
 // whatever their role: see effectiveRole(). Permissions are always read as
 // rolePermissions[effectiveRole(user)].
 export function permissionsOf(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): typeof rolePermissions[UserRole] {
