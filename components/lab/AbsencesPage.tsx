@@ -42,7 +42,7 @@ const REQUEST_LABEL = absenceRequestLabel;
 const requestWhen = absenceWhenLabel;
 
 export default function AbsencesPage() {
-  const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences, bookingSettings } = useLabContext();
+  const { user, users, absences, absenceSettings, updateAbsence, canApproveAbsences, canRequestAbsences, bookingSettings } = useLabContext();
   const [showForm, setShowForm] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
   // Month grid (who's out) or week grid with hours (short leaves at a glance)
@@ -105,11 +105,17 @@ export default function AbsencesPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold text-gray-900 font-manrope">Absences &amp; Presence</h1>
-          <p className="text-xs text-gray-500 font-manrope">Smart working used this month: <strong>{swUsedThisMonth}/{absenceSettings.swMonthlyCap}</strong> days</p>
+          {canRequestAbsences ? (
+            <p className="text-xs text-gray-500 font-manrope">Smart working used this month: <strong>{swUsedThisMonth}/{absenceSettings.swMonthlyCap}</strong> days</p>
+          ) : (
+            <p className="text-xs text-gray-500 font-manrope">Who is out and when. Absence requests are for MiMic Lab members only.</p>
+          )}
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors">
-          <Plus size={15} /> Request absence
-        </button>
+        {canRequestAbsences && (
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e] transition-colors">
+            <Plus size={15} /> Request absence
+          </button>
+        )}
       </div>
 
       {/* Approvals (supervisors only) */}
@@ -245,7 +251,7 @@ export default function AbsencesPage() {
       </div>
 
       {/* My requests */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+      {canRequestAbsences && <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <h2 className="text-sm font-semibold text-gray-900 font-manrope mb-3">My requests</h2>
         {mine.length === 0 ? (
           <p className="text-sm text-gray-400 font-manrope py-4 text-center">No absence requests yet.</p>
@@ -274,9 +280,9 @@ export default function AbsencesPage() {
             })}
           </div>
         )}
-      </div>
+      </div>}
 
-      {showForm && <RequestModal onClose={() => setShowForm(false)} />}
+      {showForm && canRequestAbsences && <RequestModal onClose={() => setShowForm(false)} />}
     </div>
   );
 }

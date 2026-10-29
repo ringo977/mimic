@@ -58,6 +58,19 @@ export function effectiveRole(u: Pick<LabUser, 'role' | 'affiliation'>): UserRol
 }
 export function isMimic(u: Pick<LabUser, 'affiliation'>): boolean { return u.affiliation === 'MiMic Lab'; }
 
+/**
+ * Absence requests (leave, smart working, trips…) are a MiMic Lab matter:
+ * members of every other affiliation see the Absences calendar but cannot
+ * file requests. MiMic MSc students and guests do not see the page at all.
+ * Server rule: lab_can_request_absences() / absences_insert v3.
+ */
+export function canRequestAbsences(u: Pick<LabUser, 'role' | 'affiliation'>): boolean {
+  return isMimic(u) && !['msc', 'guest'].includes(u.role);
+}
+export function canSeeAbsences(u: Pick<LabUser, 'role' | 'affiliation'>): boolean {
+  return !isMimic(u) || canRequestAbsences(u);
+}
+
 // --- Trainings and certifications: who may grant them ---------------------
 // Microfabrication training: any MiMic member from PhD up.
 export const MICROFAB_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd'];

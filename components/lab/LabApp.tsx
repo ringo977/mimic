@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff, BarChart3 } from 'lucide-react';
-import { LabUser, rolePermissions, effectiveRole } from '@/data/lab-data';
+import { LabUser, rolePermissions, effectiveRole, canSeeAbsences } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -496,7 +496,7 @@ const navItems = [
   { id: 'manuals', label: 'Manuals', icon: BookOpen, requiresPerm: null },
   { id: 'team', label: 'Users', icon: UsersRound, requiresPerm: null },
   // Absence policy applies to staff — MSc students and guests don't see it
-  { id: 'absences', label: 'Absences', icon: CalendarOff, requiresPerm: null, hideForRoles: ['msc', 'guest'] },
+  { id: 'absences', label: 'Absences', icon: CalendarOff, requiresPerm: null }, // visibility: canSeeAbsences(user)
   { id: 'log', label: 'Activity Log', icon: ClipboardList, requiresPerm: 'canViewLog' as const },
   { id: 'database', label: 'Database', icon: Database, requiresPerm: 'canViewDatabase' as const },
   { id: 'sitestats', label: 'Site Stats', icon: BarChart3, requiresPerm: 'canAdmin' as const },
@@ -579,6 +579,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
 
   const filteredNav = navItems.filter(item => {
     if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(effectiveRole(user))) return false;
+    if (item.id === 'absences' && !canSeeAbsences(user)) return false;
     if (!item.requiresPerm) return true;
     return (permissions as unknown as Record<string, boolean>)[item.requiresPerm];
   });

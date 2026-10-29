@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import {
   LabUser, Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry, Instrument, Manual,
   StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings, CellType,
-  rolePermissions, permissionsOf, effectiveRole, isResponsibleOf,
+  rolePermissions, permissionsOf, effectiveRole, canRequestAbsences, isResponsibleOf,
   generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
@@ -63,6 +63,8 @@ interface LabContextType {
   updateCellTypes: (types: CellType[]) => void;
   updateAbsenceSettings: (s: AbsenceSettings) => void;
   canApproveAbsences: boolean;
+  /** MiMic Lab members (not MSc / guest) file absence requests; everybody else only looks. */
+  canRequestAbsences: boolean;
   reagents: Reagent[];
   withdrawReagent: (reagentId: string, amount: number, purpose: string, project: string) => void;
   addReagentStock: (reagentId: string, amount: number) => void;
@@ -617,6 +619,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       absenceSettings, updateAbsenceSettings,
       cellTypes, updateCellTypes,
       canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(effectiveRole(user)),
+      canRequestAbsences: canRequestAbsences(user),
       reagents, withdrawReagent, addReagentStock, prepareWorkingSolution,
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,

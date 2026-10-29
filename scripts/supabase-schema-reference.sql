@@ -115,6 +115,9 @@
 --        lab_can_upload_manuals v3, can_access_stock v3, add_students/members
 --        v3, lab_is_pi_or_admin v2, lab_can_grant_training v2,
 --        enforce_booking_policy v5)
+--      then supabase-2026-10-absences-mimic-only.sql (lab_can_request_absences();
+--        absences_insert v3: only MiMic Lab members, not msc/guest, file
+--        absence requests — other affiliations just see the calendar)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
