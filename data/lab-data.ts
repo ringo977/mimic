@@ -6,8 +6,8 @@
 
 export type UserRole = 'admin' | 'pi' | 'researcher' | 'lab_manager' | 'project_manager' | 'postdoc' | 'phd' | 'msc' | 'guest';
 
-export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'Biomech' | 'External';
-export const USER_AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'External'];
+export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'Biomech' | 'BiomimX' | 'External';
+export const USER_AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'BiomimX', 'External'];
 
 export type UserStatus = 'active' | 'alumni';
 
@@ -44,7 +44,7 @@ export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
 
 /**
  * The role that decides what a person may do in the app. Members of other
- * affiliations (DEIB, POLIMI, Biomech, External) are treated like a MiMic
+ * affiliations (DEIB, POLIMI, Biomech, BiomimX, External) are treated like a MiMic
  * MSc student whatever their title: they book instruments and look around.
  * The displayed role (rolePermissions[u.role].label) stays the real one.
  * Server rule: same test inside lab_can / is_lab_admin / is_booking_manager.
@@ -1320,7 +1320,7 @@ export const rolePermissions: Record<UserRole, {
   },
 };
 
-// Non-MiMic members (DEIB, POLIMI, Biomech, External) get rolePermissions.msc
+// Non-MiMic members (DEIB, POLIMI, Biomech, BiomimX, External) get rolePermissions.msc
 // whatever their role: see effectiveRole(). Permissions are always read as
 // rolePermissions[effectiveRole(user)].
 export function permissionsOf(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): typeof rolePermissions[UserRole] {

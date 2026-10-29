@@ -109,6 +109,7 @@
 --        lab_can_grant_certification(id), lab_is_granter; protect_lab_user_fields
 --        v3 + lab_users_update v3 so PhD+ mark the microfab training, Lab
 --        Manager+ the bio training, responsibles grant their certification)
+--      then supabase-2026-10-biomimx.sql        (affiliation BiomimX in the CHECK)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -168,7 +169,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   certified_at            jsonb,   -- { certificationId: YYYY-MM-DD } training dates
   favorite_instrument_ids text[] NOT NULL DEFAULT '{}'::text[],   -- 2026-10-beta-round4.sql: own favourites (self-editable)
   CONSTRAINT lab_users_affiliation_check
-    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'External'::text]))),   -- 2026-10-lab-assistant.sql
+    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'BiomimX'::text, 'External'::text]))),   -- 2026-10-biomimx.sql
   CONSTRAINT lab_users_role_check
     CHECK ((role = ANY (ARRAY['admin'::text, 'pi'::text, 'researcher'::text, 'lab_manager'::text, 'project_manager'::text, 'postdoc'::text, 'phd'::text, 'msc'::text, 'guest'::text]))),   -- 2026-09-roles.sql
   CONSTRAINT lab_users_status_check
