@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap, QrCode, TrendingDown } from 'lucide-react';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
+import ReagentQrModal from './ReagentQrModal';
+import ReagentConsumption from './ReagentConsumption';
 import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, canWithdrawReagentFor, canRestockReagent, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
-  const { user, users, permissions, reagents, withdrawReagent, addReagentStock, setReagentOpenToStudents, prepareWorkingSolution, storageUnits, storageBoxes, canManageAllBookings } = useLabContext();
+  const { user, users, permissions, reagents, withdrawReagent, addReagentStock, setReagentOpenToStudents, prepareWorkingSolution, storageUnits, storageBoxes, canManageAllBookings, deepLinkReagentId, consumeDeepLink } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedKind, setSelectedKind] = useState<ReagentKind | 'All'>('All');
@@ -27,9 +29,31 @@ export default function ReagentsPage() {
   // Add a new reagent / edit an existing one (anyone with add_reagents)
   const [editForm, setEditForm] = useState<{ reagent: Reagent | null } | null>(null);
   const [historyOf, setHistoryOf] = useState<Reagent | null>(null);
+  const [qrOf, setQrOf] = useState<Reagent | null>(null);
+  // Message after a scanned QR that could not open the withdraw dialog
+  const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => canWithdrawReagentFor(user, permissions.canWithdrawReagents, r);
+
+  // Scanned QR (/lab/#reagent=<id>): isolate the item and open its withdraw dialog
+  useEffect(() => {
+    if (!deepLinkReagentId) return;
+    const r = reagents.find(x => x.id === deepLinkReagentId);
+    if (!r) {
+      setDeepLinkNotice('The scanned QR code points to an item that is no longer in the stock list.');
+    } else {
+      setView('list'); setSelectedCategory('All'); setSelectedKind('All'); setSearch(r.name);
+      if (canWithdrawReagentFor(user, permissions.canWithdrawReagents, r)) {
+        setModal({ type: 'withdraw', reagentId: r.id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || '');
+      } else {
+        setDeepLinkNotice(`${r.name}: your role cannot withdraw from this item${r.kind === 'stock' ? ' (stock reserved to its responsibles)' : ''}. Ask the responsible or the lab manager.`);
+      }
+    }
+    consumeDeepLink();
+  // Run once at mount: the reagents are loaded before the page renders
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Somebody who only withdraws from the items opened to students sees no lock on the rest
   const showLocks = permissions.canWithdrawReagents;
   // Who may open / close an item to students: managers and the item's responsibles (Sonia for the PDMS)
@@ -145,6 +169,14 @@ export default function ReagentsPage() {
         </div>
       </div>
 
+      {deepLinkNotice && (
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 text-amber-800 text-xs font-manrope">
+          <QrCode size={14} className="shrink-0 mt-0.5" />
+          <span className="flex-1">{deepLinkNotice}</span>
+          <button onClick={() => { setDeepLinkNotice(null); setSearch(''); }} aria-label="Dismiss" className="text-amber-700 hover:text-amber-900"><X size={13} /></button>
+        </div>
+      )}
+
       {view === 'units' && (
         <UnitShelvesView
           reagents={reagents} storageUnits={storageUnits} storageBoxes={storageBoxes}
@@ -234,7 +266,12 @@ export default function ReagentsPage() {
                     <Pencil size={13} />
                   </button>
                 )}
-                <button onClick={() => setHistoryOf(r)} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="History of changes" aria-label="History of this reagent">
+                {canEdit(r) && (
+                  <button onClick={() => setQrOf(r)} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="QR label: scanning it opens the withdraw dialog of this item" aria-label="QR code of this reagent">
+                    <QrCode size={13} />
+                  </button>
+                )}
+                <button onClick={() => setHistoryOf(r)} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="Consumption chart and history of changes" aria-label="History and consumption of this reagent">
                   <History size={13} />
                 </button>
               </div>
@@ -341,7 +378,17 @@ export default function ReagentsPage() {
           onClose={() => setEditForm(null)}
         />
       )}
-      {historyOf && <RowHistoryModal table="reagents" rowId={historyOf.id} label={historyOf.name} onClose={() => setHistoryOf(null)} />}
+      {historyOf && (
+        <RowHistoryModal
+          table="reagents" rowId={historyOf.id} label={historyOf.name} onClose={() => setHistoryOf(null)}
+          limit={1000} defaultTab="consumption"
+          extraTabs={[{
+            id: 'consumption', label: 'Consumption', icon: TrendingDown,
+            render: lines => <ReagentConsumption reagent={reagents.find(r => r.id === historyOf.id) ?? historyOf} lines={lines} canExport={permissions.canExportData} />,
+          }]}
+        />
+      )}
+      {qrOf && <ReagentQrModal reagent={qrOf} place={reagentPlaceLabel(qrOf, storageUnits, storageBoxes)} onClose={() => setQrOf(null)} />}
 
       {/* Modal */}
       {modal && modalReagent && (

@@ -26,6 +26,7 @@ import {
   fetchAppSetting, upsertAppSetting,
   fetchAbsences, upsertAbsence, deleteAbsence,
 } from '@/lib/supabase-data';
+import { readReagentDeepLink, clearDeepLink } from '@/lib/lab-deeplink';
 
 const BOOKING_SETTINGS_KEY = 'booking_settings';
 const ABSENCE_SETTINGS_KEY = 'absence_settings';
@@ -36,6 +37,9 @@ interface LabContextType {
   permissions: typeof rolePermissions[LabUser['role']];
   currentPage: string;
   setCurrentPage: (page: string) => void;
+  /** Reagent id carried by a scanned QR (/lab/#reagent=<id>), until the Reagents page consumes it. */
+  deepLinkReagentId: string | null;
+  consumeDeepLink: () => void;
   bookings: Booking[];
   addBooking: (b: Omit<Booking, 'id' | 'createdAt'>) => void;
   updateBooking: (b: Booking) => void;
@@ -129,7 +133,10 @@ export function useLabContext() { const ctx = useContext(LabContext); if (!ctx) 
 const STORAGE_KEY = 'mimic-lab-data';
 
 export function LabProvider({ user, children }: { user: LabUser; children: React.ReactNode }) {
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  // A scanned QR (/lab/#reagent=<id>) lands on the Reagents page with that item's withdraw dialog
+  const [deepLinkReagentId, setDeepLinkReagentId] = useState<string | null>(() => readReagentDeepLink());
+  const [currentPage, setCurrentPage] = useState(() => (readReagentDeepLink() ? 'reagents' : 'dashboard'));
+  const consumeDeepLink = useCallback(() => { setDeepLinkReagentId(null); clearDeepLink(); }, []);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [reagents, setReagents] = useState<Reagent[]>([]);
   const [cryoVials, setCryoVials] = useState<CryoVial[]>([]);
@@ -619,7 +626,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   return (
     <LabContext.Provider value={{
-      user, permissions: permissionsOf(user), currentPage, setCurrentPage,
+      user, permissions: permissionsOf(user), currentPage, setCurrentPage, deepLinkReagentId, consumeDeepLink,
       bookings, addBooking, updateBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries,
       favoriteInstrumentIds, toggleFavoriteInstrument,
       bookingSettings, updateBookingSettings,

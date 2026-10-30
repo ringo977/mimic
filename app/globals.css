@@ -68,3 +68,25 @@ html {
 .mimic-map-tiles {
   filter: grayscale(1) brightness(1.08) contrast(0.85) opacity(0.7);
 }
+
+/* Lab Manager → reagent QR label: print only the label, centred on one page
+   (body.qr-printing is set while the QR dialog is open). */
+@media print {
+  body.qr-printing * {
+    visibility: hidden !important;
+  }
+  body.qr-printing .qr-label,
+  body.qr-printing .qr-label * {
+    visibility: visible !important;
+  }
+  body.qr-printing .qr-label {
+    position: fixed;
+    left: 50%;
+    top: 15mm;
+    transform: translateX(-50%);
+    width: 85mm;
+    border: 1px solid #ccc !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+}

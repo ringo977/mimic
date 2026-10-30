@@ -398,28 +398,56 @@ function Snapshots({ show }: { show: (t: Status['type'], m: string) => void }) {
 // ============================================================
 // History of ONE row (vial, reagent…) — for members, from the item pages
 // ============================================================
-export function RowHistoryModal({ table, rowId, label, onClose }: { table: string; rowId: string; label: string; onClose: () => void }) {
+export interface RowHistoryExtraTab {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  /** Rendered with the loaded history lines (newest first). */
+  render: (lines: HistoryLine[]) => React.ReactNode;
+}
+
+export function RowHistoryModal({ table, rowId, label, onClose, extraTabs, defaultTab, limit }: {
+  table: string; rowId: string; label: string; onClose: () => void;
+  /** Extra views built on the same lines (e.g. reagent consumption). */
+  extraTabs?: RowHistoryExtraTab[];
+  defaultTab?: string;
+  limit?: number;
+}) {
   const ref = useDialogA11y(true, onClose);
   const [lines, setLines] = useState<HistoryLine[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>(defaultTab ?? 'changes');
 
   useEffect(() => {
-    fetchHistory({ table, rowId, limit: 100 }).then(r => { if (r.error) setError(r.error); else setLines(r.lines); });
-  }, [table, rowId]);
+    fetchHistory({ table, rowId, limit: limit ?? 100 }).then(r => { if (r.error) setError(r.error); else setLines(r.lines); });
+  }, [table, rowId, limit]);
 
   const nextOf = (l: HistoryLine) => lines?.filter(x => x.id > l.id && x.op !== 'INSERT').sort((a, b) => a.id - b.id)[0]?.oldRow ?? null;
+  const tabs = [{ id: 'changes', label: 'Changes', icon: History }, ...(extraTabs ?? [])];
+  const extra = extraTabs?.find(t => t.id === tab);
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
       <div ref={ref} role="dialog" aria-modal="true" aria-label={`History of ${label}`} tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 max-h-[85vh] overflow-y-auto outline-none">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-900 font-manrope flex items-center gap-2"><History size={15} /> History · <span className="font-normal text-gray-600 truncate">{label}</span></h2>
+          <h2 className="text-sm font-bold text-gray-900 font-manrope flex items-center gap-2 min-w-0"><History size={15} className="shrink-0" /> History · <span className="font-normal text-gray-600 truncate">{label}</span></h2>
           <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={16} /></button>
         </div>
+        {tabs.length > 1 && (
+          <div className="flex gap-1 mb-3 border-b border-gray-100">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium font-manrope border-b-2 -mb-px transition-colors ${tab === t.id ? 'border-[#102C53] text-[#102C53]' : 'border-transparent text-gray-500 hover:text-gray-800'}`}>
+                <t.icon size={13} /> {t.label}
+              </button>
+            ))}
+          </div>
+        )}
         {error && <p className="text-xs text-red-600 font-manrope">{error}</p>}
         {!lines && !error && <Loader2 size={16} className="animate-spin text-gray-400 mx-auto my-6" />}
-        {lines && lines.length === 0 && <p className="text-xs text-gray-400 font-manrope py-4 text-center">No recorded change yet (history started on 28 Sep 2026).</p>}
-        {lines && lines.length > 0 && (
+        {lines && extra && extra.render(lines)}
+        {lines && !extra && lines.length === 0 && <p className="text-xs text-gray-400 font-manrope py-4 text-center">No recorded change yet (history started on 28 Sep 2026).</p>}
+        {lines && !extra && lines.length > 0 && (
           <ol className="relative border-l border-gray-200 ml-2 space-y-3">
             {lines.map(l => {
               const changes = describeChange(l, nextOf(l));
