@@ -315,6 +315,14 @@ export async function deleteReagent(id: string) { return deleteRow('reagents', i
 //
 // The server also writes the log_entries row in the same transaction and
 // returns it, so the app shows exactly what was recorded.
+/** Open / close an item to students: managers or the item's responsibles (set_reagent_open_to_students RPC). */
+export async function setReagentOpenToStudents(reagentId: string, open: boolean): Promise<{ ok: true; log: LogEntry | null } | { error: string }> {
+  const { data, error } = await supabase.rpc('set_reagent_open_to_students', { p_reagent_id: reagentId, p_open: open });
+  if (error) return { error: error.message };
+  const d = (data ?? {}) as { log?: LogEntry };
+  return { ok: true, log: d.log ?? null };
+}
+
 export async function adjustReagentStock(
   reagentId: string, delta: number, purpose?: string, project?: string,
 ): Promise<{ stock: number; log: LogEntry | null } | { error: string }> {

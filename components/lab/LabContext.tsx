@@ -17,7 +17,7 @@ import {
   fetchCertifications, upsertCertification, deleteCertification,
   fetchStorageUnits, upsertStorageUnit, deleteStorageUnit,
   fetchStorageBoxes, upsertStorageBox, deleteStorageBox,
-  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution,
+  fetchReagents, upsertReagent, deleteReagent, adjustReagentStock, fetchReagentStock, prepareWorkingSolution as rpcPrepareWorkingSolution, setReagentOpenToStudents as rpcSetReagentOpenToStudents,
   fetchBookings, upsertBooking, deleteBooking, setBookingStatus, createBookingSeries, deleteBookingSeries,
   fetchCryoVials, upsertCryoVialChecked, deleteCryoVial,
   fetchWishlist, upsertWishlistItem, deleteWishlistItem,
@@ -68,6 +68,8 @@ interface LabContextType {
   reagents: Reagent[];
   withdrawReagent: (reagentId: string, amount: number, purpose: string, project: string) => void;
   addReagentStock: (reagentId: string, amount: number) => void;
+  /** Open / close an item to students' withdrawals (managers or the item's responsibles). */
+  setReagentOpenToStudents: (reagentId: string, open: boolean) => void;
   prepareWorkingSolution: (stockId: string, stockTaken: number, workingId: string, workingMade: number, notes?: string) => void;
   cryoVials: CryoVial[];
   addCryoVial: (v: Omit<CryoVial, 'id'>) => void;
@@ -411,6 +413,14 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     changeReagentStock(reagentId, amount, 'Reagent restock');
   }, [changeReagentStock]);
 
+  const setReagentOpenToStudents = useCallback(async (reagentId: string, open: boolean) => {
+    setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, openToStudents: open } : r));
+    const res = await rpcSetReagentOpenToStudents(reagentId, open);
+    if ('ok' in res) { if (res.log) setLog(prev => [res.log as LogEntry, ...prev]); return; }
+    setReagents(prev => prev.map(r => r.id === reagentId ? { ...r, openToStudents: !open } : r));
+    setSyncError(`Students may withdraw: refused by the server (${res.error}).`);
+  }, []);
+
   // Take from a stock and top up the working solution made from it: one
   // server transaction, one log line (prepare_working_solution RPC).
   const prepareWorkingSolution = useCallback(async (stockId: string, stockTaken: number, workingId: string, workingMade: number, notes?: string) => {
@@ -620,7 +630,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       cellTypes, updateCellTypes,
       canApproveAbsences: user.isAdmin || ['admin', 'pi'].includes(effectiveRole(user)),
       canRequestAbsences: canRequestAbsences(user),
-      reagents, withdrawReagent, addReagentStock, prepareWorkingSolution,
+      reagents, withdrawReagent, addReagentStock, setReagentOpenToStudents, prepareWorkingSolution,
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
       log, addLogEntry,

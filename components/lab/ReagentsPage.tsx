@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap } from 'lucide-react';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
 import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, canWithdrawReagentFor, canRestockReagent, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
-  const { user, users, permissions, reagents, withdrawReagent, addReagentStock, prepareWorkingSolution, storageUnits, storageBoxes } = useLabContext();
+  const { user, users, permissions, reagents, withdrawReagent, addReagentStock, setReagentOpenToStudents, prepareWorkingSolution, storageUnits, storageBoxes, canManageAllBookings } = useLabContext();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedKind, setSelectedKind] = useState<ReagentKind | 'All'>('All');
@@ -32,6 +32,8 @@ export default function ReagentsPage() {
   const canTake = (r: Reagent) => canWithdrawReagentFor(user, permissions.canWithdrawReagents, r);
   // Somebody who only withdraws from the items opened to students sees no lock on the rest
   const showLocks = permissions.canWithdrawReagents;
+  // Who may open / close an item to students: managers and the item's responsibles (Sonia for the PDMS)
+  const canToggleOpen = (r: Reagent) => r.kind !== 'stock' && (canManageAllBookings || (r.responsibleUserIds ?? []).includes(user.id));
   // Who may restock: add_reagents roles, plus the responsibles of that item (PDMS kits kept by a PhD)
   const canRestock = (r: Reagent) => canRestockReagent(user, permissions.canAddReagents, r);
   const accessibleStocks = useMemo(() => reagents.filter(r => r.kind === 'stock' && canAccessStock(user, r)), [reagents, user]);
@@ -217,6 +219,14 @@ export default function ReagentsPage() {
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-2">
                 {r.currentStock <= r.alertThreshold && <AlertTriangle size={14} className="text-amber-500" />}
+                {canToggleOpen(r) && (
+                  <button onClick={() => setReagentOpenToStudents(r.id, !r.openToStudents)}
+                    className={`p-1 rounded-lg transition-colors ${r.openToStudents ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' : 'text-gray-300 hover:text-[#102C53] hover:bg-gray-100'}`}
+                    title={r.openToStudents ? 'Students may withdraw — click to close' : 'Open to students (MSc and other groups record their own withdrawals)'}
+                    aria-label="Toggle students may withdraw">
+                    <GraduationCap size={13} />
+                  </button>
+                )}
                 {permissions.canAddReagents && (
                   <button onClick={() => setEditForm({ reagent: r })} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="Edit (lot, expiry, location, supplier…)" aria-label="Edit reagent">
                     <Pencil size={13} />

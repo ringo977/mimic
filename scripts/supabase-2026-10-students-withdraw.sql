@@ -15,6 +15,7 @@
 --   §1 reagents.open_to_students
 --   §2 protect_reagent_fields v3 — the flag is a manager-only field
 --   §3 adjust_reagent_stock v7 — withdrawal allowed on open items
+--   §3b set_reagent_open_to_students(id, open) — managers or responsibles
 --   §4 checks
 -- ============================================================
 
@@ -174,14 +175,64 @@ $$;
 REVOKE ALL ON FUNCTION adjust_reagent_stock(text, numeric, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION adjust_reagent_stock(text, numeric, text, text) TO authenticated;
 
+-- §3b set_reagent_open_to_students — managers OR the item's responsibles
+--     (Sonia opens the PDMS and the resins herself). Logged. Stocks cannot be opened.
+CREATE OR REPLACE FUNCTION set_reagent_open_to_students(p_reagent_id text, p_open boolean)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r      reagents%ROWTYPE;
+  me     lab_users%ROWTYPE;
+  log_id text;
+  log_ts text;
+  action text;
+  details text;
+BEGIN
+  SELECT * INTO me FROM lab_users WHERE id = current_lab_user_id();
+  IF NOT FOUND THEN RAISE EXCEPTION 'Not a lab member'; END IF;
+  SELECT * INTO r FROM reagents WHERE id = p_reagent_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Reagent not found'; END IF;
+  IF NOT (is_booking_manager() OR me.id = ANY (coalesce(r.responsible_user_ids, '{}'::text[]))) THEN
+    RAISE EXCEPTION 'Only a lab manager or a responsible of this item can open it to students';
+  END IF;
+  IF p_open AND coalesce(r.kind, 'item') = 'stock' THEN
+    RAISE EXCEPTION 'A stock cannot be opened to students';
+  END IF;
+  IF coalesce(r.open_to_students, false) = p_open THEN
+    RETURN jsonb_build_object('open', p_open, 'log', NULL);
+  END IF;
+
+  PERFORM set_config('lab.stock_rpc', '1', true);   -- the guard trusts this RPC
+  UPDATE reagents SET open_to_students = p_open WHERE id = p_reagent_id;
+
+  log_id := lower(to_hex((extract(epoch from clock_timestamp()) * 1000)::bigint))
+            || substr(md5(random()::text || clock_timestamp()::text), 1, 9);
+  log_ts := to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
+  action  := CASE WHEN p_open THEN 'Opened ' || r.name || ' to students' ELSE 'Closed ' || r.name || ' to students' END;
+  details := CASE WHEN p_open THEN 'MSc students and other groups may now withdraw it' ELSE 'Withdrawals back to the usual roles' END;
+  INSERT INTO log_entries (id, "timestamp", user_id, user_name, action, category, details)
+  VALUES (log_id, log_ts, me.id, me.name, action, 'reagent', details);
+
+  RETURN jsonb_build_object('open', p_open, 'log', jsonb_build_object(
+    'id', log_id, 'timestamp', log_ts, 'userId', me.id, 'userName', me.name,
+    'action', action, 'category', 'reagent', 'details', details));
+END;
+$$;
+REVOKE ALL ON FUNCTION set_reagent_open_to_students(text, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION set_reagent_open_to_students(text, boolean) TO authenticated;
+
 -- §4 expect: all true
 SELECT
   (SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reagents' AND column_name = 'open_to_students')) AS column_ok,
   (SELECT prosrc LIKE '%open_to_students%' FROM pg_proc WHERE proname = 'protect_reagent_fields')                            AS guard_v3,
-  (SELECT prosrc LIKE '%open_to_students%' FROM pg_proc WHERE proname = 'adjust_reagent_stock')                              AS rpc_v7;
+  (SELECT prosrc LIKE '%open_to_students%' FROM pg_proc WHERE proname = 'adjust_reagent_stock')                              AS rpc_v7,
+  (SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'set_reagent_open_to_students'))                                     AS toggle_rpc;
 
--- Candidates to open (nothing is changed here: tick "Students may withdraw"
--- in the reagent form, or run the UPDATE below after checking the names)
+-- Candidates to open (nothing is changed here: the responsible or a manager
+-- clicks the graduation-cap icon on the reagent card; or run the UPDATE below)
 SELECT id, name, category, current_stock, unit, open_to_students
 FROM reagents WHERE name ~* 'pdms|sylgard|resin' ORDER BY name;
--- UPDATE reagents SET open_to_students = true WHERE name ~* 'pdms|sylgard|resin';
+-- UPDATE reagents SET open_to_students = true WHERE id IN ('rg-397d443b6d72', 'rg-788d0e3b9388');  -- PDMS, Resins components
