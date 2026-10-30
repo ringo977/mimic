@@ -16,6 +16,7 @@
 --   §2 protect_reagent_fields v3 — the flag is a manager-only field
 --   §3 adjust_reagent_stock v7 — withdrawal allowed on open items
 --   §3b set_reagent_open_to_students(id, open) — managers or responsibles
+--   §3c reagents_update v2 — responsibles edit their items' record
 --   §4 checks
 -- ============================================================
 
@@ -224,12 +225,23 @@ $$;
 REVOKE ALL ON FUNCTION set_reagent_open_to_students(text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION set_reagent_open_to_students(text, boolean) TO authenticated;
 
+-- §3c reagents_update v2 — the responsibles of an item edit its record
+--     (lot, expiry, unit, threshold, location…) even without add_reagents.
+--     protect_reagent_fields keeps kind / responsibles / open flag / stock
+--     out of their reach; quantities still move only through the RPCs.
+DROP POLICY IF EXISTS "reagents_update" ON reagents;
+CREATE POLICY "reagents_update" ON reagents
+  FOR UPDATE TO authenticated
+  USING      (lab_can('add_reagents') OR current_lab_user_id() = ANY (coalesce(responsible_user_ids, '{}'::text[])))
+  WITH CHECK (lab_can('add_reagents') OR current_lab_user_id() = ANY (coalesce(responsible_user_ids, '{}'::text[])));
+
 -- §4 expect: all true
 SELECT
   (SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'reagents' AND column_name = 'open_to_students')) AS column_ok,
   (SELECT prosrc LIKE '%open_to_students%' FROM pg_proc WHERE proname = 'protect_reagent_fields')                            AS guard_v3,
   (SELECT prosrc LIKE '%open_to_students%' FROM pg_proc WHERE proname = 'adjust_reagent_stock')                              AS rpc_v7,
-  (SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'set_reagent_open_to_students'))                                     AS toggle_rpc;
+  (SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'set_reagent_open_to_students'))                                     AS toggle_rpc,
+  (SELECT qual LIKE '%responsible_user_ids%' FROM pg_policies WHERE tablename = 'reagents' AND policyname = 'reagents_update') AS responsibles_edit;
 
 -- Candidates to open (nothing is changed here: the responsible or a manager
 -- clicks the graduation-cap icon on the reagent card; or run the UPDATE below)

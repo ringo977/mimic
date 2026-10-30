@@ -121,7 +121,8 @@
 --      then supabase-2026-10-students-withdraw.sql (reagents.open_to_students;
 --        protect_reagent_fields v3; adjust_reagent_stock v7: MSc / externals
 --        withdraw from the items flagged open, guests never;
---        set_reagent_open_to_students(id, open) RPC for managers / responsibles)
+--        set_reagent_open_to_students(id, open) RPC for managers / responsibles;
+--        reagents_update v2: responsibles edit their items' record)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old

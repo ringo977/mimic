@@ -34,6 +34,8 @@ export default function ReagentsPage() {
   const showLocks = permissions.canWithdrawReagents;
   // Who may open / close an item to students: managers and the item's responsibles (Sonia for the PDMS)
   const canToggleOpen = (r: Reagent) => r.kind !== 'stock' && (canManageAllBookings || (r.responsibleUserIds ?? []).includes(user.id));
+  // Who may edit the record (lot, expiry, unit, threshold…): add_reagents roles, plus the item's responsibles
+  const canEdit = (r: Reagent) => permissions.canAddReagents || (r.responsibleUserIds ?? []).includes(user.id);
   // Who may restock: add_reagents roles, plus the responsibles of that item (PDMS kits kept by a PhD)
   const canRestock = (r: Reagent) => canRestockReagent(user, permissions.canAddReagents, r);
   const accessibleStocks = useMemo(() => reagents.filter(r => r.kind === 'stock' && canAccessStock(user, r)), [reagents, user]);
@@ -227,8 +229,8 @@ export default function ReagentsPage() {
                     <GraduationCap size={13} />
                   </button>
                 )}
-                {permissions.canAddReagents && (
-                  <button onClick={() => setEditForm({ reagent: r })} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title="Edit (lot, expiry, location, supplier…)" aria-label="Edit reagent">
+                {canEdit(r) && (
+                  <button onClick={() => setEditForm({ reagent: r })} className="p-1 rounded-lg text-gray-300 hover:text-[#102C53] hover:bg-gray-100 transition-colors" title={permissions.canAddReagents ? 'Edit (lot, expiry, location, supplier…)' : 'Edit (you are a responsible of this item)'} aria-label="Edit reagent">
                     <Pencil size={13} />
                   </button>
                 )}
