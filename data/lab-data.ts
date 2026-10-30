@@ -884,6 +884,7 @@ export interface Reagent {
   kind?: ReagentKind;       // stock (concentrated, restricted) / working solution / plain item
   derivedFromId?: string;   // working solution → the stock it is prepared from
   responsibleUserIds?: string[];  // stock → lab_users.id of the 1–2 people in charge
+  openToStudents?: boolean; // MSc students / externals may withdraw from it (PDMS, resins…); set by managers
 }
 
 /**
@@ -916,6 +917,19 @@ export function canAccessStock(user: Pick<LabUser, 'id' | 'role' | 'isAdmin' | '
  */
 export function canRestockReagent(user: Pick<LabUser, 'id'>, canAddReagents: boolean, r: Reagent): boolean {
   return canAddReagents || (r.responsibleUserIds ?? []).includes(user.id);
+}
+
+/**
+ * Who may take from a reagent: the withdraw_reagents roles, plus — on items
+ * flagged "open to students" (PDMS, resins…) — everybody who is not a guest,
+ * i.e. MSc students and members of other affiliations. Stocks stay reserved
+ * to their responsibles in both cases.
+ * Server rule: adjust_reagent_stock v7 (2026-10-students-withdraw.sql).
+ */
+export function canWithdrawReagentFor(user: Pick<LabUser, 'id' | 'role' | 'affiliation' | 'isAdmin'>, canWithdrawReagents: boolean, r: Reagent): boolean {
+  if (!canAccessStock(user, r)) return false;
+  if (canWithdrawReagents) return true;
+  return !!r.openToStudents && effectiveRole(user) !== 'guest';
 }
 
 // ============================================================

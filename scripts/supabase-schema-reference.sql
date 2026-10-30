@@ -118,6 +118,9 @@
 --      then supabase-2026-10-absences-mimic-only.sql (lab_can_request_absences();
 --        absences_insert v3: only MiMic Lab members, not msc/guest, file
 --        absence requests — other affiliations just see the calendar)
+--      then supabase-2026-10-students-withdraw.sql (reagents.open_to_students;
+--        protect_reagent_fields v3; adjust_reagent_stock v7: MSc / externals
+--        withdraw from the items flagged open, guests never)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -303,6 +306,7 @@ CREATE TABLE IF NOT EXISTS reagents (
   kind             text NOT NULL DEFAULT 'item'::text,   -- stock | working | item (2026-09-reagent-kind.sql)
   derived_from_id  text,      -- working solution → its stock (FK reagents.id ON DELETE SET NULL)
   responsible_user_ids text[] NOT NULL DEFAULT '{}'::text[],   -- stock → lab_users.id[]
+  open_to_students    boolean NOT NULL DEFAULT false,   -- 2026-10-students-withdraw.sql: MSc / externals may withdraw (PDMS, resins)
   CONSTRAINT reagents_door_check
     CHECK (door IN ('left', 'right')),   -- 2026-09-door.sql
   CONSTRAINT reagents_kind_check

@@ -72,6 +72,7 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
       // ones who may take from it; on every kind they may restock it even
       // without canAddReagents (PDMS kits looked after by a PhD).
       kind, derivedFromId: kind === 'working' ? form.derivedFromId : undefined, responsibleUserIds: form.responsibleUserIds ?? [],
+      openToStudents: kind !== 'stock' && !!form.openToStudents,
     };
     if (initial) {
       // Quantities move only through Withdraw / Restock (logged, atomic RPC).
@@ -204,6 +205,15 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
                 </select>
                 <p className="text-[10px] text-gray-400 font-manrope mt-1">Responsibles may restock this item whatever their role (e.g. the PhD who keeps the PDMS kits){form.kind === 'stock' ? ', and are the only ones who may take from a stock' : ''}.</p>
               </Field>
+              {form.kind !== 'stock' && (
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={!!form.openToStudents} onChange={e => setForm({ ...form, openToStudents: e.target.checked })} className="mt-0.5 rounded border-gray-300 text-[#102C53] focus:ring-[#4DC9FF]" />
+                  <span className="text-xs font-manrope">
+                    <span className="font-medium text-gray-700">Students may withdraw</span>
+                    <span className="block text-[10px] text-gray-400">MSc students and members of other groups record their own withdrawals (PDMS, resins, consumables they use alone). Guests never can.</span>
+                  </span>
+                </label>
+              )}
               {form.kind === 'working' && (
                 <Field label="Prepared from stock">
                   <select value={form.derivedFromId || ''} onChange={e => setForm({ ...form, derivedFromId: e.target.value || undefined })} className={inputCls}>
@@ -214,9 +224,9 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
               )}
             </div>
           ) : (
-            ((form.kind ?? 'item') !== 'item' || (form.responsibleUserIds ?? []).length > 0) && (
+            ((form.kind ?? 'item') !== 'item' || (form.responsibleUserIds ?? []).length > 0 || form.openToStudents) && (
               <p className="text-[11px] text-gray-400 font-manrope">
-                {reagentKindLabel[form.kind ?? 'item']}{(form.responsibleUserIds ?? []).length ? ` — responsible: ${(form.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || id).join(', ')}` : ''}. Classification and responsibles are set by the lab manager.
+                {reagentKindLabel[form.kind ?? 'item']}{(form.responsibleUserIds ?? []).length ? ` — responsible: ${(form.responsibleUserIds ?? []).map(id => users.find(u => u.id === id)?.name || id).join(', ')}` : ''}{form.openToStudents ? ' — students may withdraw' : ''}. Classification and responsibles are set by the lab manager.
               </p>
             )
           )}

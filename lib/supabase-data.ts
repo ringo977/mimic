@@ -271,6 +271,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     storage_unit_id: string | null; box_id: string | null; shelf: number | null; door: string | null; supplier: string; catalog_number: string;
     alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
     kind: string | null; derived_from_id: string | null; responsible_user_ids: string[] | null;
+    open_to_students: boolean | null;
   }>('reagents', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -284,6 +285,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     kind: (r.kind as Reagent['kind']) ?? 'item',
     derivedFromId: r.derived_from_id ?? undefined,
     responsibleUserIds: r.responsible_user_ids ?? undefined,
+    openToStudents: r.open_to_students ?? false,
   }));
 }
 
@@ -300,6 +302,7 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     lot: r.lot ?? null, owner: r.owner ?? null, notes: r.notes ?? null,
     kind: r.kind ?? 'item', derived_from_id: r.derivedFromId ?? null,
     responsible_user_ids: r.responsibleUserIds ?? [],
+    open_to_students: !!r.openToStudents,
   });
 }
 

@@ -5,7 +5,7 @@ import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerato
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
-import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, canRestockReagent, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
+import { storageUnitTypes, reagentPlaceLabel, reagentShelf, reagentDoor, doorSideLabel, isShelfBased, boxesOfUnit, canAccessStock, canWithdrawReagentFor, canRestockReagent, reagentKindLabel, Reagent, StorageUnit, DoorSide, ReagentKind } from '@/data/lab-data';
 
 export default function ReagentsPage() {
   const { user, users, permissions, reagents, withdrawReagent, addReagentStock, prepareWorkingSolution, storageUnits, storageBoxes } = useLabContext();
@@ -29,7 +29,9 @@ export default function ReagentsPage() {
   const [historyOf, setHistoryOf] = useState<Reagent | null>(null);
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
-  const canTake = (r: Reagent) => permissions.canWithdrawReagents && canAccessStock(user, r);
+  const canTake = (r: Reagent) => canWithdrawReagentFor(user, permissions.canWithdrawReagents, r);
+  // Somebody who only withdraws from the items opened to students sees no lock on the rest
+  const showLocks = permissions.canWithdrawReagents;
   // Who may restock: add_reagents roles, plus the responsibles of that item (PDMS kits kept by a PhD)
   const canRestock = (r: Reagent) => canRestockReagent(user, permissions.canAddReagents, r);
   const accessibleStocks = useMemo(() => reagents.filter(r => r.kind === 'stock' && canAccessStock(user, r)), [reagents, user]);
@@ -144,7 +146,7 @@ export default function ReagentsPage() {
           reagents={reagents} storageUnits={storageUnits} storageBoxes={storageBoxes}
           selectedUnitId={selectedUnitId} onSelectUnit={setSelectedUnitId}
           search={search} onSearch={setSearch}
-          canWithdraw={permissions.canWithdrawReagents} canAdd={canRestock}
+          canWithdraw={showLocks} canAdd={canRestock}
           canTake={canTake}
           onWithdraw={id => { setModal({ type: 'withdraw', reagentId: id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
           onAdd={id => { setModal({ type: 'add', reagentId: id }); setAmountStr('1'); }}
@@ -208,7 +210,7 @@ export default function ReagentsPage() {
             <div className="flex items-start justify-between mb-2">
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope truncate flex items-center gap-1.5">
-                  <KindBadge kind={r.kind} />
+                  <KindBadge kind={r.kind} open={r.openToStudents} />
                   <span className="truncate">{r.name}</span>
                 </h3>
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.supplier} &middot; {r.catalogNumber}</p>
@@ -278,7 +280,7 @@ export default function ReagentsPage() {
 
             {/* Actions */}
             <div className="flex gap-2 mt-3">
-              {permissions.canWithdrawReagents && (canTake(r) ? (
+              {(showLocks || canTake(r)) && (canTake(r) ? (
                 <button
                   onClick={() => { setModal({ type: 'withdraw', reagentId: r.id }); setAmountStr('1'); setPurpose(''); setProject(user.projects[0] || ''); }}
                   className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-medium font-manrope hover:bg-amber-100 transition-colors"
@@ -504,11 +506,13 @@ export default function ReagentsPage() {
   );
 }
 
-function KindBadge({ kind }: { kind?: ReagentKind }) {
-  if (!kind || kind === 'item') return null;
-  return kind === 'stock'
+function KindBadge({ kind, open }: { kind?: ReagentKind; open?: boolean }) {
+  const kindBadge = !kind || kind === 'item' ? null : kind === 'stock'
     ? <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-px rounded bg-[#102C53] text-white text-[9px] font-semibold tracking-wide font-manrope" title="Stock — reserved to its responsibles"><Lock size={8} /> STOCK</span>
     : <span className="shrink-0 px-1.5 py-px rounded bg-[#4DC9FF]/20 text-[#102C53] text-[9px] font-semibold tracking-wide font-manrope" title="Working solution">WS</span>;
+  const openBadge = open ? <span className="shrink-0 px-1.5 py-px rounded bg-emerald-50 text-emerald-700 text-[9px] font-semibold tracking-wide font-manrope" title="Students may withdraw from this item">STUDENTS</span> : null;
+  if (!kindBadge && !openBadge) return null;
+  return <>{kindBadge}{openBadge}</>;
 }
 
 // ============================================================
@@ -557,12 +561,12 @@ function UnitShelvesView({ reagents, storageUnits, storageBoxes, selectedUnitId,
     const low = r.currentStock <= r.alertThreshold;
     return (
       <div className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0 text-xs font-manrope">
-        <span className={`flex-1 min-w-0 truncate flex items-center gap-1 ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}><KindBadge kind={r.kind} /><span className="truncate">{r.name}</span></span>
+        <span className={`flex-1 min-w-0 truncate flex items-center gap-1 ${low ? 'text-red-600' : 'text-gray-800'}`} title={r.name}><KindBadge kind={r.kind} open={r.openToStudents} /><span className="truncate">{r.name}</span></span>
         <span className="text-gray-400 shrink-0 tabular-nums">{r.currentStock}{r.maxStock > 0 && <span className="text-gray-300">/{r.maxStock}</span>} {r.unit}</span>
         {low && <AlertTriangle size={12} className="text-amber-500 shrink-0" />}
-        {canWithdraw && (canTake(r)
+        {canTake(r)
           ? <button onClick={() => onWithdraw(r.id)} className="p-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100" title="Withdraw"><Minus size={11} /></button>
-          : <span className="p-1 rounded bg-gray-50 text-gray-400 cursor-not-allowed" title="Stock reserved to its responsibles"><Lock size={11} /></span>)}
+          : canWithdraw && <span className="p-1 rounded bg-gray-50 text-gray-400 cursor-not-allowed" title="Stock reserved to its responsibles"><Lock size={11} /></span>}
         {canAdd(r) && <button onClick={() => onAdd(r.id)} className="p-1 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Restock"><Plus size={11} /></button>}
       </div>
     );
