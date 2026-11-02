@@ -6,10 +6,12 @@ import type { HistoryLine } from '@/lib/history';
 import { stockMovesFromHistory, weeklyBuckets, perPerson, movesToCSV } from '@/lib/reagent-consumption';
 import type { Reagent } from '@/data/lab-data';
 
+// Weekly bars; the ranges are in whole weeks ending with the current one
 const RANGES = [
-  { weeks: 12, label: '12 weeks' },
+  { weeks: 5, label: '1 month' },
+  { weeks: 13, label: '3 months' },
   { weeks: 26, label: '6 months' },
-  { weeks: 52, label: '1 year' },
+  { weeks: 52, label: '12 months' },
   { weeks: 0, label: 'All' },
 ];
 
@@ -21,7 +23,7 @@ const fmtQty = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(n < 10
  * reagent's row history. Shown inside the History dialog of a reagent.
  */
 export default function ReagentConsumption({ reagent, lines, canExport }: { reagent: Reagent; lines: HistoryLine[]; canExport: boolean }) {
-  const [weeks, setWeeks] = useState(12);
+  const [weeks, setWeeks] = useState(13);
   const moves = useMemo(() => stockMovesFromHistory(lines, reagent.currentStock), [lines, reagent.currentStock]);
   const buckets = useMemo(() => weeklyBuckets(moves, weeks), [moves, weeks]);
   const since = buckets[0]?.start;
