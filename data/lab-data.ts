@@ -72,18 +72,23 @@ export function canSeeAbsences(u: Pick<LabUser, 'role' | 'affiliation'>): boolea
 }
 
 // --- Trainings and certifications: who may grant them ---------------------
-// Microfabrication training: any MiMic member from PhD up.
-export const MICROFAB_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager', 'postdoc', 'phd'];
-// Biological training: Lab Manager and up (Lab Manager, Researcher, PI, Admin).
-export const BIO_TRAINER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager'];
+// Trainings (microfabrication, biological) and instrument certifications are
+// granted and revoked by the staff only: Admin, PI, Researcher, Lab Manager,
+// Project Manager (effective role, so BiomimX = PhD cannot). Post-docs and PhD
+// students cannot touch other people's cards, even as instrument responsibles
+// (Marco, 03/11/2026). Server: lab_can_grant_training v3 / lab_can_grant_certification v2.
+export const GRANTER_ROLES: UserRole[] = ['admin', 'pi', 'researcher', 'lab_manager', 'project_manager'];
 export type TrainingKind = 'microfab' | 'bio';
-/** PI / Admin (role or flag): the only ones who grant any certification and edit everything. */
+/** PI / Admin (role or flag): the only ones who may mark their own card and edit everything. */
 export function isPiOrAdmin(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
   return u.isAdmin || ['admin', 'pi'].includes(effectiveRole(u));
 }
+export function isGranter(u: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
+  return u.isAdmin || GRANTER_ROLES.includes(effectiveRole(u));
+}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kind kept: the two trainings may diverge again
 export function canGrantTraining(actor: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>, kind: TrainingKind): boolean {
-  if (isPiOrAdmin(actor)) return true;
-  return (kind === 'microfab' ? MICROFAB_TRAINER_ROLES : BIO_TRAINER_ROLES).includes(effectiveRole(actor));
+  return isGranter(actor);
 }
 
 // Roles senior enough to supervise MSc students and guests.
@@ -416,10 +421,9 @@ export function instrumentCertId(i: Pick<Instrument, 'id' | 'certificationId'>):
 export function isCertifiedFor(u: Pick<LabUser, 'certifications'>, i: Pick<Instrument, 'id' | 'certificationId' | 'requiresCertification'>): boolean {
   return !i.requiresCertification || u.certifications.includes(instrumentCertId(i));
 }
-/** Who may grant a certification: PI / Admin, or the responsible of an instrument it unlocks. */
-export function canGrantCertification(actor: Pick<LabUser, 'id' | 'role' | 'affiliation' | 'isAdmin'>, certId: string, instruments: Pick<Instrument, 'id' | 'certificationId' | 'responsibleUserId'>[]): boolean {
-  if (isPiOrAdmin(actor)) return true;
-  return instruments.some(i => instrumentCertId(i) === certId && !!i.responsibleUserId && i.responsibleUserId === actor.id);
+/** Who may grant a certification: the staff roles (GRANTER_ROLES), whatever the instrument. */
+export function canGrantCertification(actor: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
+  return isGranter(actor);
 }
 /** Responsibles manage every booking of their instrument like a booking manager. */
 export function isResponsibleOf(actor: Pick<LabUser, 'id'>, i: Pick<Instrument, 'responsibleUserId'> | undefined): boolean {

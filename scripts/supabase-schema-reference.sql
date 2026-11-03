@@ -123,6 +123,10 @@
 --        withdraw from the items flagged open, guests never;
 --        set_reagent_open_to_students(id, open) RPC for managers / responsibles;
 --        reagents_update v2: responsibles edit their items' record)
+--      then supabase-2026-11-granters-staff-only.sql (lab_can_grant_training v3,
+--        lab_can_grant_certification v2, lab_is_granter v2: trainings and
+--        certifications granted by Researcher / Lab Manager / Project Manager /
+--        PI / Admin only — no more PhD, post-doc or instrument responsible)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old

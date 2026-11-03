@@ -268,7 +268,7 @@ function UsersTab() {
   const { users, user: currentUser, addUser, updateUser, removeUser, projects, certifications, instruments, bookings, removeBooking } = useLabContext();
   // Trainings and certifications have their own granters (server: protect_lab_user_fields v3)
   const mayGrant = { microfab: canGrantTraining(currentUser, 'microfab'), bio: canGrantTraining(currentUser, 'bio') };
-  const mayGrantCert = (id: string) => canGrantCertification(currentUser, id, instruments);
+  const mayGrantCert = (_id: string) => canGrantCertification(currentUser);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<LabUser | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -602,7 +602,7 @@ function UsersTab() {
                 const ok = mayGrantCert(c.id);
                 return (
                   <button key={c.id} type="button" onClick={() => toggleCert(c.id)} disabled={!ok}
-                    title={ok ? undefined : 'Granted by the responsible of the instrument (or a PI / Admin)'}
+                    title={ok ? undefined : 'Granted by the staff: Researcher, Lab Manager, Project Manager, PI, Admin'}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope transition-all ${form.certifications.includes(c.id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} ${ok ? '' : 'opacity-50 cursor-not-allowed'}`}>
                     {c.name}
                   </button>
@@ -735,7 +735,7 @@ function ProjectsTab() {
 // ============================================================
 function CertificationsTab() {
   const { certifications, addCertification, updateCertification, removeCertification, instruments, users, user: currentUser, updateUser } = useLabContext();
-  const mayGrantCert = (id: string) => canGrantCertification(currentUser, id, instruments);
+  const mayGrantCert = (_id: string) => canGrantCertification(currentUser);
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [editing, setEditing] = useState<Certification | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -848,7 +848,7 @@ function CertificationsTab() {
                     const has = u.certifications.includes(c.id);
                     return (
                       <td key={c.id} className="px-1.5 py-2 text-center">
-                        <button onClick={() => toggleUserCert(u.id, c.id)} disabled={!mayGrantCert(c.id)} title={mayGrantCert(c.id) ? undefined : 'Granted by the instrument responsible (or a PI / Admin)'}
+                        <button onClick={() => toggleUserCert(u.id, c.id)} disabled={!mayGrantCert(c.id)} title={mayGrantCert(c.id) ? undefined : 'Granted by the staff: Researcher, Lab Manager, Project Manager, PI, Admin'}
                           className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed ${has ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'}`}>
                           {has ? <span className="text-[10px] font-bold">&#10003;</span> : <span className="text-[10px]">—</span>}
                         </button>

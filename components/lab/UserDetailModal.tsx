@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Mail, Hash, CalendarDays, UserCheck, Award, FolderKanban, CheckCircle2, Circle, GraduationCap, Plus, Minus } from 'lucide-react';
-import { LabUser, Project, Certification, Instrument, rolePermissions, generateAbbreviation, formatDate, todayStr, SUPERVISED_ROLES, TrainingKind, canGrantTraining, canGrantCertification, isPiOrAdmin } from '@/data/lab-data';
+import { LabUser, Project, Certification, rolePermissions, generateAbbreviation, formatDate, todayStr, SUPERVISED_ROLES, TrainingKind, canGrantTraining, canGrantCertification, isPiOrAdmin } from '@/data/lab-data';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { fetchSignupCode } from '@/lib/supabase-users';
 
@@ -17,12 +17,11 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
   onClose: () => void;
   footer?: React.ReactNode;
   /**
-   * Lets the viewer grant trainings / certifications from this card:
-   * microfab training by any MiMic PhD and up, biological training by Lab
-   * Manager and up, certifications by the responsible of an instrument they
-   * unlock (PI / Admin: everything). Server: protect_lab_user_fields v3.
+   * Lets the viewer grant trainings / certifications from this card: staff
+   * only (Researcher, Lab Manager, Project Manager, PI, Admin — GRANTER_ROLES).
+   * Server: protect_lab_user_fields v3 with lab_can_grant_* v3/v2.
    */
-  grant?: { actor: LabUser; instruments: Instrument[]; onUpdate: (u: LabUser) => void };
+  grant?: { actor: LabUser; onUpdate: (u: LabUser) => void };
 }) {
   const supervisor = users.find(x => x.id === u.supervisorId);
   const supervises = users.filter(x => x.supervisorId === u.id && x.status !== 'alumni');
@@ -53,7 +52,7 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
       ? { ...u, trainingMicrofabDone: done, trainingMicrofabDate: done ? today : undefined }
       : { ...u, trainingBioDone: done, trainingBioDate: done ? today : undefined });
   };
-  const grantableCerts = granting ? certifications.filter(c => canGrantCertification(granting.actor, c.id, granting.instruments)) : [];
+  const grantableCerts = granting ? certifications.filter(() => canGrantCertification(granting.actor)) : [];
   const toggleCert = (certId: string) => {
     if (!granting) return;
     const has = u.certifications.includes(certId);
@@ -146,7 +145,7 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
                 ))}
               </div>
             )}
-            {granting && grantableCerts.length > 0 && <p className="text-[10px] text-gray-400 mt-1">You can grant the certifications of the instruments you are responsible for{isPiOrAdmin(granting.actor) ? ' (all of them, as PI / Admin)' : ''}.</p>}
+            {granting && grantableCerts.length > 0 && <p className="text-[10px] text-gray-400 mt-1">As staff you can grant or revoke any certification; the date is recorded.</p>}
           </div>
 
           <div>
