@@ -6,8 +6,8 @@
 
 export type UserRole = 'admin' | 'pi' | 'researcher' | 'lab_manager' | 'project_manager' | 'postdoc' | 'phd' | 'msc' | 'guest';
 
-export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'Biomech' | 'BiomimX' | 'External';
-export const USER_AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'BiomimX', 'External'];
+export type UserAffiliation = 'MiMic Lab' | 'DEIB' | 'POLIMI' | 'Biomech' | 'BiomimX' | 'THLab' | 'ATTiC' | 'External';
+export const USER_AFFILIATIONS: UserAffiliation[] = ['MiMic Lab', 'DEIB', 'POLIMI', 'Biomech', 'BiomimX', 'THLab', 'ATTiC', 'External'];
 
 export type UserStatus = 'active' | 'alumni';
 
@@ -46,8 +46,8 @@ export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }
  * The role that decides what a person may do in the app.
  *   · MiMic Lab: the real role.
  *   · BiomimX (spin-off, in the lab every day): a MiMic PhD, whatever the title.
- *   · DEIB, POLIMI, Biomech, External: a MiMic MSc student — they book
- *     instruments and look around.
+ *   · DEIB, POLIMI, Biomech, THLab, ATTiC, External: a MiMic MSc student —
+ *     they book instruments and look around.
  * The displayed role (rolePermissions[u.role].label) stays the real one.
  * Server rule: lab_effective_role(affiliation, role) in lab-assistant / biomimx SQL.
  */
