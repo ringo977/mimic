@@ -163,13 +163,21 @@ export async function updateLabUser(u: LabUser): Promise<{ ok: boolean; error?: 
 
 /** Own favourites only (RLS: own row; the column is not a management field). */
 export async function saveMyFavoriteInstruments(userId: string, ids: string[]): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase
+  // .select(): an UPDATE that RLS does not let through touches 0 rows with
+  // NO error (e.g. a lab_users row linked to a stale auth account, so
+  // current_lab_user_id() is NULL). Surface it instead of pretending.
+  const { data, error } = await supabase
     .from('lab_users')
     .update({ favorite_instrument_ids: ids })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('id');
   if (error) {
     console.error('Failed to save favourites:', error.message);
     return { ok: false, error: error.message };
+  }
+  if (!data || data.length === 0) {
+    console.error('Favourites not saved: the server did not let this account write its own row (account link?)');
+    return { ok: false, error: 'row not writable' };
   }
   return { ok: true };
 }
