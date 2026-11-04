@@ -127,7 +127,7 @@
 --        lab_can_grant_certification v2, lab_is_granter v2: trainings and
 --        certifications granted by Researcher / Lab Manager / Project Manager /
 --        PI / Admin only — no more PhD, post-doc or instrument responsible)
---      then supabase-2026-11-affiliations-thlab-attic.sql (affiliations THLab,
+--      then supabase-2026-11-affiliations-thlab-attic.sql (affiliations Th-Lab,
 --        ATTiC in the CHECK — externals, = MSc permissions)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   certified_at            jsonb,   -- { certificationId: YYYY-MM-DD } training dates
   favorite_instrument_ids text[] NOT NULL DEFAULT '{}'::text[],   -- 2026-10-beta-round4.sql: own favourites (self-editable)
   CONSTRAINT lab_users_affiliation_check
-    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'BiomimX'::text, 'THLab'::text, 'ATTiC'::text, 'External'::text]))),   -- 2026-11-affiliations-thlab-attic.sql
+    CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'BiomimX'::text, 'Th-Lab'::text, 'ATTiC'::text, 'External'::text]))),   -- 2026-11-affiliations-thlab-attic.sql
   CONSTRAINT lab_users_role_check
     CHECK ((role = ANY (ARRAY['admin'::text, 'pi'::text, 'researcher'::text, 'lab_manager'::text, 'project_manager'::text, 'postdoc'::text, 'phd'::text, 'msc'::text, 'guest'::text]))),   -- 2026-09-roles.sql
   CONSTRAINT lab_users_status_check
