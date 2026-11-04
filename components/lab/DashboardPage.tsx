@@ -569,7 +569,7 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const [onlyBooked, setOnlyBooked] = useState(false);
   const [modal, setModal] = useState<ModalState | null>(null);
   const isMobile = useMediaQuery('(max-width: 640px)');
-  const { favoriteInstrumentIds } = useLabContext();
+  const { favoriteInstrumentIds, setCurrentPage } = useLabContext();
 
   const day = useMemo(() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + dayOffset); return d; }, [dayOffset]);
   const ds = localDateStr(day);
@@ -682,7 +682,13 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
             </div>
           </div>
 
-          {rows.length === 0 && <p className="text-xs text-gray-400 font-manrope py-6 text-center">No instrument{onlyBooked ? ' booked' : ''} in this category.</p>}
+          {rows.length === 0 && (
+            <p className="text-xs text-gray-400 font-manrope py-6 text-center">
+              {category === '★' && favoriteInstrumentIds.length === 0
+                ? <>No favourites yet. Go to <button type="button" onClick={() => setCurrentPage('instruments')} className="underline text-[#102C53]">Instruments</button> and click the ☆ star on a card (or next to the instrument name) to add it here.</>
+                : <>No instrument{onlyBooked ? ' booked' : ''} in this category.</>}
+            </p>
+          )}
 
           {rows.map(inst => {
             const showCat = category === 'All' && inst.category !== lastCategory;
