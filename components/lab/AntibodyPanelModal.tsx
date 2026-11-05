@@ -16,6 +16,27 @@ const sel = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-m
  */
 type Props = { reagents: Reagent[]; storageUnits: StorageUnit[]; storageBoxes: StorageBox[]; onClose: () => void };
 
+/**
+ * The panel lists aliquots, not the stock vials behind them (same antibody
+ * twice would only add noise). An empty aliquot still counts as available
+ * when its stock is not empty; the quantity shown says so.
+ */
+type PanelReagent = Reagent & { ownStock: number; backupStock: number };
+const abKey = (r: Reagent) => { const a = r.antibody!; return [abKind(a), a.host, a.target, a.isotype, a.fluorophore, a.antigen ?? '', a.clone ?? ''].join('|').toLowerCase(); };
+function panelReagents(reagents: Reagent[]): PanelReagent[] {
+  const withAb = reagents.filter(r => r.antibody);
+  const nonStock = withAb.filter(r => r.kind !== 'stock');
+  const keys = new Set(nonStock.map(abKey));
+  // stocks without any aliquot are kept, so nothing disappears
+  const shown = [...nonStock, ...withAb.filter(r => r.kind === 'stock' && !keys.has(abKey(r)))];
+  return shown.map(r => {
+    const backups = withAb.filter(x => x.kind === 'stock' && x.id !== r.id && (x.id === r.derivedFromId || abKey(x) === abKey(r)));
+    const backupStock = backups.reduce((n, x) => n + Math.max(0, x.currentStock), 0);
+    return { ...r, ownStock: r.currentStock, backupStock, currentStock: r.currentStock > 0 ? r.currentStock : backupStock };
+  });
+}
+const qty = (r: PanelReagent) => r.ownStock > 0 ? `${r.ownStock} ${r.unit}` : r.backupStock > 0 ? `aliquot empty · stock ${r.backupStock} ${r.unit}` : `0 ${r.unit} (empty!)`;
+
 export default function AntibodyPanelModal(props: Props) {
   const ref = useDialogA11y(true, props.onClose);
   const [mode, setMode] = useState<'targets' | 'colours'>('targets');
@@ -42,24 +63,25 @@ export default function AntibodyPanelModal(props: Props) {
  * From targets: pick primaries and dyes from the stock list; each unconjugated
  * primary gets a compatible secondary (anti-host, right Ig class) on a free band.
  */
-function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
-  const pool = useMemo(() => reagents.filter(r => r.antibody && (abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye')).sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
-  const secondaries = useMemo(() => reagents.filter(r => r.antibody && abKind(r.antibody) === 'secondary'), [reagents]);
+function TargetsMode({ reagents: allReagents, storageUnits, storageBoxes }: Props) {
+  const reagents = useMemo(() => panelReagents(allReagents), [allReagents]);
+  const pool = useMemo(() => reagents.filter(r => abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye').sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
+  const secondaries = useMemo(() => reagents.filter(r => abKind(r.antibody) === 'secondary'), [reagents]);
   const [ids, setIds] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
-  const items = ids.map(id => pool.find(r => r.id === id)).filter((r): r is Reagent => !!r);
+  const items = ids.map(id => pool.find(r => r.id === id)).filter((r): r is PanelReagent => !!r);
   const entries = useMemo(() => assignPanel(items, secondaries, overrides), [items, secondaries, overrides]);
-  const label = (r: Reagent) => r.antibody ? (abKind(r.antibody) === 'secondary' ? antibodyShortLabel(r.antibody) : (r.antibody.antigen || r.name)) : r.name;
+  const label = (r: PanelReagent) => r.antibody ? (abKind(r.antibody) === 'secondary' ? antibodyShortLabel(r.antibody) : (r.antibody.antigen || r.name)) : r.name;
   const warnings = panelEntryWarnings(entries, label);
   const hits = q.trim() ? pool.filter(r => !ids.includes(r.id) && `${r.antibody!.antigen} ${r.name} ${r.antibody!.host} ${r.antibody!.isotype} ${r.antibody!.clone}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 12) : [];
   const add = (id: string) => { if (ids.length < 5 && !ids.includes(id)) setIds([...ids, id]); setQ(''); };
   const remove = (id: string) => { setIds(ids.filter(x => x !== id)); setOverrides(o => { const n = { ...o }; delete n[id]; return n; }); };
   const quick = (re: RegExp) => pool.find(r => re.test(r.antibody!.antigen || '') && !ids.includes(r.id));
   const nuclei = quick(/nuclei/i), actin = quick(/f-actin/i);
-  const place = (r: Reagent) => reagentPlaceLabel(r, storageUnits, storageBoxes);
-  const summary = entries.map(e => { const m = e.band ? emissionBandMeta[e.band].label : 'no band'; const sec = e.secondary ? ` → ${antibodyShortLabel(e.secondary.antibody!)} — ${e.secondary.supplier} ${e.secondary.catalogNumber} (${e.secondary.currentStock} ${e.secondary.unit}, ${place(e.secondary)})` : e.fixed ? '' : ' → no compatible secondary'; return `${m}: ${label(e.item)} [${[e.item.antibody!.host, e.item.antibody!.isotype, e.item.antibody!.clone ? 'clone ' + e.item.antibody!.clone : ''].filter(Boolean).join(' · ') || e.item.antibody!.fluorophore}] (${e.item.currentStock} ${e.item.unit}, ${place(e.item)})${sec}`; }).join('\n');
+  const place = (r: PanelReagent) => reagentPlaceLabel(r, storageUnits, storageBoxes);
+  const summary = entries.map(e => { const m = e.band ? emissionBandMeta[e.band].label : 'no band'; const sec = e.secondary ? ` → ${antibodyShortLabel(e.secondary.antibody!)} — ${e.secondary.supplier} ${e.secondary.catalogNumber} (${qty(e.secondary)}, ${place(e.secondary)})` : e.fixed ? '' : ' → no compatible secondary'; return `${m}: ${label(e.item)} [${[e.item.antibody!.host, e.item.antibody!.isotype, e.item.antibody!.clone ? 'clone ' + e.item.antibody!.clone : ''].filter(Boolean).join(' · ') || e.item.antibody!.fluorophore}] (${qty(e.item)}, ${place(e.item)})${sec}`; }).join('\n');
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — IF panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
   return (
@@ -72,7 +94,7 @@ function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
           <ul className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
             {hits.map(r => <li key={r.id}><button onClick={() => add(r.id)} className="w-full text-left px-3 py-1.5 text-xs font-manrope hover:bg-gray-50 flex items-center justify-between gap-2">
               <span className="truncate"><span className="font-medium text-gray-900">{r.antibody!.antigen || r.name}</span> <span className="text-gray-500">{[r.antibody!.host, r.antibody!.isotype, r.antibody!.clone ? 'clone ' + r.antibody!.clone : '', r.antibody!.fluorophore].filter(Boolean).join(' · ')}</span></span>
-              <span className={`shrink-0 text-[10px] ${r.currentStock <= 0 ? 'text-red-600' : 'text-gray-400'}`}>{r.currentStock} {r.unit}</span>
+              <span className={`shrink-0 text-[10px] ${r.currentStock <= 0 ? 'text-red-600' : 'text-gray-400'}`}>{qty(r)}</span>
             </button></li>)}
           </ul>
         )}
@@ -95,14 +117,14 @@ function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-gray-900 font-manrope truncate" title={e.item.name}>{ab.antigen || e.item.name}</p>
-                <p className="text-[10px] text-gray-500 font-manrope truncate">{[ab.host, ab.isotype, ab.clone ? 'clone ' + ab.clone : '', ab.fluorophore].filter(Boolean).join(' · ')} · {e.item.currentStock} {e.item.unit} · {place(e.item)}</p>
+                <p className="text-[10px] text-gray-500 font-manrope truncate">{[ab.host, ab.isotype, ab.clone ? 'clone ' + ab.clone : '', ab.fluorophore].filter(Boolean).join(' · ')} · {qty(e.item)} · {place(e.item)}</p>
               </div>
               <div className="min-w-0">
                 {e.fixed ? <p className="text-[10px] text-gray-500 font-manrope">{abKind(ab) === 'dye' ? 'Dye — no secondary needed.' : 'Directly conjugated — no secondary needed.'}</p>
                  : e.candidates.length === 0 ? <p className="text-[10px] text-red-600 font-manrope">No secondary in stock recognises {ab.host || '?'} {ab.isotype}.</p>
                  : <>
                     <select value={e.secondary?.id ?? ''} onChange={ev => setOverrides({ ...overrides, [e.item.id]: ev.target.value })} className={sel}>
-                      {e.candidates.map(c => <option key={c.item.id} value={c.item.id}>{antibodyShortLabel(c.item.antibody!)}{c.fit === 'generic' ? ' (generic)' : ''} · {c.item.currentStock} {c.item.unit}{c.item.currentStock <= 0 ? ' (empty!)' : ''}</option>)}
+                      {e.candidates.map(c => <option key={c.item.id} value={c.item.id}>{antibodyShortLabel(c.item.antibody!)}{c.fit === 'generic' ? ' (generic)' : ''} · {qty(c.item)}</option>)}
                     </select>
                     {e.secondary && <p className="text-[10px] text-gray-500 font-manrope mt-0.5 truncate" title={e.secondary.name}>{e.secondary.supplier} {e.secondary.catalogNumber} · {place(e.secondary)}</p>}
                    </>}
@@ -127,11 +149,12 @@ function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
 }
 
 /** From colours: one slot per band, then the species / Ig class of each primary. */
-function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
-  const secondaries = useMemo(() => reagents.filter(r => r.antibody && abKind(r.antibody) === 'secondary' && fluorophoreBand(r.antibody.fluorophore)), [reagents]);
+function ColoursMode({ reagents: allReagents, storageUnits, storageBoxes }: Props) {
+  const reagents = useMemo(() => panelReagents(allReagents), [allReagents]);
+  const secondaries = useMemo(() => reagents.filter(r => abKind(r.antibody) === 'secondary' && fluorophoreBand(r.antibody!.fluorophore)), [reagents]);
   const options = useMemo(() => antibodyOptions(secondaries.map(r => r.antibody)), [secondaries]);
   // Primaries and dyes in stock: picking one fills species / Ig (and the band, when directly conjugated)
-  const pool = useMemo(() => reagents.filter(r => r.antibody && (abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye')).sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
+  const pool = useMemo(() => reagents.filter(r => abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye').sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
   type Slot = PanelSlot & { primaryId?: string };
   const [slots, setSlots] = useState<Slot[]>([
     { band: 'blue', target: '', isotype: '' }, { band: 'green', target: '', isotype: '' }, { band: 'red', target: '', isotype: '' }, { band: 'farred', target: '', isotype: '' },
@@ -167,7 +190,7 @@ function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
     ...slots.flatMap((s, i) => { const pr = primaryOf(s); return pr && pr.currentStock <= 0 ? [`Slot ${i + 1}: ${pr.antibody!.antigen || pr.name} is out of stock.`] : []; }),
   ];
 
-  const summary = slots.map((s, i) => { const p = picked[i]; const pr = primaryOf(s); const prTxt = pr ? `${pr.antibody!.antigen || pr.name} [${[pr.antibody!.host, pr.antibody!.isotype, pr.antibody!.clone ? 'clone ' + pr.antibody!.clone : '', pr.antibody!.fluorophore].filter(Boolean).join(' · ')}] (${pr.currentStock} ${pr.unit}, ${reagentPlaceLabel(pr, storageUnits, storageBoxes)})${isFixed(s) ? '' : ' → '}` : ''; return `${emissionBandMeta[s.band].label}: ${prTxt}${isFixed(s) ? '' : p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${p.currentStock} ${p.unit}, ${reagentPlaceLabel(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
+  const summary = slots.map((s, i) => { const p = picked[i]; const pr = primaryOf(s); const prTxt = pr ? `${pr.antibody!.antigen || pr.name} [${[pr.antibody!.host, pr.antibody!.isotype, pr.antibody!.clone ? 'clone ' + pr.antibody!.clone : '', pr.antibody!.fluorophore].filter(Boolean).join(' · ')}] (${qty(pr)}, ${reagentPlaceLabel(pr, storageUnits, storageBoxes)})${isFixed(s) ? '' : ' → '}` : ''; return `${emissionBandMeta[s.band].label}: ${prTxt}${isFixed(s) ? '' : p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${qty(p)}, ${reagentPlaceLabel(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — secondary panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
   return (
@@ -197,21 +220,13 @@ function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
             const c = candidates(s);
             const p = picked[i];
             return (
-              <div key={i} className="grid grid-cols-1 sm:grid-cols-[120px_1.4fr_0.9fr_0.8fr_1.7fr] gap-2 items-start p-3 rounded-xl border" style={{ borderColor: meta.color + '66', background: meta.bg + '55' }}>
+              <div key={i} className="grid grid-cols-1 sm:grid-cols-[120px_0.9fr_0.8fr_1.7fr_1.4fr] gap-2 items-start p-3 rounded-xl border" style={{ borderColor: meta.color + '66', background: meta.bg + '55' }}>
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Band</label>
                   <select value={s.band} onChange={e => setSlot(i, { band: e.target.value as EmissionBand, ...(isFixed(s) ? { primaryId: undefined, target: '', isotype: '' } : {}) })} className={sel} style={{ borderColor: meta.color }}>
                     {EMISSION_BANDS.map(b => <option key={b} value={b}>{emissionBandMeta[b].label}</option>)}
                   </select>
                   <p className="text-[9px] text-gray-400 mt-0.5 font-manrope">{meta.hint}</p>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Primary / dye in stock <span className="text-gray-400">({primaryChoices(s).length})</span></label>
-                  <select value={s.primaryId ?? ''} onChange={e => pickPrimary(i, e.target.value)} className={sel}>
-                    <option value="">— none / any —</option>
-                    {primaryChoices(s).map(r => { const ab = r.antibody!; return <option key={r.id} value={r.id}>{ab.antigen || r.name}{abKind(ab) === 'dye' ? ` (${ab.fluorophore})` : ` · ${[ab.host, ab.isotype].filter(Boolean).join(' ')}${ab.fluorophore ? ' · ' + ab.fluorophore : ''}`} · {r.currentStock} {r.unit}{r.currentStock <= 0 ? ' (empty!)' : ''}</option>; })}
-                  </select>
-                  {primaryOf(s) && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={primaryOf(s)!.name}>{primaryOf(s)!.antibody!.clone ? `clone ${primaryOf(s)!.antibody!.clone} · ` : ''}{reagentPlaceLabel(primaryOf(s)!, storageUnits, storageBoxes)}</p>}
                 </div>
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Raised in</label>
@@ -234,10 +249,18 @@ function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
                    : c.length === 0 ? <p className="text-xs text-red-600 font-manrope py-2">None in the stock list for this band.</p>
                    : (
                     <select value={p?.id ?? ''} onChange={e => setChosen({ ...chosen, [i]: e.target.value })} className={sel}>
-                      {c.map(r => <option key={r.id} value={r.id}>{antibodyShortLabel(r.antibody!)} · {r.currentStock} {r.unit}{r.currentStock <= 0 ? ' (empty!)' : ''}</option>)}
+                      {c.map(r => <option key={r.id} value={r.id}>{antibodyShortLabel(r.antibody!)} · {qty(r)}</option>)}
                     </select>
                   )}
                   {p && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={p.name}>{p.supplier} {p.catalogNumber} · {reagentPlaceLabel(p, storageUnits, storageBoxes)}</p>}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Primary / dye in stock <span className="text-gray-400">({primaryChoices(s).length})</span></label>
+                  <select value={s.primaryId ?? ''} onChange={e => pickPrimary(i, e.target.value)} className={sel}>
+                    <option value="">— none / any —</option>
+                    {primaryChoices(s).map(r => { const ab = r.antibody!; return <option key={r.id} value={r.id}>{ab.antigen || r.name}{abKind(ab) === 'dye' ? ` (${ab.fluorophore})` : ` · ${[ab.host, ab.isotype].filter(Boolean).join(' ')}${ab.fluorophore ? ' · ' + ab.fluorophore : ''}`} · {qty(r)}</option>; })}
+                  </select>
+                  {primaryOf(s) && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={primaryOf(s)!.name}>{primaryOf(s)!.antibody!.clone ? `clone ${primaryOf(s)!.antibody!.clone} · ` : ''}{reagentPlaceLabel(primaryOf(s)!, storageUnits, storageBoxes)}</p>}
                 </div>
               </div>
             );
