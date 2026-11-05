@@ -9,7 +9,8 @@
 -- Recipients (active, with an e-mail, not opted out):
 --   · managers — Admin flag, or effective role admin / pi / lab_manager /
 --     project_manager — get everything;
---   · the responsible of an instrument gets the part about that instrument.
+--   · the responsible of an instrument gets the part about that instrument;
+--   · the responsible of a reagent (stock) gets its movements and low-stock alert.
 -- An e-mail goes out only when there is something to say.
 --
 -- Content, by slot (Europe/Rome):
@@ -107,21 +108,24 @@ END;
 $$;
 
 -- Who receives, and with which scope
+DROP FUNCTION IF EXISTS digest_recipients();   -- the returned columns changed (reagent_ids added): CREATE OR REPLACE cannot do that
 CREATE OR REPLACE FUNCTION digest_recipients()
-RETURNS TABLE (user_id text, email text, name text, is_manager boolean, is_pi boolean, is_admin boolean, instrument_ids text[])
+RETURNS TABLE (user_id text, email text, name text, is_manager boolean, is_pi boolean, is_admin boolean, instrument_ids text[], reagent_ids text[])
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT u.id, u.email, u.name,
          (u.is_admin OR lab_effective_role(u.affiliation, u.role) IN ('admin', 'pi', 'lab_manager', 'project_manager')) AS is_manager,
          (lab_effective_role(u.affiliation, u.role) IN ('admin', 'pi'))                                                   AS is_pi,      -- approves purchases
          u.is_admin                                                                                                        AS is_admin,   -- approves absences too
-         coalesce((SELECT array_agg(i.id) FROM instruments i WHERE i.responsible_user_id = u.id), '{}')                     AS instrument_ids
+         coalesce((SELECT array_agg(i.id) FROM instruments i WHERE i.responsible_user_id = u.id), '{}')                     AS instrument_ids,
+         coalesce((SELECT array_agg(g.id) FROM reagents g WHERE u.id = ANY (g.responsible_user_ids)), '{}')                 AS reagent_ids
     FROM lab_users u
    WHERE u.status = 'active'
      AND coalesce(u.email, '') <> ''
      AND NOT u.digest_opt_out
      AND (u.is_admin
           OR lab_effective_role(u.affiliation, u.role) IN ('admin', 'pi', 'lab_manager', 'project_manager')
-          OR EXISTS (SELECT 1 FROM instruments i WHERE i.responsible_user_id = u.id));
+          OR EXISTS (SELECT 1 FROM instruments i WHERE i.responsible_user_id = u.id)
+          OR EXISTS (SELECT 1 FROM reagents g WHERE u.id = ANY (g.responsible_user_ids)));
 $$;
 
 -- ------------------------------------------------------------
@@ -264,6 +268,38 @@ BEGIN
     END IF;
   END IF;
 
+  IF NOT r.is_manager AND cardinality(r.reagent_ids) > 0 THEN
+    -- I. Reagent responsible (not a manager): stock movements of own reagents,
+    --    from row_history (each version's old stock vs the next one / live value)
+    SELECT count(*), string_agg(format('<li>%s — <b>%s</b>: %s → %s %s <span style="color:#6b7280">· %s</span></li>',
+             to_char(m.changed_at AT TIME ZONE 'Europe/Rome', 'HH24:MI'), digest_h(m.name), m.old_stock, m.new_stock, digest_h(m.unit), digest_h(coalesce(m.changed_by_name, 'SQL / system'))),
+             '' ORDER BY m.changed_at)
+      INTO n_auth, sec
+      FROM (
+        SELECT h.changed_at, g.name, g.unit, h.changed_by_name,
+               (h.old_row ->> 'current_stock')::numeric AS old_stock,
+               coalesce((lead(h.old_row) OVER (PARTITION BY h.row_id ORDER BY h.changed_at)) ->> 'current_stock', g.current_stock::text)::numeric AS new_stock
+          FROM row_history h JOIN reagents g ON g.id = h.row_id
+         WHERE h.table_name = 'reagents' AND h.op = 'UPDATE' AND h.row_id = ANY (r.reagent_ids)
+           AND 'current_stock' = ANY (h.changed_cols) AND NOT ('unit' = ANY (h.changed_cols))
+      ) m
+     WHERE m.changed_at >= since AND m.old_stock IS DISTINCT FROM m.new_stock;
+    IF n_auth > 0 THEN
+      body := body || format('<h3 style="margin:18px 0 6px;color:#102C53">Your reagents — movements since %s</h3><ul style="margin:0;padding-left:18px">%s</ul>',
+                             to_char(since AT TIME ZONE 'Europe/Rome', 'HH24:MI'), sec);
+      n := n + n_auth; parts := parts || format('%s stock movement%s', n_auth, CASE WHEN n_auth = 1 THEN '' ELSE 's' END);
+    END IF;
+
+    IF p_slot = 7 THEN
+      SELECT count(*), string_agg(format('<li>%s — <b>%s %s</b> left (alert at %s)</li>', digest_h(g.name), g.current_stock, digest_h(g.unit), g.alert_threshold), '' ORDER BY g.name)
+        INTO n_auth, sec FROM reagents g WHERE g.id = ANY (r.reagent_ids) AND g.alert_threshold > 0 AND g.current_stock <= g.alert_threshold;
+      IF n_auth > 0 THEN
+        body := body || format('<h3 style="margin:18px 0 6px;color:#b91c1c">Your reagents — low stock (%s)</h3><ul style="margin:0;padding-left:18px">%s</ul>', n_auth, sec);
+        n := n + n_auth; parts := parts || format('%s low stock', n_auth);
+      END IF;
+    END IF;
+  END IF;
+
   IF n = 0 THEN RETURN; END IF;
 
   subject := format('MiMic Lab · %s recap%s', slot_lbl, CASE WHEN cardinality(parts) > 0 THEN ' — ' || array_to_string(parts, ', ') ELSE '' END);
@@ -272,7 +308,7 @@ BEGIN
     '<p style="margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280">MiMic Lab Manager · %s %s</p>'
     '<p style="margin:0">Hi %s, here is your %s recap.</p>%s'
     '<p style="margin:22px 0 0"><a href="%s" style="display:inline-block;padding:9px 14px;background:#102C53;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Open the Lab Manager</a></p>'
-    '<p style="margin:18px 0 0;font-size:11px;color:#9ca3af">You receive this because you manage bookings or an instrument. To stop it: Lab Manager → sidebar → “E-mail recap”.</p></div>',
+    '<p style="margin:18px 0 0;font-size:11px;color:#9ca3af">You receive this because you manage bookings, an instrument or a reagent. To stop it: Lab Manager → sidebar → “E-mail recap”.</p></div>',
     digest_day(today), slot_lbl, digest_h(split_part(r.name, ' ', 1)), slot_lbl, body, app_url);
   n_items := n;
   RETURN NEXT;
@@ -411,7 +447,7 @@ SELECT
   (SELECT count(*) = 1 FROM cron.job WHERE jobname = 'mimic-digest')                                                   AS cron_ok,
   (SELECT count(*) = 1 FROM vault.decrypted_secrets WHERE name = 'brevo_api_key')                                      AS key_in_vault;
 
-SELECT name, email, is_manager, is_pi, is_admin, cardinality(instrument_ids) AS n_instruments FROM digest_recipients() ORDER BY is_manager DESC, name;
+SELECT name, email, is_manager, is_pi, is_admin, cardinality(instrument_ids) AS n_instruments, cardinality(reagent_ids) AS n_reagents FROM digest_recipients() ORDER BY is_manager DESC, name;
 
 -- Then, to test (as yourself, from the SQL Editor it needs a JWT → use the
 -- app's Admin button, or run these here with the SQL Editor's role):

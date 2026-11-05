@@ -579,7 +579,9 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
  * "send me one now" test.
  */
 function EmailRecapModal({ optOut, setOptOut, onClose }: { optOut: boolean; setOptOut: (v: boolean) => void; onClose: () => void }) {
-  const { user, canManageAllBookings, canApproveAbsences } = useLabContext();
+  const { user, canManageAllBookings, canApproveAbsences, instruments, reagents } = useLabContext();
+  const ownInstruments = instruments.some(i => isResponsibleOf(user, i));
+  const ownReagents = reagents.some(r => (r.responsibleUserIds ?? []).includes(user.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [testMsg, setTestMsg] = useState('');
@@ -610,7 +612,9 @@ function EmailRecapModal({ optOut, setOptOut, onClose }: { optOut: boolean; setO
         </div>
         <p className="text-sm text-gray-600 font-manrope mb-4">
           Three short mails a day — <b>07:00</b>, <b>13:00</b> and <b>19:00</b> — to <span className="text-gray-900">{user.email}</span>, only when there is something for you:
-          {canManageAllBookings ? ' bookings to authorize, the agenda, stock movements and low stock' : ' bookings to authorize and the agenda of the instruments you are responsible for'}
+          {canManageAllBookings
+            ? ' bookings to authorize, the agenda, stock movements and low stock'
+            : [ownInstruments ? ' bookings to authorize and the agenda of the instruments you are responsible for' : '', ownReagents ? ' movements and low stock of the reagents you are responsible for' : ''].filter(Boolean).join(',')}
           {canApproveAbsences ? ', pending absence requests' : ''}
           {effectiveRole(user) === 'pi' || effectiveRole(user) === 'admin' ? ' and purchase requests' : ''}.
         </p>
@@ -641,7 +645,7 @@ function EmailRecapModal({ optOut, setOptOut, onClose }: { optOut: boolean; setO
 }
 
 function AppShell({ onLogout }: { onLogout: () => void }) {
-  const { user, permissions, currentPage, setCurrentPage, absences, canApproveAbsences, canManageAllBookings, instruments } = useLabContext();
+  const { user, permissions, currentPage, setCurrentPage, absences, canApproveAbsences, canManageAllBookings, instruments, reagents } = useLabContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
@@ -649,8 +653,8 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
   // lab_users row is not re-fetched during the session).
   const [digestOptOut, setDigestOptOut] = useState(!!user.digestOptOut);
   useEffect(() => { setDigestOptOut(!!user.digestOptOut); }, [user.digestOptOut]);
-  // Who the server would mail: booking managers and instrument responsibles
-  const recapEligible = canManageAllBookings || instruments.some(i => isResponsibleOf(user, i));
+  // Who the server would mail: booking managers, instrument and reagent responsibles
+  const recapEligible = canManageAllBookings || instruments.some(i => isResponsibleOf(user, i)) || reagents.some(r => (r.responsibleUserIds ?? []).includes(user.id));
 
   const filteredNav = navItems.filter(item => {
     if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(effectiveRole(user))) return false;
