@@ -423,9 +423,24 @@ export function instrumentCertId(i: Pick<Instrument, 'id' | 'certificationId'>):
 export function isCertifiedFor(u: Pick<LabUser, 'certifications'>, i: Pick<Instrument, 'id' | 'certificationId' | 'requiresCertification'>): boolean {
   return !i.requiresCertification || u.certifications.includes(instrumentCertId(i));
 }
-/** Who may grant a certification: the staff roles (GRANTER_ROLES), whatever the instrument. */
-export function canGrantCertification(actor: Pick<LabUser, 'role' | 'affiliation' | 'isAdmin'>): boolean {
-  return isGranter(actor);
+/** Staff that grants every certification: Lab Manager, Project Manager, PI, Admin (flag or role). */
+export const CERT_STAFF_ROLES: UserRole[] = ['admin', 'pi', 'lab_manager', 'project_manager'];
+/**
+ * Who may grant a certification (Marco, 05/11/2026):
+ *   · Lab Manager / Project Manager / PI / Admin → any certification;
+ *   · Researcher → only the certifications of the instruments they are
+ *     responsible for (a Researcher without instruments grants none).
+ * Trainings (microfab, bio) stay with the whole staff incl. Researchers.
+ * Server: lab_can_grant_certification v3.
+ */
+export function canGrantCertification(
+  actor: Pick<LabUser, 'id' | 'role' | 'affiliation' | 'isAdmin'>,
+  certId: string,
+  instruments: Pick<Instrument, 'id' | 'certificationId' | 'responsibleUserId'>[],
+): boolean {
+  if (actor.isAdmin || CERT_STAFF_ROLES.includes(effectiveRole(actor))) return true;
+  if (effectiveRole(actor) !== 'researcher') return false;
+  return instruments.some(i => instrumentCertId(i) === certId && i.responsibleUserId === actor.id);
 }
 /** Responsibles manage every booking of their instrument like a booking manager. */
 export function isResponsibleOf(actor: Pick<LabUser, 'id'>, i: Pick<Instrument, 'responsibleUserId'> | undefined): boolean {

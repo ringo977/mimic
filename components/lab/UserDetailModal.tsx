@@ -2,24 +2,27 @@
 
 import React, { useEffect, useState } from 'react';
 import { X, Mail, Hash, CalendarDays, UserCheck, Award, FolderKanban, CheckCircle2, Circle, GraduationCap, Plus, Minus } from 'lucide-react';
-import { LabUser, Project, Certification, rolePermissions, generateAbbreviation, formatDate, todayStr, SUPERVISED_ROLES, TrainingKind, canGrantTraining, canGrantCertification, isPiOrAdmin } from '@/data/lab-data';
+import { LabUser, Project, Certification, Instrument, rolePermissions, generateAbbreviation, formatDate, todayStr, SUPERVISED_ROLES, TrainingKind, canGrantTraining, canGrantCertification, isPiOrAdmin } from '@/data/lab-data';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { fetchSignupCode } from '@/lib/supabase-users';
 
 // Person card shown when clicking a name. Used by the admin Users tab
 // (showSensitive: person code) and by the members' directory (without it).
-export default function UserDetailModal({ user: u, users, projects, certifications, showSensitive, onClose, footer, grant }: {
+export default function UserDetailModal({ user: u, users, projects, certifications, instruments = [], showSensitive, onClose, footer, grant }: {
   user: LabUser;
   users: LabUser[];
   projects: Project[];
   certifications: Certification[];
+  /** Needed to work out which certifications a Researcher may grant (own instruments). */
+  instruments?: Instrument[];
   showSensitive?: boolean;
   onClose: () => void;
   footer?: React.ReactNode;
   /**
-   * Lets the viewer grant trainings / certifications from this card: staff
-   * only (Researcher, Lab Manager, Project Manager, PI, Admin — GRANTER_ROLES).
-   * Server: protect_lab_user_fields v3 with lab_can_grant_* v3/v2.
+   * Lets the viewer grant trainings / certifications from this card. Trainings:
+   * staff (Researcher, Lab Manager, Project Manager, PI, Admin). Certifications:
+   * LM / PM / PI / Admin any; Researcher only for their own instruments.
+   * Server: protect_lab_user_fields v3 with lab_can_grant_training v3 / lab_can_grant_certification v3.
    */
   grant?: { actor: LabUser; onUpdate: (u: LabUser) => void };
 }) {
@@ -52,7 +55,7 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
       ? { ...u, trainingMicrofabDone: done, trainingMicrofabDate: done ? today : undefined }
       : { ...u, trainingBioDone: done, trainingBioDate: done ? today : undefined });
   };
-  const grantableCerts = granting ? certifications.filter(() => canGrantCertification(granting.actor)) : [];
+  const grantableCerts = granting ? certifications.filter(c => canGrantCertification(granting.actor, c.id, instruments)) : [];
   const toggleCert = (certId: string) => {
     if (!granting) return;
     const has = u.certifications.includes(certId);
@@ -145,7 +148,7 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
                 ))}
               </div>
             )}
-            {granting && grantableCerts.length > 0 && <p className="text-[10px] text-gray-400 mt-1">As staff you can grant or revoke any certification; the date is recorded.</p>}
+            {granting && grantableCerts.length > 0 && <p className="text-[10px] text-gray-400 mt-1">You can grant or revoke the certifications listed here; the date is recorded.</p>}
           </div>
 
           <div>

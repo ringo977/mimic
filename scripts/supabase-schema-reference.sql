@@ -129,6 +129,9 @@
 --        PI / Admin only — no more PhD, post-doc or instrument responsible)
 --      then supabase-2026-11-affiliations-thlab-attic.sql (affiliations Th-Lab,
 --        ATTiC in the CHECK — externals, = MSc permissions)
+--      then supabase-2026-11-cert-researcher-own-instruments.sql
+--        (lab_can_grant_certification v3: LM / PM / PI / Admin any certification,
+--        Researcher only for the instruments they are responsible for)
 --      then supabase-2026-11-email-digest.sql (e-mail recap at 07/13/19 Rome via
 --        pg_cron 'mimic-digest' + pg_net → Brevo: lab_users.digest_opt_out,
 --        app_settings 'digest', digest_log, digest_* functions,
