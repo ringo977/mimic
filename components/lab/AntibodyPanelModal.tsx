@@ -21,7 +21,7 @@ export default function AntibodyPanelModal(props: Props) {
   const [mode, setMode] = useState<'targets' | 'colours'>('targets');
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={props.onClose}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label="Immunofluorescence panel" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[92vh] overflow-y-auto outline-none" onClick={e => e.stopPropagation()}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label="Immunofluorescence panel" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-4xl p-6 max-h-[92vh] overflow-y-auto outline-none" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-bold text-gray-900 font-manrope">Build a panel</h2>
           <div className="flex items-center gap-2">
@@ -130,28 +130,49 @@ function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
 function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
   const secondaries = useMemo(() => reagents.filter(r => r.antibody && abKind(r.antibody) === 'secondary' && fluorophoreBand(r.antibody.fluorophore)), [reagents]);
   const options = useMemo(() => antibodyOptions(secondaries.map(r => r.antibody)), [secondaries]);
-  const [slots, setSlots] = useState<PanelSlot[]>([
+  // Primaries and dyes in stock: picking one fills species / Ig (and the band, when directly conjugated)
+  const pool = useMemo(() => reagents.filter(r => r.antibody && (abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye')).sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
+  type Slot = PanelSlot & { primaryId?: string };
+  const [slots, setSlots] = useState<Slot[]>([
     { band: 'blue', target: '', isotype: '' }, { band: 'green', target: '', isotype: '' }, { band: 'red', target: '', isotype: '' }, { band: 'farred', target: '', isotype: '' },
   ]);
   const [host, setHost] = useState('');
   const [chosen, setChosen] = useState<Record<number, string>>({});   // slot index → reagent id
   const [copied, setCopied] = useState(false);
 
-  const setSlot = (i: number, patch: Partial<PanelSlot>) => { setSlots(s => s.map((x, k) => k === i ? { ...x, ...patch } : x)); setChosen(c => { const n = { ...c }; delete n[i]; return n; }); };
+  const setSlot = (i: number, patch: Partial<Slot>) => { setSlots(s => s.map((x, k) => k === i ? { ...x, ...patch } : x)); setChosen(c => { const n = { ...c }; delete n[i]; return n; }); };
   const addSlot = () => { if (slots.length >= 5) return; const used = new Set(slots.map(s => s.band)); const free = EMISSION_BANDS.find(b => !used.has(b)) ?? 'red'; setSlots([...slots, { band: free, target: '', isotype: '' }]); };
   const removeSlot = () => { if (slots.length <= 3) return; setSlots(slots.slice(0, -1)); setChosen(c => { const n = { ...c }; delete n[slots.length - 1]; return n; }); };
 
-  const candidates = (s: PanelSlot) => secondaries.filter(r => antibodyMatches(r.antibody, { band: s.band, target: s.target, isotype: s.isotype, host })).sort((a, b) => (b.currentStock > 0 ? 1 : 0) - (a.currentStock > 0 ? 1 : 0) || a.name.localeCompare(b.name));
+  const primaryOf = (s: Slot) => s.primaryId ? pool.find(r => r.id === s.primaryId) : undefined;
+  // Dye or conjugated primary: the slot needs no secondary
+  const isFixed = (s: Slot) => { const pr = primaryOf(s); return !!pr && (abKind(pr.antibody) === 'dye' || !!pr.antibody!.fluorophore); };
+  const primaryChoices = (s: Slot) => pool.filter(r => {
+    const ab = r.antibody!;
+    if (abKind(ab) === 'dye') return fluorophoreBand(ab.fluorophore) === s.band;
+    if (ab.fluorophore && fluorophoreBand(ab.fluorophore) !== s.band) return false;
+    return (!s.target || ab.host === s.target) && (!s.isotype || !ab.isotype || ab.isotype === s.isotype || (s.isotype.startsWith('IgG') && /\(H\+L\)/.test(s.isotype) && ab.isotype.startsWith('IgG')));
+  });
+  const pickPrimary = (i: number, id: string) => {
+    const pr = pool.find(r => r.id === id);
+    if (!pr) { setSlot(i, { primaryId: undefined }); return; }
+    const ab = pr.antibody!; const own = fluorophoreBand(ab.fluorophore);
+    setSlot(i, abKind(ab) === 'dye' ? { primaryId: id, target: '', isotype: '' } : { primaryId: id, target: ab.host, isotype: ab.isotype, ...(own ? { band: own } : {}) });
+  };
+  const candidates = (s: Slot) => isFixed(s) ? [] : secondaries.filter(r => antibodyMatches(r.antibody, { band: s.band, target: s.target, isotype: s.isotype, host })).sort((a, b) => (b.currentStock > 0 ? 1 : 0) - (a.currentStock > 0 ? 1 : 0) || a.name.localeCompare(b.name));
   const pickedOf = (i: number) => { const s = slots[i]; const c = candidates(s); const id = chosen[i]; return (id && c.find(r => r.id === id)) || c[0]; };
   const picked = slots.map((_, i) => pickedOf(i));
-  const warnings = panelWarnings(slots, picked.map(p => p?.antibody));
+  const warnings = [
+    ...panelWarnings(slots, picked.map(p => p?.antibody)),
+    ...slots.flatMap((s, i) => { const pr = primaryOf(s); return pr && pr.currentStock <= 0 ? [`Slot ${i + 1}: ${pr.antibody!.antigen || pr.name} is out of stock.`] : []; }),
+  ];
 
-  const summary = slots.map((s, i) => { const p = picked[i]; return `${emissionBandMeta[s.band].label}: ${p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${p.currentStock} ${p.unit}, ${reagentPlaceLabel(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
+  const summary = slots.map((s, i) => { const p = picked[i]; const pr = primaryOf(s); const prTxt = pr ? `${pr.antibody!.antigen || pr.name} [${[pr.antibody!.host, pr.antibody!.isotype, pr.antibody!.clone ? 'clone ' + pr.antibody!.clone : '', pr.antibody!.fluorophore].filter(Boolean).join(' · ')}] (${pr.currentStock} ${pr.unit}, ${reagentPlaceLabel(pr, storageUnits, storageBoxes)})${isFixed(s) ? '' : ' → '}` : ''; return `${emissionBandMeta[s.band].label}: ${prTxt}${isFixed(s) ? '' : p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${p.currentStock} ${p.unit}, ${reagentPlaceLabel(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — secondary panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
   return (
     <>
-        <p className="text-xs text-gray-500 font-manrope mb-4">One colour per primary. Pick the species (and subclass) of each primary; the list shows the secondaries in stock for that band.</p>
+        <p className="text-xs text-gray-500 font-manrope mb-4">One colour per primary. Pick a primary from the stock list (species and Ig fill in by themselves), or just the species and subclass; the last column shows the secondaries in stock for that band.</p>
 
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-1 text-xs font-manrope text-gray-600">
@@ -176,31 +197,40 @@ function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
             const c = candidates(s);
             const p = picked[i];
             return (
-              <div key={i} className="grid grid-cols-1 sm:grid-cols-[150px_1fr_1fr_2fr] gap-2 items-start p-3 rounded-xl border" style={{ borderColor: meta.color + '66', background: meta.bg + '55' }}>
+              <div key={i} className="grid grid-cols-1 sm:grid-cols-[120px_1.4fr_0.9fr_0.8fr_1.7fr] gap-2 items-start p-3 rounded-xl border" style={{ borderColor: meta.color + '66', background: meta.bg + '55' }}>
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Band</label>
-                  <select value={s.band} onChange={e => setSlot(i, { band: e.target.value as EmissionBand })} className={sel} style={{ borderColor: meta.color }}>
+                  <select value={s.band} onChange={e => setSlot(i, { band: e.target.value as EmissionBand, ...(isFixed(s) ? { primaryId: undefined, target: '', isotype: '' } : {}) })} className={sel} style={{ borderColor: meta.color }}>
                     {EMISSION_BANDS.map(b => <option key={b} value={b}>{emissionBandMeta[b].label}</option>)}
                   </select>
                   <p className="text-[9px] text-gray-400 mt-0.5 font-manrope">{meta.hint}</p>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Primary raised in</label>
-                  <select value={s.target} onChange={e => setSlot(i, { target: e.target.value })} className={sel}>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Primary / dye in stock <span className="text-gray-400">({primaryChoices(s).length})</span></label>
+                  <select value={s.primaryId ?? ''} onChange={e => pickPrimary(i, e.target.value)} className={sel}>
+                    <option value="">— none / any —</option>
+                    {primaryChoices(s).map(r => { const ab = r.antibody!; return <option key={r.id} value={r.id}>{ab.antigen || r.name}{abKind(ab) === 'dye' ? ` (${ab.fluorophore})` : ` · ${[ab.host, ab.isotype].filter(Boolean).join(' ')}${ab.fluorophore ? ' · ' + ab.fluorophore : ''}`} · {r.currentStock} {r.unit}{r.currentStock <= 0 ? ' (empty!)' : ''}</option>; })}
+                  </select>
+                  {primaryOf(s) && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={primaryOf(s)!.name}>{primaryOf(s)!.antibody!.clone ? `clone ${primaryOf(s)!.antibody!.clone} · ` : ''}{reagentPlaceLabel(primaryOf(s)!, storageUnits, storageBoxes)}</p>}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Raised in</label>
+                  <select value={s.target} onChange={e => setSlot(i, { target: e.target.value, primaryId: undefined })} className={sel} disabled={isFixed(s)}>
                     <option value="">— species —</option>
                     {options.targets.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Ig type</label>
-                  <select value={s.isotype} onChange={e => setSlot(i, { isotype: e.target.value })} className={sel}>
+                  <select value={s.isotype} onChange={e => setSlot(i, { isotype: e.target.value, primaryId: undefined })} className={sel} disabled={isFixed(s)}>
                     <option value="">any</option>
                     {options.isotypes.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Secondary in stock {s.target && <span className="text-gray-400">({c.length})</span>}</label>
-                  {!s.target ? <p className="text-xs text-gray-400 font-manrope py-2">Choose the species first.</p>
+                  <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Secondary in stock {s.target && !isFixed(s) && <span className="text-gray-400">({c.length})</span>}</label>
+                  {isFixed(s) ? <p className="text-xs text-gray-500 font-manrope py-2">{abKind(primaryOf(s)!.antibody) === 'dye' ? 'Dye — no secondary needed.' : 'Directly conjugated — no secondary needed.'}</p>
+                   : !s.target ? <p className="text-xs text-gray-400 font-manrope py-2">Choose a primary or a species first.</p>
                    : c.length === 0 ? <p className="text-xs text-red-600 font-manrope py-2">None in the stock list for this band.</p>
                    : (
                     <select value={p?.id ?? ''} onChange={e => setChosen({ ...chosen, [i]: e.target.value })} className={sel}>
@@ -219,7 +249,7 @@ function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
             {warnings.map((w, i) => <li key={i} className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2 font-manrope">{w}</li>)}
           </ul>
         )}
-        {warnings.length === 0 && slots.every(s => s.target) && picked.every(Boolean) && (
+        {warnings.length === 0 && slots.every(s => s.target || isFixed(s)) && slots.every((s, i) => isFixed(s) || picked[i]) && (
           <p className="mt-4 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 font-manrope">No clash detected: distinct bands, distinct primaries, single host.</p>
         )}
 
