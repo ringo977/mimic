@@ -1,6 +1,34 @@
 {
   "publications": [
     {
+      "id": 107,
+      "authors": [
+        "Pignataro, A.M.",
+        "Schwarz, C.C.",
+        "Wiechec, E.",
+        "Cordiale, A.",
+        "Sasikumar, S.",
+        "Jenssen, A.",
+        "Ariyaberg, T.",
+        "Khare, L.P.",
+        "Apu, E.H.",
+        "Roberg, K.",
+        "Naeimipour, S.",
+        "Basile Carballo, G.",
+        "Szczot, M.",
+        "Aili, D.",
+        "Rasponi, M.",
+        "Pagella, P."
+      ],
+      "title": "An innervated and vascularized HNSCC-on-a-chip model built on defined and tunable engineered extracellular matrices",
+      "journal": "Proceedings of the National Academy of Sciences",
+      "year": 2026,
+      "volume": "123(44)",
+      "pages": "e2602541123",
+      "doi": "10.1073/pnas.2602541123",
+      "type": "Journal Article"
+    },
+    {
       "id": 106,
       "authors": [
         "Cretti, G.",

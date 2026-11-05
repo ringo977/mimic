@@ -1,6 +1,21 @@
 {
   "news": [
     {
+      "id": 39,
+      "date": "2026-10-27",
+      "title": "A Tumour-on-Chip with Vessels and Nerves: Head and Neck Cancer Model Published in PNAS",
+      "excerpt": "Head and neck squamous cell carcinoma (HNSCC) is the sixth most common cancer worldwide and, in its advanced forms, fewer than one patient in two survives five years. A study published in PNAS by Linköping University and the MiMic Lab at Politecnico di Milano presents an all-human organ-on-a-chip that reproduces, for the first time in a single system, the three components of the microenvironment in which the tumour grows: the extracellular matrix, the blood vessels and the sensory nerves.\n\nThe model combines patient-derived HNSCC cells, cancer-associated fibroblasts and endothelial cells within fully defined, tunable engineered extracellular matrices (hyaluronan–PEG with collagen and laminin), a perfusable vascular channel in direct contact with the tumour, and injectable 3D human bioengineered trigeminal ganglia that project axons to the tumour through microgrooves. Built in a stepwise increase of complexity — isolated 3D cultures, then the tumour–vasculature chip, finally the complete tumour–vasculature–innervation tri-interface — the platform showed that the matrix dictates how cancer cells self-organize and invade the vessel, that chemotherapy delivered through the vasculature is far less effective than conventional in vitro tests suggest, and that innervation markedly increases tumour growth while changing its invasive behaviour.\n\nA fully human, chemically defined and modular system of this kind offers a controlled platform to study metastasis, cancer pain and new therapies without animal models, in line with the recent openings of FDA and EMA towards New Approach Methodologies.\n\nThe work was coordinated by Dr. Pierfrancesco Pagella (Linköping University, corresponding author) in collaboration with Prof. Marco Rasponi. First author Alessia Maria Pignataro, jointly affiliated with Linköping University and MiMic Lab, began the project with her MSc thesis at Politecnico di Milano, carried out between Milan and Linköping, and continued it during her ongoing PhD in Sweden; MiMic Lab PhD student Alessandro Cordiale is co-author. The study is Politecnico di Milano's first PNAS paper in the organ-on-chip field.",
+      "tag": "Publication",
+      "link": "https://www.pnas.org/doi/10.1073/pnas.2602541123",
+      "image": "/images/news/HNSCC-PNAS-2026/HNSCC-on-chip-schematic.jpg",
+      "gallery": [
+        "/images/news/HNSCC-PNAS-2026/HNSCC-on-chip-schematic.jpg"
+      ],
+      "captions": [
+        "From the orofacial complex to the chip: the 3D cancer–innervation and cancer–vasculature interfaces of HNSCC (A) and their on-chip emulation with bioengineered trigeminal ganglia, 3D tumour and vascular channel (B). Pignataro, Schwarz et al., PNAS 2026"
+      ]
+    },
+    {
       "id": 38,
       "date": "2026-09-20",
       "title": "The Human Body in Miniature: MiMic Lab at the International Engineering Festival",
@@ -68,7 +83,10 @@
       "title": "MiMic Lab Shines with Three Awards at EUROoCS 2026 in Braga",
       "excerpt": "A large MiMic Lab delegation took part in the EUROoCS Annual Meeting 2026, held June 22–24 at the Altice Forum in Braga, Portugal, and hosted by the International Iberian Nanotechnology Laboratory (INL). As the flagship event of the European Organ-on-Chip Society — chaired by our PI Prof. Marco Rasponi — the meeting gathered the international organ-on-chip and microphysiological systems community for two and a half days of plenary and keynote lectures, scientific sessions, and poster presentations spanning disease and multi-organ models, biofabrication, PK/PD modelling, standardization and toxicity.\n\nThe week was a triumph for the group, which brought home three awards. PhD student Sonia Peddio received the 3rd Best Oral Award among Young Investigators, while PhD student Viola Antonello won the Poster Presentation Award. Our collaborator Stefano Piazza was honoured with the Best Oral Award among Senior Investigators, presenting the PHOENIX project. Dr. Mattia Ballerini and Dr. Alberto Mantegazza delivered talks, and Prof. Paola Occhetta joined the young investigators' round table, while Prof. Marco Rasponi chaired the society meeting and closed the conference. The strong MiMic Lab presence reaffirmed the group's central role in the European MPS landscape.",
       "tag": "Award",
-      "tags": ["Award", "Conference"],
+      "tags": [
+        "Award",
+        "Conference"
+      ],
       "link": "https://euroocs.eu/annual-meeting/",
       "image": "/images/news/EUROoCS2026/EUROoCS2026-MiMic-Team.jpeg",
       "gallery": [
@@ -136,8 +154,12 @@
       "tag": "Conference",
       "link": "https://www.microfluidics2026.it/",
       "image": "/images/news/Horizon2026/Horizon2026-Rasponi-talk.jpg",
-      "gallery": ["/images/news/Horizon2026/Horizon2026-Rasponi-talk.jpg"],
-      "captions": ["Prof. Marco Rasponi delivering his Perspective Talk at Microfluidic Horizons 2026 in Padua"]
+      "gallery": [
+        "/images/news/Horizon2026/Horizon2026-Rasponi-talk.jpg"
+      ],
+      "captions": [
+        "Prof. Marco Rasponi delivering his Perspective Talk at Microfluidic Horizons 2026 in Padua"
+      ]
     },
     {
       "id": 30,
