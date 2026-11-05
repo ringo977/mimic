@@ -140,7 +140,9 @@
 --        'brevo_api_key': SELECT vault.create_secret('xkeysib-…', 'brevo_api_key');
 --      then supabase-2026-11-secondary-antibodies.sql (reagents.antibody jsonb
 --        {host,target,isotype,fluorophore}; backfill from the "[Host · Ig · AF-xxx]"
---        name suffix — only on an existing inventory, harmless on a fresh one).
+--        name suffix — only on an existing inventory, harmless on a fresh one),
+--        then supabase-2026-11-antibodies-primaries.sql (kind primary/secondary/dye/facs,
+--        antigen, clone; backfill of primaries and dyes from the same suffixes).
 --        sender mimiclab.polimi@gmail.com verified on Brevo — no DNS needed)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
@@ -329,7 +331,7 @@ CREATE TABLE IF NOT EXISTS reagents (
   derived_from_id  text,      -- working solution → its stock (FK reagents.id ON DELETE SET NULL)
   responsible_user_ids text[] NOT NULL DEFAULT '{}'::text[],   -- stock → lab_users.id[]
   open_to_students    boolean NOT NULL DEFAULT false,   -- 2026-10-students-withdraw.sql: MSc / externals may withdraw (PDMS, resins)
-  antibody            jsonb,   -- 2026-11-secondary-antibodies.sql: secondary antibody {host,target,isotype,fluorophore}; band derived client-side (lib/antibodies.ts)
+  antibody            jsonb,   -- 2026-11-secondary-antibodies.sql + antibodies-primaries.sql: {kind,host,target,isotype,fluorophore,antigen,clone}; band derived client-side (lib/antibodies.ts)
   CONSTRAINT reagents_door_check
     CHECK (door IN ('left', 'right')),   -- 2026-09-door.sql
   CONSTRAINT reagents_kind_check

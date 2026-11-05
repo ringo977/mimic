@@ -4,7 +4,7 @@
 
 // --- Types ---
 
-import type { SecondaryAntibody } from '@/lib/antibodies';
+import type { AntibodyInfo } from '@/lib/antibodies';
 
 export type UserRole = 'admin' | 'pi' | 'researcher' | 'lab_manager' | 'project_manager' | 'postdoc' | 'phd' | 'msc' | 'guest';
 
@@ -911,7 +911,7 @@ export interface Reagent {
   derivedFromId?: string;   // working solution → the stock it is prepared from
   responsibleUserIds?: string[];  // stock → lab_users.id of the 1–2 people in charge
   openToStudents?: boolean; // MSc students / externals may withdraw from it (PDMS, resins…); set by managers
-  antibody?: SecondaryAntibody;   // secondary antibodies: host / target / Ig type / fluorophore (lib/antibodies.ts)
+  antibody?: AntibodyInfo;   // secondary antibodies: host / target / Ig type / fluorophore (lib/antibodies.ts)
 }
 
 /**

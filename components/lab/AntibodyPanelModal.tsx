@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { X, Copy, Check, Plus, Minus } from 'lucide-react';
+import { X, Copy, Check, Plus, Minus, Search, Trash2 } from 'lucide-react';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { Reagent, reagentPlaceLabel, StorageUnit, StorageBox } from '@/data/lab-data';
-import { EMISSION_BANDS, EmissionBand, emissionBandMeta, fluorophoreBand, antibodyOptions, antibodyMatches, panelWarnings, PanelSlot, antibodyShortLabel } from '@/lib/antibodies';
+import { EMISSION_BANDS, EmissionBand, emissionBandMeta, fluorophoreBand, antibodyOptions, antibodyMatches, panelWarnings, PanelSlot, antibodyShortLabel, abKind, assignPanel, panelEntryWarnings } from '@/lib/antibodies';
 
 const sel = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none bg-white';
 
@@ -14,11 +14,121 @@ const sel = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-m
  * and sees which secondaries in stock fit. Warns about clashes (same band,
  * same target, mixed hosts).
  */
-export default function AntibodyPanelModal({ reagents, storageUnits, storageBoxes, onClose }: {
-  reagents: Reagent[]; storageUnits: StorageUnit[]; storageBoxes: StorageBox[]; onClose: () => void;
-}) {
-  const ref = useDialogA11y(true, onClose);
-  const secondaries = useMemo(() => reagents.filter(r => r.antibody && fluorophoreBand(r.antibody.fluorophore)), [reagents]);
+type Props = { reagents: Reagent[]; storageUnits: StorageUnit[]; storageBoxes: StorageBox[]; onClose: () => void };
+
+export default function AntibodyPanelModal(props: Props) {
+  const ref = useDialogA11y(true, props.onClose);
+  const [mode, setMode] = useState<'targets' | 'colours'>('targets');
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={props.onClose}>
+      <div ref={ref} role="dialog" aria-modal="true" aria-label="Immunofluorescence panel" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[92vh] overflow-y-auto outline-none" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold text-gray-900 font-manrope">Build a panel</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px] font-manrope">
+              <button onClick={() => setMode('targets')} className={`px-3 py-1.5 ${mode === 'targets' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>From targets</button>
+              <button onClick={() => setMode('colours')} className={`px-3 py-1.5 ${mode === 'colours' ? 'bg-[#102C53] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>From colours</button>
+            </div>
+            <button onClick={props.onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+          </div>
+        </div>
+        {mode === 'targets' ? <TargetsMode {...props} /> : <ColoursMode {...props} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * From targets: pick primaries and dyes from the stock list; each unconjugated
+ * primary gets a compatible secondary (anti-host, right Ig class) on a free band.
+ */
+function TargetsMode({ reagents, storageUnits, storageBoxes }: Props) {
+  const pool = useMemo(() => reagents.filter(r => r.antibody && (abKind(r.antibody) === 'primary' || abKind(r.antibody) === 'dye')).sort((a, b) => (a.antibody!.antigen || a.name).localeCompare(b.antibody!.antigen || b.name)), [reagents]);
+  const secondaries = useMemo(() => reagents.filter(r => r.antibody && abKind(r.antibody) === 'secondary'), [reagents]);
+  const [ids, setIds] = useState<string[]>([]);
+  const [q, setQ] = useState('');
+  const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState(false);
+  const items = ids.map(id => pool.find(r => r.id === id)).filter((r): r is Reagent => !!r);
+  const entries = useMemo(() => assignPanel(items, secondaries, overrides), [items, secondaries, overrides]);
+  const label = (r: Reagent) => r.antibody ? (abKind(r.antibody) === 'secondary' ? antibodyShortLabel(r.antibody) : (r.antibody.antigen || r.name)) : r.name;
+  const warnings = panelEntryWarnings(entries, label);
+  const hits = q.trim() ? pool.filter(r => !ids.includes(r.id) && `${r.antibody!.antigen} ${r.name} ${r.antibody!.host} ${r.antibody!.isotype} ${r.antibody!.clone}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 12) : [];
+  const add = (id: string) => { if (ids.length < 5 && !ids.includes(id)) setIds([...ids, id]); setQ(''); };
+  const remove = (id: string) => { setIds(ids.filter(x => x !== id)); setOverrides(o => { const n = { ...o }; delete n[id]; return n; }); };
+  const quick = (re: RegExp) => pool.find(r => re.test(r.antibody!.antigen || '') && !ids.includes(r.id));
+  const nuclei = quick(/nuclei/i), actin = quick(/f-actin/i);
+  const place = (r: Reagent) => reagentPlaceLabel(r, storageUnits, storageBoxes);
+  const summary = entries.map(e => { const m = e.band ? emissionBandMeta[e.band].label : 'no band'; const sec = e.secondary ? ` → ${antibodyShortLabel(e.secondary.antibody!)} — ${e.secondary.supplier} ${e.secondary.catalogNumber} (${e.secondary.currentStock} ${e.secondary.unit}, ${place(e.secondary)})` : e.fixed ? '' : ' → no compatible secondary'; return `${m}: ${label(e.item)} [${[e.item.antibody!.host, e.item.antibody!.isotype, e.item.antibody!.clone ? 'clone ' + e.item.antibody!.clone : ''].filter(Boolean).join(' · ') || e.item.antibody!.fluorophore}] (${e.item.currentStock} ${e.item.unit}, ${place(e.item)})${sec}`; }).join('\n');
+  const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — IF panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
+
+  return (
+    <>
+      <p className="text-xs text-gray-500 font-manrope mb-3">Choose what you want to stain (up to 5 items). Each primary is matched with a secondary in stock that recognises its species and Ig class, on a free colour; conjugated primaries and dyes keep their own.</p>
+      <div className="relative mb-2">
+        <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={ids.length >= 5 ? 'Panel full (5)' : 'Search a primary or dye: aSMA, vimentin, troponin, phalloidin…'} disabled={ids.length >= 5} className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none disabled:bg-gray-50" />
+        {hits.length > 0 && (
+          <ul className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+            {hits.map(r => <li key={r.id}><button onClick={() => add(r.id)} className="w-full text-left px-3 py-1.5 text-xs font-manrope hover:bg-gray-50 flex items-center justify-between gap-2">
+              <span className="truncate"><span className="font-medium text-gray-900">{r.antibody!.antigen || r.name}</span> <span className="text-gray-500">{[r.antibody!.host, r.antibody!.isotype, r.antibody!.clone ? 'clone ' + r.antibody!.clone : '', r.antibody!.fluorophore].filter(Boolean).join(' · ')}</span></span>
+              <span className={`shrink-0 text-[10px] ${r.currentStock <= 0 ? 'text-red-600' : 'text-gray-400'}`}>{r.currentStock} {r.unit}</span>
+            </button></li>)}
+          </ul>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-3 text-[10px] font-manrope text-gray-500">
+        Quick add:
+        {nuclei && <button onClick={() => add(nuclei.id)} disabled={ids.length >= 5} className="px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-40">{nuclei.antibody!.antigen} ({nuclei.antibody!.fluorophore || nuclei.name})</button>}
+        {actin && <button onClick={() => add(actin.id)} disabled={ids.length >= 5} className="px-2 py-0.5 rounded-full border border-gray-200 hover:bg-gray-50 disabled:opacity-40">{actin.antibody!.antigen} ({actin.antibody!.fluorophore})</button>}
+        <span className="ml-auto text-gray-400">{pool.length} primaries & dyes · {secondaries.length} secondaries in the stock list</span>
+      </div>
+
+      {entries.length === 0 && <p className="text-xs text-gray-400 font-manrope text-center py-8 border border-dashed border-gray-200 rounded-xl">Nothing picked yet.</p>}
+      <div className="space-y-2">
+        {entries.map(e => {
+          const m = e.band ? emissionBandMeta[e.band] : null; const ab = e.item.antibody!;
+          return (
+            <div key={e.item.id} className="grid grid-cols-1 sm:grid-cols-[110px_1fr_1.4fr_auto] gap-2 items-center p-3 rounded-xl border" style={{ borderColor: (m?.color ?? '#d1d5db') + '66', background: (m?.bg ?? '#f9fafb') + '55' }}>
+              <div className="flex items-center gap-1.5 text-xs font-semibold font-manrope" style={{ color: m?.text ?? '#6b7280' }}>
+                <span className="w-3 h-3 rounded-full border border-white shadow" style={{ background: m?.color ?? '#d1d5db' }} />{m?.label ?? 'no band'}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-gray-900 font-manrope truncate" title={e.item.name}>{ab.antigen || e.item.name}</p>
+                <p className="text-[10px] text-gray-500 font-manrope truncate">{[ab.host, ab.isotype, ab.clone ? 'clone ' + ab.clone : '', ab.fluorophore].filter(Boolean).join(' · ')} · {e.item.currentStock} {e.item.unit} · {place(e.item)}</p>
+              </div>
+              <div className="min-w-0">
+                {e.fixed ? <p className="text-[10px] text-gray-500 font-manrope">{abKind(ab) === 'dye' ? 'Dye — no secondary needed.' : 'Directly conjugated — no secondary needed.'}</p>
+                 : e.candidates.length === 0 ? <p className="text-[10px] text-red-600 font-manrope">No secondary in stock recognises {ab.host || '?'} {ab.isotype}.</p>
+                 : <>
+                    <select value={e.secondary?.id ?? ''} onChange={ev => setOverrides({ ...overrides, [e.item.id]: ev.target.value })} className={sel}>
+                      {e.candidates.map(c => <option key={c.item.id} value={c.item.id}>{antibodyShortLabel(c.item.antibody!)}{c.fit === 'generic' ? ' (generic)' : ''} · {c.item.currentStock} {c.item.unit}{c.item.currentStock <= 0 ? ' (empty!)' : ''}</option>)}
+                    </select>
+                    {e.secondary && <p className="text-[10px] text-gray-500 font-manrope mt-0.5 truncate" title={e.secondary.name}>{e.secondary.supplier} {e.secondary.catalogNumber} · {place(e.secondary)}</p>}
+                   </>}
+              </div>
+              <button onClick={() => remove(e.item.id)} aria-label="Remove" className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-white"><Trash2 size={13} /></button>
+            </div>
+          );
+        })}
+      </div>
+
+      {warnings.length > 0 && <ul className="mt-4 space-y-1">{warnings.map((w, i) => <li key={i} className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2 font-manrope">{w}</li>)}</ul>}
+      {entries.length >= 2 && warnings.length === 0 && <p className="mt-4 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 font-manrope">No clash detected: distinct colours, every primary has a specific secondary, single host, everything in stock.</p>}
+
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <p className="text-[10px] text-gray-400 font-manrope">Bands come from the fluorophore name; always check the filter sets of the microscope you will use.</p>
+        <button onClick={copy} disabled={entries.length === 0} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#102C53] text-white text-xs font-medium font-manrope hover:bg-[#1a3d6e] disabled:opacity-40">
+          {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy panel as text'}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** From colours: one slot per band, then the species / Ig class of each primary. */
+function ColoursMode({ reagents, storageUnits, storageBoxes }: Props) {
+  const secondaries = useMemo(() => reagents.filter(r => r.antibody && abKind(r.antibody) === 'secondary' && fluorophoreBand(r.antibody.fluorophore)), [reagents]);
   const options = useMemo(() => antibodyOptions(secondaries.map(r => r.antibody)), [secondaries]);
   const [slots, setSlots] = useState<PanelSlot[]>([
     { band: 'blue', target: '', isotype: '' }, { band: 'green', target: '', isotype: '' }, { band: 'red', target: '', isotype: '' }, { band: 'farred', target: '', isotype: '' },
@@ -40,12 +150,7 @@ export default function AntibodyPanelModal({ reagents, storageUnits, storageBoxe
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — secondary panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-label="Secondary antibody panel" tabIndex={-1} className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 max-h-[92vh] overflow-y-auto outline-none" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
-          <h2 className="text-lg font-bold text-gray-900 font-manrope">Build a secondary panel</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
-        </div>
+    <>
         <p className="text-xs text-gray-500 font-manrope mb-4">One colour per primary. Pick the species (and subclass) of each primary; the list shows the secondaries in stock for that band.</p>
 
         <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -124,7 +229,6 @@ export default function AntibodyPanelModal({ reagents, storageUnits, storageBoxe
             {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy panel as text'}
           </button>
         </div>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { AntibodyKind } from '@/lib/antibodies';
 import {
   Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
   Instrument, BookingPolicy, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
@@ -272,7 +273,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
     kind: string | null; derived_from_id: string | null; responsible_user_ids: string[] | null;
     open_to_students: boolean | null;
-    antibody: { host?: string; target?: string; isotype?: string; fluorophore?: string } | null;
+    antibody: { kind?: string; host?: string; target?: string; isotype?: string; fluorophore?: string; antigen?: string; clone?: string } | null;
   }>('reagents', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -287,7 +288,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     derivedFromId: r.derived_from_id ?? undefined,
     responsibleUserIds: r.responsible_user_ids ?? undefined,
     openToStudents: r.open_to_students ?? false,
-    antibody: r.antibody ? { host: r.antibody.host ?? '', target: r.antibody.target ?? '', isotype: r.antibody.isotype ?? '', fluorophore: r.antibody.fluorophore ?? '' } : undefined,
+    antibody: r.antibody ? { kind: (['primary', 'secondary', 'dye', 'facs'].includes(r.antibody.kind ?? '') ? r.antibody.kind : 'secondary') as AntibodyKind, host: r.antibody.host ?? '', target: r.antibody.target ?? '', isotype: r.antibody.isotype ?? '', fluorophore: r.antibody.fluorophore ?? '', antigen: r.antibody.antigen ?? '', clone: r.antibody.clone ?? '' } : undefined,
   }));
 }
 

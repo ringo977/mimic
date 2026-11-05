@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { X, Save, Wand2 } from 'lucide-react';
-import { parseSecondaryAntibody, fluorophoreBand, emissionBandMeta, SecondaryAntibody } from '@/lib/antibodies';
+import { parseAntibody, fluorophoreBand, emissionBandMeta, AntibodyInfo, AntibodyKind, antibodyKindMeta, emptyAntibody, abKind } from '@/lib/antibodies';
 import { useLabContext } from './LabContext';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import {
@@ -59,21 +59,22 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
   const formBoxes = formUnit ? boxesOfUnit(storageBoxes, formUnit.id) : [];
   const formDoors = formUnit && isShelfBased(formUnit.type) ? (formUnit.numDoors || 1) : 1;
 
-  // Secondary antibody block: for the antibody categories, or when already set
-  const isAbCategory = /antibod/i.test(form.category);
+  // Antibody / dye block: for the antibody categories, dyes (DAPI, phalloidin…), or when already set
+  const isAbCategory = /antibod/i.test(form.category) || /\b(dapi|hoechst|phalloidin|draq)/i.test(form.name);
   const showAb = isAbCategory || !!form.antibody;
-  const ab: SecondaryAntibody = form.antibody ?? { host: '', target: '', isotype: '', fluorophore: '' };
-  const setAb = (patch: Partial<SecondaryAntibody>) => setForm({ ...form, antibody: { ...ab, ...patch } });
+  const ab: AntibodyInfo = form.antibody ?? emptyAntibody(parseAntibody(form.name)?.kind ?? 'primary');
+  const kind: AntibodyKind = abKind(ab);
+  const setAb = (patch: Partial<AntibodyInfo>) => setForm({ ...form, antibody: { ...ab, ...patch } });
   const abBand = fluorophoreBand(ab.fluorophore);
   const abOptions = useMemo(() => {
     const hosts = new Set<string>(), targets = new Set<string>(), isotypes = new Set<string>(), fluors = new Set<string>();
     reagents.forEach(r => { if (!r.antibody) return; if (r.antibody.host) hosts.add(r.antibody.host); if (r.antibody.target) targets.add(r.antibody.target); if (r.antibody.isotype) isotypes.add(r.antibody.isotype); if (r.antibody.fluorophore) fluors.add(r.antibody.fluorophore); });
-    ['Goat', 'Donkey'].forEach(x => hosts.add(x)); ['Mouse', 'Rabbit', 'Rat', 'Chicken', 'Goat', 'Human'].forEach(x => targets.add(x));
-    ['IgG (H+L)', 'IgG1', 'IgG2a', 'IgG2b', 'IgG3', 'IgM', 'IgY'].forEach(x => isotypes.add(x)); ['AF-405', 'AF-488', 'AF-546', 'AF-555', 'AF-594', 'AF-647', 'AF-680', 'AF-750', 'FITC', 'TRITC', 'Cy3', 'Cy5', 'HRP'].forEach(x => fluors.add(x));
+    ['Goat', 'Donkey', 'Mouse', 'Rabbit', 'Rat', 'Chicken'].forEach(x => hosts.add(x)); ['Mouse', 'Rabbit', 'Rat', 'Chicken', 'Goat', 'Human'].forEach(x => targets.add(x));
+    ['IgG', 'IgG (H+L)', 'IgG1', 'IgG2a', 'IgG2b', 'IgG3', 'IgM', 'IgY'].forEach(x => isotypes.add(x)); ['AF-405', 'AF-488', 'AF-546', 'AF-555', 'AF-594', 'AF-647', 'AF-680', 'AF-750', 'FITC', 'TRITC', 'Cy3', 'Cy5', 'HRP'].forEach(x => fluors.add(x));
     const s = (x: Set<string>) => Array.from(x).sort();
     return { hosts: s(hosts), targets: s(targets), isotypes: s(isotypes), fluors: s(fluors) };
   }, [reagents]);
-  const detectAb = () => { const p = parseSecondaryAntibody(form.name); if (p) setForm({ ...form, antibody: p }); };
+  const detectAb = () => { const p = parseAntibody(form.name); if (p) setForm({ ...form, antibody: p }); };
 
   const save = () => {
     if (!form.name) return;
@@ -84,8 +85,9 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
     const maxStock = rawMax > 0 ? Math.max(rawMax, currentStock) : 0;
     const kind: ReagentKind = form.kind ?? 'item';
     // Antibody block: dropped when every field is empty
-    const abClean = form.antibody && Object.values(form.antibody).some(v => (v || '').trim()) 
-      ? { host: form.antibody.host.trim(), target: form.antibody.target.trim(), isotype: form.antibody.isotype.trim(), fluorophore: form.antibody.fluorophore.trim() }
+    const fa = form.antibody;
+    const abClean = fa && [fa.host, fa.target, fa.isotype, fa.fluorophore, fa.antigen, fa.clone].some(v => (v || '').trim())
+      ? { kind: abKind(fa), host: fa.host.trim(), target: abKind(fa) === 'secondary' ? fa.target.trim() : '', isotype: fa.isotype.trim(), fluorophore: fa.fluorophore.trim(), antigen: abKind(fa) === 'secondary' ? '' : (fa.antigen || '').trim(), clone: abKind(fa) === 'secondary' || abKind(fa) === 'dye' ? '' : (fa.clone || '').trim() }
       : undefined;
     const clean: Reagent = {
       ...form, antibody: abClean, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
@@ -199,18 +201,25 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
           {showAb && (
             <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/60 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold text-gray-700 font-manrope">Secondary antibody</p>
-                <button type="button" onClick={detectAb} disabled={!form.name} className="flex items-center gap-1 text-[11px] font-medium text-[#102C53] hover:underline disabled:opacity-40 font-manrope" title="Read host, target, Ig type and fluorophore from the name">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold text-gray-700 font-manrope">Antibody / dye</p>
+                  <select value={kind} onChange={e => setAb({ kind: e.target.value as AntibodyKind })} className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-manrope bg-white">
+                    {(Object.keys(antibodyKindMeta) as AntibodyKind[]).map(k => <option key={k} value={k}>{antibodyKindMeta[k].label}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={detectAb} disabled={!form.name} className="flex items-center gap-1 text-[11px] font-medium text-[#102C53] hover:underline disabled:opacity-40 font-manrope" title="Read species, Ig type, clone and fluorophore from the name (lab suffix [Host · Ig · clone …])">
                   <Wand2 size={11} /> Detect from name
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Host (raised in)"><input value={ab.host} onChange={e => setAb({ host: e.target.value })} list="ab-hosts" placeholder="Goat" className={inputCls} /></Field>
-                <Field label="Target (anti-)"><input value={ab.target} onChange={e => setAb({ target: e.target.value })} list="ab-targets" placeholder="Mouse" className={inputCls} /></Field>
-                <Field label="Ig type"><input value={ab.isotype} onChange={e => setAb({ isotype: e.target.value })} list="ab-isotypes" placeholder="IgG (H+L), IgG1…" className={inputCls} /></Field>
-                <Field label="Fluorophore">
+                {kind !== 'secondary' && <Field label={kind === 'dye' ? 'Stains' : 'Antigen / marker'}><input value={ab.antigen || ''} onChange={e => setAb({ antigen: e.target.value })} placeholder={kind === 'dye' ? 'F-actin, Nuclei' : 'aSMA, Vimentin, CD31…'} className={inputCls} /></Field>}
+                {kind === 'secondary' || kind === 'primary' ? <Field label="Host (raised in)"><input value={ab.host} onChange={e => setAb({ host: e.target.value })} list="ab-hosts" placeholder={kind === 'primary' ? 'Mouse, Rabbit…' : 'Goat, Donkey'} className={inputCls} /></Field> : null}
+                {kind === 'secondary' && <Field label="Target (anti-)"><input value={ab.target} onChange={e => setAb({ target: e.target.value })} list="ab-targets" placeholder="Mouse" className={inputCls} /></Field>}
+                {kind === 'secondary' || kind === 'primary' ? <Field label="Ig type"><input value={ab.isotype} onChange={e => setAb({ isotype: e.target.value })} list="ab-isotypes" placeholder={kind === 'primary' ? 'IgG1, IgG2a, IgY…' : 'IgG (H+L), IgG1…'} className={inputCls} /></Field> : null}
+                {kind === 'primary' || kind === 'facs' ? <Field label="Clone"><input value={ab.clone || ''} onChange={e => setAb({ clone: e.target.value })} placeholder="1A4 (blank if polyclonal)" className={inputCls} /></Field> : null}
+                <Field label={kind === 'primary' ? 'Conjugate (if any)' : 'Fluorophore'}>
                   <div className="flex items-center gap-2">
-                    <input value={ab.fluorophore} onChange={e => setAb({ fluorophore: e.target.value })} list="ab-fluors" placeholder="AF-488" className={inputCls} />
+                    <input value={ab.fluorophore} onChange={e => setAb({ fluorophore: e.target.value })} list="ab-fluors" placeholder={kind === 'primary' ? 'blank = unconjugated' : 'AF-488'} className={inputCls} />
                     {abBand && <span className="shrink-0 w-3 h-3 rounded-full border border-white shadow" style={{ background: emissionBandMeta[abBand].color }} title={`${emissionBandMeta[abBand].label} · ${emissionBandMeta[abBand].hint}`} />}
                   </div>
                 </Field>
@@ -219,7 +228,10 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
               <datalist id="ab-targets">{abOptions.targets.map(x => <option key={x} value={x} />)}</datalist>
               <datalist id="ab-isotypes">{abOptions.isotypes.map(x => <option key={x} value={x} />)}</datalist>
               <datalist id="ab-fluors">{abOptions.fluors.map(x => <option key={x} value={x} />)}</datalist>
-              <p className="text-[10px] text-gray-400 font-manrope">{abBand ? `Emission band: ${emissionBandMeta[abBand].label} (${emissionBandMeta[abBand].hint}).` : 'The band (blue, green, red, far-red, ultra-far-red) is worked out from the fluorophore.'} Leave everything empty for a primary antibody.</p>
+              <p className="text-[10px] text-gray-400 font-manrope">
+                {abBand ? `Emission band: ${emissionBandMeta[abBand].label} (${emissionBandMeta[abBand].hint}). ` : kind === 'primary' ? 'Species and Ig type let the panel builder pick a compatible secondary. ' : 'The band (blue, green, red, far-red, ultra-far-red) is worked out from the fluorophore. '}
+                {kind === 'facs' ? 'FACS conjugates are never proposed in immunofluorescence panels.' : 'Clear every field for a plain consumable.'}
+              </p>
             </div>
           )}
 
