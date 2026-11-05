@@ -237,25 +237,42 @@ BEGIN
   END IF;
 
   IF r.is_pi THEN
-    -- D. Purchase requests waiting for approval (PIs only, as in the app)
-    SELECT count(*), string_agg(format('<li><b>%s</b> ×%s — %s%s · asked by %s%s</li>', digest_h(w.name), w.quantity, digest_h(w.supplier),
+    -- D. Purchase requests waiting for approval (PIs only, as in the app).
+    --    Only the NEW ones since the previous recap are listed and counted as
+    --    news; the backlog is one line and never triggers a mail by itself.
+    SELECT count(*) FILTER (WHERE digest_ts(w.timestamp) >= since),
+           count(*),
+           string_agg(format('<li><b>%s</b> ×%s — %s%s · asked by %s%s</li>', digest_h(w.name), w.quantity, digest_h(w.supplier),
              CASE WHEN w.estimated_cost > 0 THEN format(' · ~%s €', w.estimated_cost) ELSE '' END, digest_h(w.requested_by_name),
              CASE WHEN w.urgency = 'high' THEN ' <b style="color:#b91c1c">urgent</b>' ELSE '' END), '' ORDER BY w.timestamp)
-      INTO n_auth, sec
+             FILTER (WHERE digest_ts(w.timestamp) >= since)
+      INTO n_auth, n_book, sec
       FROM wishlist_items w WHERE w.status = 'pending';
     IF n_auth > 0 THEN
-      body := body || format('<h3 style="margin:18px 0 6px;color:#b45309">Purchases to approve (%s)</h3><ul style="margin:0;padding-left:18px">%s</ul>', n_auth, sec);
-      n := n + n_auth; parts := parts || format('%s purchase%s', n_auth, CASE WHEN n_auth = 1 THEN '' ELSE 's' END);
+      body := body || format('<h3 style="margin:18px 0 6px;color:#b45309">New purchase requests (%s)</h3><ul style="margin:0;padding-left:18px">%s</ul>', n_auth, sec)
+                   || CASE WHEN n_book > n_auth THEN format('<p style="margin:6px 0 0;font-size:12px;color:#6b7280">%s request%s in total waiting for your approval.</p>', n_book, CASE WHEN n_book = 1 THEN '' ELSE 's' END) ELSE '' END;
+      n := n + n_auth; parts := parts || format('%s new purchase request%s', n_auth, CASE WHEN n_auth = 1 THEN '' ELSE 's' END);
+    ELSIF n_book > 0 THEN
+      body := body || format('<p style="margin:18px 0 0;font-size:12px;color:#6b7280">Purchases: %s request%s waiting for your approval, none new.</p>', n_book, CASE WHEN n_book = 1 THEN '' ELSE 's' END);
     END IF;
   END IF;
 
   IF r.is_manager THEN
-    -- E. Approved purchases not yet ordered (Lab / Project Manager step)
-    SELECT count(*), string_agg(format('<li>%s ×%s — %s</li>', digest_h(w.name), w.quantity, digest_h(w.supplier)), '' ORDER BY w.timestamp)
-      INTO n_auth, sec FROM wishlist_items w WHERE w.status = 'approved';
+    -- E. Approved purchases not yet ordered (Lab / Project Manager step): same
+    --    rule — newly approved items are news, the backlog is a one-liner
+    SELECT count(*) FILTER (WHERE h.changed_at >= since), count(*),
+           string_agg(format('<li>%s ×%s — %s</li>', digest_h(w.name), w.quantity, digest_h(w.supplier)), '' ORDER BY h.changed_at) FILTER (WHERE h.changed_at >= since)
+      INTO n_auth, n_book, sec
+      FROM wishlist_items w
+      LEFT JOIN LATERAL (SELECT max(changed_at) AS changed_at FROM row_history x
+                          WHERE x.table_name = 'wishlist_items' AND x.row_id = w.id AND x.op = 'UPDATE' AND 'status' = ANY (x.changed_cols)) h ON true
+     WHERE w.status = 'approved';
     IF n_auth > 0 THEN
-      body := body || format('<h3 style="margin:18px 0 6px;color:#102C53">Approved, to be ordered (%s)</h3><ul style="margin:0;padding-left:18px">%s</ul>', n_auth, sec);
-      n := n + n_auth;
+      body := body || format('<h3 style="margin:18px 0 6px;color:#102C53">Newly approved, to be ordered (%s)</h3><ul style="margin:0;padding-left:18px">%s</ul>', n_auth, sec)
+                   || CASE WHEN n_book > n_auth THEN format('<p style="margin:6px 0 0;font-size:12px;color:#6b7280">%s approved item%s in total still to order.</p>', n_book, CASE WHEN n_book = 1 THEN '' ELSE 's' END) ELSE '' END;
+      n := n + n_auth; parts := parts || format('%s to order', n_auth);
+    ELSIF n_book > 0 THEN
+      body := body || format('<p style="margin:18px 0 0;font-size:12px;color:#6b7280">Orders: %s approved item%s still to order, none new.</p>', n_book, CASE WHEN n_book = 1 THEN '' ELSE 's' END);
     END IF;
 
     -- F. Stock movements since the previous recap
