@@ -38,6 +38,8 @@ export interface LabUser {
   certifiedAt?: Record<string, string>;
   /** Personal favourites (star on the instrument cards). Own-row field, not managed by admins. */
   favoriteInstrumentIds?: string[];
+  /** Opted out of the e-mail recap (07/13/19). Own-row field, saved via set_my_digest_opt_out(). */
+  digestOptOut?: boolean;
 }
 
 export function isAlumni(u: LabUser): boolean { return u.status === 'alumni'; }

@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff, BarChart3 } from 'lucide-react';
-import { LabUser, rolePermissions, effectiveRole, canSeeAbsences } from '@/data/lab-data';
+import { Calendar, FlaskConical, Snowflake, ShoppingCart, BookOpen, LayoutDashboard, ClipboardList, LogOut, Lock, ChevronRight, Database, Menu, X, Settings, Shield, Smartphone, UsersRound, CalendarOff, BarChart3, Mail } from 'lucide-react';
+import { LabUser, rolePermissions, effectiveRole, canSeeAbsences, isResponsibleOf } from '@/data/lab-data';
 import { LabProvider, useLabContext } from './LabContext';
 import { supabase } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
-import { findLabUserByAuthId, findLabUserByEmail, lookupLabUser } from '@/lib/supabase-users';
+import { findLabUserByAuthId, findLabUserByEmail, lookupLabUser, setMyDigestOptOut, sendMyDigestNow } from '@/lib/supabase-users';
 import { validatePassword, PASSWORD_HINT } from '@/lib/lab-auth';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 
@@ -572,10 +572,85 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * E-mail recap (server: supabase-2026-11-email-digest.sql). Three mails a day
+ * (07:00, 13:00, 19:00 Rome) to booking managers and instrument responsibles,
+ * only when there is something to report. Here: own opt-out, and for admins a
+ * "send me one now" test.
+ */
+function EmailRecapModal({ optOut, setOptOut, onClose }: { optOut: boolean; setOptOut: (v: boolean) => void; onClose: () => void }) {
+  const { user, canManageAllBookings, canApproveAbsences } = useLabContext();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [testMsg, setTestMsg] = useState('');
+
+  const toggle = async () => {
+    setSaving(true); setError('');
+    const next = !optOut;
+    const r = await setMyDigestOptOut(next);
+    setSaving(false);
+    if (!r.ok) { setError(r.error || 'Could not save.'); return; }
+    setOptOut(next);
+  };
+
+  const sendTest = async (slot: 7 | 13 | 19) => {
+    setTestMsg('Sending…');
+    const r = await sendMyDigestNow(slot);
+    if (!r.ok) { setTestMsg(`Error: ${r.error}`); return; }
+    setTestMsg(r.sent ? `Sent: ${r.note}` : `Not sent — ${r.note}`);
+  };
+
+  const panelRef = useDialogA11y(true, onClose);
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="email-recap-title" tabIndex={-1} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 outline-none" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 id="email-recap-title" className="text-base font-bold text-gray-900 font-manrope flex items-center gap-2"><Mail size={16} className="text-[#102C53]" /> E-mail recap</h2>
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-gray-700"><X size={18} /></button>
+        </div>
+        <p className="text-sm text-gray-600 font-manrope mb-4">
+          Three short mails a day — <b>07:00</b>, <b>13:00</b> and <b>19:00</b> — to <span className="text-gray-900">{user.email}</span>, only when there is something for you:
+          {canManageAllBookings ? ' bookings to authorize, the agenda, stock movements and low stock' : ' bookings to authorize and the agenda of the instruments you are responsible for'}
+          {canApproveAbsences ? ', pending absence requests' : ''}
+          {effectiveRole(user) === 'pi' || effectiveRole(user) === 'admin' ? ' and purchase requests' : ''}.
+        </p>
+        <label className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl border border-gray-200 cursor-pointer">
+          <span className="text-sm font-medium text-gray-900 font-manrope">Receive the recap</span>
+          <button
+            type="button" role="switch" aria-checked={!optOut} disabled={saving} onClick={toggle}
+            className={`relative w-11 h-6 rounded-full transition-colors ${optOut ? 'bg-gray-300' : 'bg-[#102C53]'} disabled:opacity-50`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${optOut ? '' : 'translate-x-5'}`} />
+          </button>
+        </label>
+        {error && <p className="text-xs text-red-600 font-manrope mt-2">{error}</p>}
+        {user.isAdmin && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500 font-manrope mb-2">Admin test — send me the recap now, as it would look at:</p>
+            <div className="flex gap-2">
+              {([7, 13, 19] as const).map(h => (
+                <button key={h} onClick={() => sendTest(h)} className="flex-1 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-[#102C53] hover:bg-gray-50 font-manrope">{String(h).padStart(2, '0')}:00</button>
+              ))}
+            </div>
+            {testMsg && <p className="text-xs text-gray-600 font-manrope mt-2 break-words">{testMsg}</p>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AppShell({ onLogout }: { onLogout: () => void }) {
-  const { user, permissions, currentPage, setCurrentPage, absences, canApproveAbsences } = useLabContext();
+  const { user, permissions, currentPage, setCurrentPage, absences, canApproveAbsences, canManageAllBookings, instruments } = useLabContext();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
+  // Own setting, kept here so reopening the modal shows the saved value (the
+  // lab_users row is not re-fetched during the session).
+  const [digestOptOut, setDigestOptOut] = useState(!!user.digestOptOut);
+  useEffect(() => { setDigestOptOut(!!user.digestOptOut); }, [user.digestOptOut]);
+  // Who the server would mail: booking managers and instrument responsibles
+  const recapEligible = canManageAllBookings || instruments.some(i => isResponsibleOf(user, i));
 
   const filteredNav = navItems.filter(item => {
     if ((item as { hideForRoles?: string[] }).hideForRoles?.includes(effectiveRole(user))) return false;
@@ -660,6 +735,15 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
             <Lock size={18} />
             Change password
           </button>
+          {recapEligible && (
+            <button
+              onClick={() => setShowRecap(true)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-[#102C53] hover:bg-gray-50 transition-all font-manrope"
+            >
+              <Mail size={18} />
+              E-mail recap
+            </button>
+          )}
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all font-manrope"
@@ -710,6 +794,11 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
               <button onClick={() => { setShowChangePwd(true); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-[#102C53] hover:bg-gray-50 transition-all font-manrope">
                 <Lock size={18} /> Change password
               </button>
+              {recapEligible && (
+                <button onClick={() => { setShowRecap(true); setSidebarOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-[#102C53] hover:bg-gray-50 transition-all font-manrope">
+                  <Mail size={18} /> E-mail recap
+                </button>
+              )}
               <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all font-manrope">
                 <LogOut size={18} /> Logout
               </button>
@@ -719,6 +808,7 @@ function AppShell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {showChangePwd && <ChangePasswordModal onClose={() => setShowChangePwd(false)} />}
+      {showRecap && <EmailRecapModal optOut={digestOptOut} setOptOut={setDigestOptOut} onClose={() => setShowRecap(false)} />}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">

@@ -129,6 +129,12 @@
 --        PI / Admin only — no more PhD, post-doc or instrument responsible)
 --      then supabase-2026-11-affiliations-thlab-attic.sql (affiliations Th-Lab,
 --        ATTiC in the CHECK — externals, = MSc permissions)
+--      then supabase-2026-11-email-digest.sql (e-mail recap at 07/13/19 Rome via
+--        pg_cron 'mimic-digest' + pg_net → Resend: lab_users.digest_opt_out,
+--        app_settings 'digest', digest_log, digest_* functions,
+--        set_my_digest_opt_out / digest_preview_me / digest_send_me RPCs.
+--        Needs pg_cron + pg_net enabled and the Resend key in Vault as
+--        'resend_api_key': SELECT vault.create_secret('re_…', 'resend_api_key'))
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
@@ -187,6 +193,7 @@ CREATE TABLE IF NOT EXISTS lab_users (
   auth_user_id            uuid,   -- linked auth.users.id (tighten.sql)
   certified_at            jsonb,   -- { certificationId: YYYY-MM-DD } training dates
   favorite_instrument_ids text[] NOT NULL DEFAULT '{}'::text[],   -- 2026-10-beta-round4.sql: own favourites (self-editable)
+  digest_opt_out boolean NOT NULL DEFAULT false,                  -- 2026-11-email-digest.sql: own e-mail recap opt-out (RPC)
   CONSTRAINT lab_users_affiliation_check
     CHECK ((affiliation = ANY (ARRAY['MiMic Lab'::text, 'DEIB'::text, 'POLIMI'::text, 'Biomech'::text, 'BiomimX'::text, 'Th-Lab'::text, 'ATTiC'::text, 'External'::text]))),   -- 2026-11-affiliations-thlab-attic.sql
   CONSTRAINT lab_users_role_check
@@ -412,7 +419,8 @@ CREATE INDEX IF NOT EXISTS storage_boxes_unit_idx ON public.storage_boxes USING 
 --   app_settings → supabase-booking-settings.sql (step 2)
 --   absences     → supabase-absences.sql (step 6)
 --   page_views   → supabase-site-analytics.sql (step 7)
--- No other table exists in the live public schema (17 in total).
+--   digest_log   → supabase-2026-11-email-digest.sql (one row per recipient per recap; admins read)
+-- No other table exists in the live public schema (18 in total).
 
 -- ============================================================
 -- Helper bootstrap — minimal versions of the RLS helper functions,

@@ -22,6 +22,7 @@ export interface SupabaseLabUser {
   training_bio_date?: string | null;
   certified_at?: Record<string, string> | null;
   favorite_instrument_ids?: string[] | null;
+  digest_opt_out?: boolean | null;
   created_at?: string;
 }
 
@@ -47,13 +48,15 @@ function toLabUser(row: SupabaseLabUser): LabUser {
     trainingBioDate: row.training_bio_date || undefined,
     certifiedAt: row.certified_at || undefined,
     favoriteInstrumentIds: row.favorite_instrument_ids || [],
+    digestOptOut: row.digest_opt_out ?? false,
   };
 }
 
-// favorite_instrument_ids is deliberately NOT part of this row: it is the
-// user's own list, saved only through saveMyFavoriteInstruments(), so an
-// admin editing the profile never overwrites it with a stale copy.
-function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at' | 'favorite_instrument_ids'> {
+// favorite_instrument_ids and digest_opt_out are deliberately NOT part of
+// this row: they are the user's own settings, saved only through
+// saveMyFavoriteInstruments() / setMyDigestOptOut(), so an admin editing the
+// profile never overwrites them with a stale copy.
+function toSupabaseRow(u: LabUser): Omit<SupabaseLabUser, 'created_at' | 'favorite_instrument_ids' | 'digest_opt_out'> {
   return {
     id: u.id,
     email: u.email,
@@ -180,6 +183,24 @@ export async function saveMyFavoriteInstruments(userId: string, ids: string[]): 
     return { ok: false, error: 'row not writable' };
   }
   return { ok: true };
+}
+
+/** Own e-mail recap opt-out (RPC set_my_digest_opt_out, 2026-11-email-digest.sql). */
+export async function setMyDigestOptOut(optOut: boolean): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.rpc('set_my_digest_opt_out', { p_opt_out: optOut });
+  if (error) {
+    console.error('Failed to save e-mail recap preference:', error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** Admin only: send yourself the recap for a slot (7, 13 or 19) right now. */
+export async function sendMyDigestNow(slot: 7 | 13 | 19): Promise<{ ok: boolean; sent: boolean; note?: string; error?: string }> {
+  const { data, error } = await supabase.rpc('digest_send_me', { p_slot: slot });
+  if (error) return { ok: false, sent: false, error: error.message };
+  const r = (data ?? {}) as { sent?: boolean; note?: string; subject?: string };
+  return { ok: true, sent: !!r.sent, note: r.note ?? r.subject };
 }
 
 export async function deleteLabUser(id: string): Promise<{ ok: boolean; error?: string }> {
