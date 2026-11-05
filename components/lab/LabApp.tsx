@@ -611,7 +611,10 @@ function EmailRecapModal({ optOut, setOptOut, onClose }: { optOut: boolean; setO
           <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
         <p className="text-sm text-gray-600 font-manrope mb-4">
-          Three short mails a day — <b>07:00</b>, <b>13:00</b> and <b>19:00</b> — to <span className="text-gray-900">{user.email}</span>, only when there is something for you:
+          {canManageAllBookings || ownInstruments
+            ? <>Three short mails a day — <b>07:00</b>, <b>13:00</b> and <b>19:00</b> — </>
+            : <>One short mail a day — <b>07:00</b>, Monday to Friday — </>}
+          to <span className="text-gray-900">{user.email}</span>, only when there is something for you:
           {canManageAllBookings
             ? ' bookings to authorize, the agenda, stock movements and low stock'
             : [ownInstruments ? ' bookings to authorize and the agenda of the instruments you are responsible for' : '', ownReagents ? ' movements and low stock of the reagents you are responsible for' : ''].filter(Boolean).join(',')}

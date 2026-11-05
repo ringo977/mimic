@@ -11,6 +11,9 @@
 --     project_manager — get everything;
 --   · the responsible of an instrument gets the part about that instrument;
 --   · the responsible of a reagent (stock) gets its movements and low-stock alert.
+-- Rhythm: managers and instrument responsibles 3×/day (07, 13, 19, every day);
+-- people who are only reagent responsibles ONE mail/day, at 07:00, Monday to
+-- Friday, covering everything since the previous working day's mail.
 -- An e-mail goes out only when there is something to say.
 --
 -- Content, by slot (Europe/Rome):
@@ -50,6 +53,7 @@ INSERT INTO app_settings (key, value) VALUES ('digest', jsonb_build_object(
   'from_name',  'MiMic Lab Manager',
   'from_email', 'mimiclab.polimi@gmail.com',       -- must be a verified sender on Brevo
   'reply_to',   'marco.rasponi@polimi.it',
+  'reagent_hour', 7,                                 -- the one daily slot (Mon–Fri) for reagent-only responsibles
   'only_to',    jsonb_build_array(),                 -- [] = everybody eligible; or an allowlist of e-mails while testing
   'app_url',    'https://www.mimic.polimi.it/lab/'
 )) ON CONFLICT (key) DO UPDATE SET
@@ -58,6 +62,7 @@ INSERT INTO app_settings (key, value) VALUES ('digest', jsonb_build_object(
     'from_name',  'MiMic Lab Manager',
     'from_email', 'mimiclab.polimi@gmail.com',
     'reply_to',   'marco.rasponi@polimi.it',
+    'reagent_hour', coalesce(app_settings.value -> 'reagent_hour', '7'::jsonb),
     'only_to',    jsonb_build_array());
 
 -- ------------------------------------------------------------
@@ -128,6 +133,17 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
           OR EXISTS (SELECT 1 FROM reagents g WHERE u.id = ANY (g.responsible_user_ids)));
 $$;
 
+-- Reagent-only responsibles (no management role, no instrument) are on the
+-- daily rhythm: one mail at reagent_hour, Monday to Friday.
+CREATE OR REPLACE FUNCTION digest_slot_applies(p_is_manager boolean, p_instrument_ids text[], p_slot integer)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN p_is_manager OR cardinality(coalesce(p_instrument_ids, '{}')) > 0 THEN true
+    ELSE p_slot = coalesce((SELECT (value ->> 'reagent_hour')::int FROM app_settings WHERE key = 'digest'), 7)
+         AND extract(isodow FROM (now() AT TIME ZONE 'Europe/Rome')::date) BETWEEN 1 AND 5
+  END;
+$$;
+
 -- ------------------------------------------------------------
 -- 5. Build one message
 -- ------------------------------------------------------------
@@ -150,16 +166,25 @@ DECLARE
   n_book     integer := 0;
   parts      text[] := '{}';
   slot_lbl   text := lpad(p_slot::text, 2, '0') || ':00';
+  daily      boolean;
 BEGIN
   SELECT * INTO r FROM digest_recipients() d WHERE d.user_id = p_user_id;
   IF NOT FOUND THEN RETURN; END IF;
+  IF NOT digest_slot_applies(r.is_manager, r.instrument_ids, p_slot) THEN RETURN; END IF;
+  daily := NOT r.is_manager AND cardinality(r.instrument_ids) = 0;
 
-  -- Window "since the previous recap": 07 → yesterday 19:00, 13 → 07:00, 19 → 13:00
-  since := CASE p_slot
-             WHEN 7  THEN ((today - 1)::timestamp + interval '19 hours') AT TIME ZONE 'Europe/Rome'
-             WHEN 13 THEN (today::timestamp + interval '7 hours')  AT TIME ZONE 'Europe/Rome'
-             ELSE         (today::timestamp + interval '13 hours') AT TIME ZONE 'Europe/Rome'
-           END;
+  -- Window "since the previous recap": 07 → yesterday 19:00, 13 → 07:00, 19 → 13:00;
+  -- daily rhythm → the previous working day's mail (Monday looks back to Friday)
+  IF daily THEN
+    since := ((today - CASE WHEN extract(isodow FROM today) = 1 THEN 3 ELSE 1 END)::timestamp + make_interval(hours => p_slot)) AT TIME ZONE 'Europe/Rome';
+    slot_lbl := 'daily';
+  ELSE
+    since := CASE p_slot
+               WHEN 7  THEN ((today - 1)::timestamp + interval '19 hours') AT TIME ZONE 'Europe/Rome'
+               WHEN 13 THEN (today::timestamp + interval '7 hours')  AT TIME ZONE 'Europe/Rome'
+               ELSE         (today::timestamp + interval '13 hours') AT TIME ZONE 'Europe/Rome'
+             END;
+  END IF;
   IF p_slot = 19 THEN agenda_day := today + 1; agenda_lbl := 'Tomorrow';
   ELSIF p_slot = 13 THEN agenda_day := today; agenda_lbl := 'This afternoon'; agenda_min := 13;
   ELSE agenda_day := today; agenda_lbl := 'Today'; END IF;
@@ -272,7 +297,7 @@ BEGIN
     -- I. Reagent responsible (not a manager): stock movements of own reagents,
     --    from row_history (each version's old stock vs the next one / live value)
     SELECT count(*), string_agg(format('<li>%s — <b>%s</b>: %s → %s %s <span style="color:#6b7280">· %s</span></li>',
-             to_char(m.changed_at AT TIME ZONE 'Europe/Rome', 'HH24:MI'), digest_h(m.name), m.old_stock, m.new_stock, digest_h(m.unit), digest_h(coalesce(m.changed_by_name, 'SQL / system'))),
+             to_char(m.changed_at AT TIME ZONE 'Europe/Rome', CASE WHEN daily THEN 'Dy HH24:MI' ELSE 'HH24:MI' END), digest_h(m.name), m.old_stock, m.new_stock, digest_h(m.unit), digest_h(coalesce(m.changed_by_name, 'SQL / system'))),
              '' ORDER BY m.changed_at)
       INTO n_auth, sec
       FROM (
@@ -286,7 +311,7 @@ BEGIN
      WHERE m.changed_at >= since AND m.old_stock IS DISTINCT FROM m.new_stock;
     IF n_auth > 0 THEN
       body := body || format('<h3 style="margin:18px 0 6px;color:#102C53">Your reagents — movements since %s</h3><ul style="margin:0;padding-left:18px">%s</ul>',
-                             to_char(since AT TIME ZONE 'Europe/Rome', 'HH24:MI'), sec);
+                             CASE WHEN daily THEN digest_day((since AT TIME ZONE 'Europe/Rome')::date) || ' ' ELSE '' END || to_char(since AT TIME ZONE 'Europe/Rome', 'HH24:MI'), sec);
       n := n + n_auth; parts := parts || format('%s stock movement%s', n_auth, CASE WHEN n_auth = 1 THEN '' ELSE 's' END);
     END IF;
 
@@ -306,10 +331,11 @@ BEGIN
   html := format(
     '<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827;max-width:620px">'
     '<p style="margin:0 0 4px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280">MiMic Lab Manager · %s %s</p>'
-    '<p style="margin:0">Hi %s, here is your %s recap.</p>%s'
+    '<p style="margin:0">Hi %s, here is your %s recap%s.</p>%s'
     '<p style="margin:22px 0 0"><a href="%s" style="display:inline-block;padding:9px 14px;background:#102C53;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Open the Lab Manager</a></p>'
     '<p style="margin:18px 0 0;font-size:11px;color:#9ca3af">You receive this because you manage bookings, an instrument or a reagent. To stop it: Lab Manager → sidebar → “E-mail recap”.</p></div>',
-    digest_day(today), slot_lbl, digest_h(split_part(r.name, ' ', 1)), slot_lbl, body, app_url);
+    digest_day(today), lpad(p_slot::text, 2, '0') || ':00', digest_h(split_part(r.name, ' ', 1)), slot_lbl,
+    CASE WHEN daily THEN ' (Monday to Friday at ' || lpad(p_slot::text, 2, '0') || ':00)' ELSE '' END, body, app_url);
   n_items := n;
   RETURN NEXT;
 END;
@@ -386,6 +412,7 @@ BEGIN
   -- Not twice in the same slot (cron retry, manual run)
   IF p_slot IS NULL AND EXISTS (SELECT 1 FROM digest_log WHERE slot_hour = slot AND sent_at > now() - interval '50 minutes') THEN RETURN 0; END IF;
   FOR rcpt IN SELECT * FROM digest_recipients() LOOP
+    CONTINUE WHEN NOT digest_slot_applies(rcpt.is_manager, rcpt.instrument_ids, slot);   -- not their slot: no mail, no log row
     IF (digest_send_one(rcpt.user_id, slot) ->> 'sent')::boolean THEN sent := sent + 1; END IF;
   END LOOP;
   RETURN sent;
