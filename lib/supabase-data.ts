@@ -272,6 +272,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     alert_threshold: number; lot: string | null; owner: string | null; notes: string | null;
     kind: string | null; derived_from_id: string | null; responsible_user_ids: string[] | null;
     open_to_students: boolean | null;
+    antibody: { host?: string; target?: string; isotype?: string; fluorophore?: string } | null;
   }>('reagents', 'name');
   if (!rows) return null;
   return rows.map(r => ({
@@ -286,6 +287,7 @@ export async function fetchReagents(): Promise<Reagent[] | null> {
     derivedFromId: r.derived_from_id ?? undefined,
     responsibleUserIds: r.responsible_user_ids ?? undefined,
     openToStudents: r.open_to_students ?? false,
+    antibody: r.antibody ? { host: r.antibody.host ?? '', target: r.antibody.target ?? '', isotype: r.antibody.isotype ?? '', fluorophore: r.antibody.fluorophore ?? '' } : undefined,
   }));
 }
 
@@ -303,6 +305,7 @@ export async function upsertReagent(r: Reagent, opts?: { skipStock?: boolean }) 
     kind: r.kind ?? 'item', derived_from_id: r.derivedFromId ?? null,
     responsible_user_ids: r.responsibleUserIds ?? [],
     open_to_students: !!r.openToStudents,
+    antibody: r.antibody ?? null,
   });
 }
 

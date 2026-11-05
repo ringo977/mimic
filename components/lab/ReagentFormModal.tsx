@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Save, Wand2 } from 'lucide-react';
+import { parseSecondaryAntibody, fluorophoreBand, emissionBandMeta, SecondaryAntibody } from '@/lib/antibodies';
 import { useLabContext } from './LabContext';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import {
@@ -58,6 +59,22 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
   const formBoxes = formUnit ? boxesOfUnit(storageBoxes, formUnit.id) : [];
   const formDoors = formUnit && isShelfBased(formUnit.type) ? (formUnit.numDoors || 1) : 1;
 
+  // Secondary antibody block: for the antibody categories, or when already set
+  const isAbCategory = /antibod/i.test(form.category);
+  const showAb = isAbCategory || !!form.antibody;
+  const ab: SecondaryAntibody = form.antibody ?? { host: '', target: '', isotype: '', fluorophore: '' };
+  const setAb = (patch: Partial<SecondaryAntibody>) => setForm({ ...form, antibody: { ...ab, ...patch } });
+  const abBand = fluorophoreBand(ab.fluorophore);
+  const abOptions = useMemo(() => {
+    const hosts = new Set<string>(), targets = new Set<string>(), isotypes = new Set<string>(), fluors = new Set<string>();
+    reagents.forEach(r => { if (!r.antibody) return; if (r.antibody.host) hosts.add(r.antibody.host); if (r.antibody.target) targets.add(r.antibody.target); if (r.antibody.isotype) isotypes.add(r.antibody.isotype); if (r.antibody.fluorophore) fluors.add(r.antibody.fluorophore); });
+    ['Goat', 'Donkey'].forEach(x => hosts.add(x)); ['Mouse', 'Rabbit', 'Rat', 'Chicken', 'Goat', 'Human'].forEach(x => targets.add(x));
+    ['IgG (H+L)', 'IgG1', 'IgG2a', 'IgG2b', 'IgG3', 'IgM', 'IgY'].forEach(x => isotypes.add(x)); ['AF-405', 'AF-488', 'AF-546', 'AF-555', 'AF-594', 'AF-647', 'AF-680', 'AF-750', 'FITC', 'TRITC', 'Cy3', 'Cy5', 'HRP'].forEach(x => fluors.add(x));
+    const s = (x: Set<string>) => Array.from(x).sort();
+    return { hosts: s(hosts), targets: s(targets), isotypes: s(isotypes), fluors: s(fluors) };
+  }, [reagents]);
+  const detectAb = () => { const p = parseSecondaryAntibody(form.name); if (p) setForm({ ...form, antibody: p }); };
+
   const save = () => {
     if (!form.name) return;
     // Sanitise numbers: no negatives; max 0 = no limit, otherwise ≥ stock
@@ -66,8 +83,12 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
     const rawMax = Math.max(0, Number(form.maxStock) || 0);
     const maxStock = rawMax > 0 ? Math.max(rawMax, currentStock) : 0;
     const kind: ReagentKind = form.kind ?? 'item';
+    // Antibody block: dropped when every field is empty
+    const abClean = form.antibody && Object.values(form.antibody).some(v => (v || '').trim()) 
+      ? { host: form.antibody.host.trim(), target: form.antibody.target.trim(), isotype: form.antibody.isotype.trim(), fluorophore: form.antibody.fluorophore.trim() }
+      : undefined;
     const clean: Reagent = {
-      ...form, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
+      ...form, antibody: abClean, currentStock, maxStock, alertThreshold: Math.max(0, Number(form.alertThreshold) || 0),
       // Responsibles on any kind (beta round 4): on a stock they are the only
       // ones who may take from it; on every kind they may restock it even
       // without canAddReagents (PDMS kits looked after by a PhD).
@@ -174,6 +195,33 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
             </Field>
           </div>
           <Field label="Notes"><input value={form.notes || ''} onChange={e => setForm({ ...form, notes: e.target.value || undefined })} placeholder="e.g., 2 aliquots in use" className={inputCls} /></Field>
+
+          {showAb && (
+            <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/60 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-gray-700 font-manrope">Secondary antibody</p>
+                <button type="button" onClick={detectAb} disabled={!form.name} className="flex items-center gap-1 text-[11px] font-medium text-[#102C53] hover:underline disabled:opacity-40 font-manrope" title="Read host, target, Ig type and fluorophore from the name">
+                  <Wand2 size={11} /> Detect from name
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Host (raised in)"><input value={ab.host} onChange={e => setAb({ host: e.target.value })} list="ab-hosts" placeholder="Goat" className={inputCls} /></Field>
+                <Field label="Target (anti-)"><input value={ab.target} onChange={e => setAb({ target: e.target.value })} list="ab-targets" placeholder="Mouse" className={inputCls} /></Field>
+                <Field label="Ig type"><input value={ab.isotype} onChange={e => setAb({ isotype: e.target.value })} list="ab-isotypes" placeholder="IgG (H+L), IgG1…" className={inputCls} /></Field>
+                <Field label="Fluorophore">
+                  <div className="flex items-center gap-2">
+                    <input value={ab.fluorophore} onChange={e => setAb({ fluorophore: e.target.value })} list="ab-fluors" placeholder="AF-488" className={inputCls} />
+                    {abBand && <span className="shrink-0 w-3 h-3 rounded-full border border-white shadow" style={{ background: emissionBandMeta[abBand].color }} title={`${emissionBandMeta[abBand].label} · ${emissionBandMeta[abBand].hint}`} />}
+                  </div>
+                </Field>
+              </div>
+              <datalist id="ab-hosts">{abOptions.hosts.map(x => <option key={x} value={x} />)}</datalist>
+              <datalist id="ab-targets">{abOptions.targets.map(x => <option key={x} value={x} />)}</datalist>
+              <datalist id="ab-isotypes">{abOptions.isotypes.map(x => <option key={x} value={x} />)}</datalist>
+              <datalist id="ab-fluors">{abOptions.fluors.map(x => <option key={x} value={x} />)}</datalist>
+              <p className="text-[10px] text-gray-400 font-manrope">{abBand ? `Emission band: ${emissionBandMeta[abBand].label} (${emissionBandMeta[abBand].hint}).` : 'The band (blue, green, red, far-red, ultra-far-red) is worked out from the fluorophore.'} Leave everything empty for a primary antibody.</p>
+            </div>
+          )}
 
           {canEditKind ? (
             <div className="rounded-xl border border-gray-200 p-3 space-y-3">

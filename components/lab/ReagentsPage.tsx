@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap, QrCode, TrendingDown } from 'lucide-react';
+import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap, QrCode, TrendingDown, Palette } from 'lucide-react';
+import AntibodyPanelModal from './AntibodyPanelModal';
+import { EMISSION_BANDS, EmissionBand, emissionBandMeta, fluorophoreBand, antibodyMatches, antibodyOptions } from '@/lib/antibodies';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
@@ -32,6 +34,9 @@ export default function ReagentsPage() {
   const [qrOf, setQrOf] = useState<Reagent | null>(null);
   // Message after a scanned QR that could not open the withdraw dialog
   const [deepLinkNotice, setDeepLinkNotice] = useState<string | null>(null);
+  // Secondary antibodies: structured filters and the panel builder
+  const [abFilter, setAbFilter] = useState<{ host: string; target: string; isotype: string; band: EmissionBand | '' }>({ host: '', target: '', isotype: '', band: '' });
+  const [showPanel, setShowPanel] = useState(false);
 
   // Who may take from this reagent (stocks are restricted to their responsibles)
   const canTake = (r: Reagent) => canWithdrawReagentFor(user, permissions.canWithdrawReagents, r);
@@ -100,18 +105,27 @@ export default function ReagentsPage() {
     return ['All', ...Array.from(new Set(reagents.map(r => r.category)))];
   }, [reagents]);
 
+  const abActive = !!(abFilter.host || abFilter.target || abFilter.isotype || abFilter.band);
   const filtered = useMemo(() => {
     return reagents.filter(r => {
       const matchCat = selectedCategory === 'All' || r.category === selectedCategory;
       const matchKind = selectedKind === 'All' || (r.kind ?? 'item') === selectedKind;
       const q = search.toLowerCase();
-      // Name, catalogue number, supplier, lot — and the responsibles (name or initials)
+      const ab = r.antibody;
+      const band = ab ? fluorophoreBand(ab.fluorophore) : null;
+      // Name, catalogue number, supplier, lot, the responsibles (name or initials) —
+      // and for secondaries host / target / Ig type / fluorophore / band ("anti-mouse", "igg1", "647", "far-red")
       const matchSearch = !q || r.name.toLowerCase().includes(q) || r.catalogNumber.toLowerCase().includes(q)
         || (r.supplier || '').toLowerCase().includes(q) || (r.lot || '').toLowerCase().includes(q)
-        || (r.responsibleUserIds ?? []).some(id => { const u = users.find(x => x.id === id); return !!u && (u.name.toLowerCase().includes(q) || u.abbreviation.toLowerCase() === q); });
-      return matchCat && matchKind && matchSearch;
+        || (r.responsibleUserIds ?? []).some(id => { const u = users.find(x => x.id === id); return !!u && (u.name.toLowerCase().includes(q) || u.abbreviation.toLowerCase() === q); })
+        || (!!ab && (`anti-${ab.target}`.toLowerCase().includes(q) || ab.host.toLowerCase() === q || ab.isotype.toLowerCase().replace(/\s/g, '') === q.replace(/\s/g, '') || ab.fluorophore.toLowerCase().includes(q) || (!!band && emissionBandMeta[band].label.toLowerCase().replace('-', '') === q.replace(/[-\s]/g, ''))));
+      const matchAb = !abActive || antibodyMatches(ab, abFilter);
+      return matchCat && matchKind && matchSearch && matchAb;
     });
-  }, [reagents, selectedCategory, selectedKind, search, users]);
+  }, [reagents, selectedCategory, selectedKind, search, users, abFilter, abActive]);
+  // Antibody filter row: shown when the current category holds secondaries
+  const abInScope = useMemo(() => reagents.filter(r => r.antibody && (selectedCategory === 'All' || r.category === selectedCategory)), [reagents, selectedCategory]);
+  const abOpts = useMemo(() => antibodyOptions(abInScope.map(r => r.antibody)), [abInScope]);
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
 
@@ -217,6 +231,36 @@ export default function ReagentsPage() {
         ))}
       </div>
 
+      {/* Secondary antibodies: host / target / Ig type / band + panel builder */}
+      {abInScope.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-white border border-gray-100">
+          <span className="text-[11px] font-semibold text-gray-600 font-manrope mr-1">Secondaries</span>
+          <select value={abFilter.target} onChange={e => setAbFilter({ ...abFilter, target: e.target.value })} className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-manrope bg-white" aria-label="Target species">
+            <option value="">anti- any</option>{abOpts.targets.map(t => <option key={t} value={t}>anti-{t}</option>)}
+          </select>
+          <select value={abFilter.isotype} onChange={e => setAbFilter({ ...abFilter, isotype: e.target.value })} className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-manrope bg-white" aria-label="Ig type">
+            <option value="">any Ig</option>{abOpts.isotypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={abFilter.host} onChange={e => setAbFilter({ ...abFilter, host: e.target.value })} className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-manrope bg-white" aria-label="Host">
+            <option value="">any host</option>{abOpts.hosts.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <div className="flex items-center gap-1">
+            {EMISSION_BANDS.map(b => {
+              const m = emissionBandMeta[b]; const on = abFilter.band === b;
+              return <button key={b} onClick={() => setAbFilter({ ...abFilter, band: on ? '' : b })} title={`${m.label} · ${m.hint}`} aria-pressed={on}
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium font-manrope border transition-all ${on ? 'text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                style={on ? { background: m.color, borderColor: m.color } : { borderColor: m.color + '88' }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: on ? '#fff' : m.color }} />{m.short}
+              </button>;
+            })}
+          </div>
+          {abActive && <button onClick={() => setAbFilter({ host: '', target: '', isotype: '', band: '' })} className="text-[10px] text-gray-500 hover:text-gray-800 font-manrope underline">clear</button>}
+          <button onClick={() => setShowPanel(true)} className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#102C53] text-white text-[11px] font-medium font-manrope hover:bg-[#1a3d6e]" title="Combine 3 to 5 colours and see which secondaries fit">
+            <Palette size={12} /> Build a panel
+          </button>
+        </div>
+      )}
+
       {/* Stock / working solution / item */}
       {(kindCounts.stock > 0 || kindCounts.working > 0) && (
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -245,11 +289,27 @@ export default function ReagentsPage() {
           <div key={r.id} className={`bg-white rounded-xl p-4 shadow-sm border ${r.kind === 'stock' ? 'border-[#102C53]/30' : 'border-gray-100'}`}>
             <div className="flex items-start justify-between mb-2">
               <div className="min-w-0 flex-1">
+                {r.antibody ? (() => {
+                  const ab = r.antibody; const band = fluorophoreBand(ab.fluorophore); const m = band ? emissionBandMeta[band] : null;
+                  return <>
+                    <h3 className="text-sm font-semibold text-gray-900 font-manrope flex items-center gap-1.5 flex-wrap">
+                      <KindBadge kind={r.kind} open={r.openToStudents} />
+                      <span>{ab.host ? `${ab.host} ` : ''}anti-{ab.target || '?'}</span>
+                      {ab.isotype && <span className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-medium">{ab.isotype}</span>}
+                      {ab.fluorophore && <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1" style={m ? { background: m.bg, color: m.text } : { background: '#f3f4f6', color: '#374151' }} title={m ? `${m.label} · ${m.hint}` : undefined}>
+                        {m && <span className="w-2 h-2 rounded-full" style={{ background: m.color }} />}{ab.fluorophore}
+                      </span>}
+                    </h3>
+                    <p className="text-[10px] text-gray-400 font-manrope mt-0.5 truncate" title={r.name}>{r.name.replace(/\s*\[[^\]]*\]\s*$/, '')}</p>
+                    <p className="text-[10px] text-gray-400 font-mono">{r.supplier} &middot; {r.catalogNumber}</p>
+                  </>;
+                })() : <>
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope truncate flex items-center gap-1.5">
                   <KindBadge kind={r.kind} open={r.openToStudents} />
                   <span className="truncate">{r.name}</span>
                 </h3>
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.supplier} &middot; {r.catalogNumber}</p>
+                </>}
               </div>
               <div className="flex items-center gap-1 shrink-0 ml-2">
                 {r.currentStock <= r.alertThreshold && <AlertTriangle size={14} className="text-amber-500" />}
@@ -389,6 +449,7 @@ export default function ReagentsPage() {
         />
       )}
       {qrOf && <ReagentQrModal reagent={qrOf} place={reagentPlaceLabel(qrOf, storageUnits, storageBoxes)} onClose={() => setQrOf(null)} />}
+      {showPanel && <AntibodyPanelModal reagents={reagents} storageUnits={storageUnits} storageBoxes={storageBoxes} onClose={() => setShowPanel(false)} />}
 
       {/* Modal */}
       {modal && modalReagent && (
