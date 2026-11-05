@@ -4,7 +4,7 @@
 -- Marco: "notifiche via email, a 7, 13 e 19, un recap, senza spam".
 -- Everything runs inside Postgres: pg_cron fires every hour, the function
 -- checks the Rome hour, builds one message per recipient and posts it to
--- Resend through pg_net. No Edge Function, nothing on the static site.
+-- Brevo (transactional e-mail API) through pg_net. No Edge Function, nothing on the static site.
 --
 -- Recipients (active, with an e-mail, not opted out):
 --   · managers — Admin flag, or effective role admin / pi / lab_manager /
@@ -20,12 +20,13 @@
 --   19  bookings of tomorrow + what happened since 13:00
 --
 -- ONE-TIME SETUP (Marco, SQL Editor) — the API key never leaves Supabase:
---   SELECT vault.create_secret('re_…', 'resend_api_key', 'Resend API key for the Lab Manager digest');
--- Sender: while no domain is verified on Resend, the test sender
--- onboarding@resend.dev only delivers to the e-mail of the Resend account.
--- The setting "only_to" below therefore restricts delivery to that address;
--- once mimic.polimi.it (or another domain) is verified, change "from" and
--- set "only_to" to [] — everybody eligible starts receiving.
+--   SELECT vault.create_secret('xkeysib-…', 'brevo_api_key', 'Brevo API key for the Lab Manager digest');
+-- Sender: mimiclab.polimi@gmail.com, verified on Brevo (Settings → Senders →
+-- Add a sender → 6-digit code). Brevo was chosen because it needs no DNS
+-- record: Polimi's DNS is not ours, and polimi.it has DMARC p=quarantine, so
+-- a @polimi.it sender from any third-party service would land in spam.
+-- Replies go to reply_to (Marco). "only_to" (optional allowlist) is empty:
+-- everybody eligible receives. Brevo free plan: 300 e-mails/day.
 --
 -- Safe to run from the SQL Editor; re-runnable.
 -- ============================================================
@@ -43,12 +44,20 @@ ALTER TABLE lab_users ADD COLUMN IF NOT EXISTS digest_opt_out boolean NOT NULL D
 -- 2. Settings (editable later from the SQL Editor or Admin → Settings)
 -- ------------------------------------------------------------
 INSERT INTO app_settings (key, value) VALUES ('digest', jsonb_build_object(
-  'enabled',  true,
-  'hours',    jsonb_build_array(7, 13, 19),
-  'from',     'MiMic Lab Manager <onboarding@resend.dev>',
-  'only_to',  jsonb_build_array('marco.rasponi@polimi.it'),
-  'app_url',  'https://www.mimic.polimi.it/lab/'
-)) ON CONFLICT (key) DO NOTHING;
+  'enabled',    true,
+  'hours',      jsonb_build_array(7, 13, 19),
+  'from_name',  'MiMic Lab Manager',
+  'from_email', 'mimiclab.polimi@gmail.com',       -- must be a verified sender on Brevo
+  'reply_to',   'marco.rasponi@polimi.it',
+  'only_to',    jsonb_build_array(),                 -- [] = everybody eligible; or an allowlist of e-mails while testing
+  'app_url',    'https://www.mimic.polimi.it/lab/'
+)) ON CONFLICT (key) DO UPDATE SET
+  -- re-run: refresh the sender (Resend → Brevo switch), keep enabled / hours / app_url
+  value = (app_settings.value - 'from') || jsonb_build_object(
+    'from_name',  'MiMic Lab Manager',
+    'from_email', 'mimiclab.polimi@gmail.com',
+    'reply_to',   'marco.rasponi@polimi.it',
+    'only_to',    jsonb_build_array());
 
 -- ------------------------------------------------------------
 -- 3. Log of what was sent (admins read it from the SQL Editor)
@@ -295,21 +304,28 @@ BEGIN
   END IF;
 
   IF cardinality(only_to) > 0 AND NOT (lower(rcpt.email) = ANY (SELECT lower(x) FROM unnest(only_to) x)) THEN
-    INSERT INTO digest_log (slot_hour, user_id, email, n_items, subject, note) VALUES (p_slot, p_user_id, rcpt.email, msg.n_items, msg.subject, 'skipped: not in only_to (sender domain not verified yet)');
+    INSERT INTO digest_log (slot_hour, user_id, email, n_items, subject, note) VALUES (p_slot, p_user_id, rcpt.email, msg.n_items, msg.subject, 'skipped: not in only_to');
     RETURN jsonb_build_object('sent', false, 'note', 'not in only_to', 'subject', msg.subject, 'n_items', msg.n_items);
   END IF;
 
-  SELECT decrypted_secret INTO key FROM vault.decrypted_secrets WHERE name = 'resend_api_key' LIMIT 1;
+  SELECT decrypted_secret INTO key FROM vault.decrypted_secrets WHERE name = 'brevo_api_key' LIMIT 1;
   IF key IS NULL THEN
-    INSERT INTO digest_log (slot_hour, user_id, email, n_items, subject, note) VALUES (p_slot, p_user_id, rcpt.email, msg.n_items, msg.subject, 'skipped: no resend_api_key in vault');
-    RETURN jsonb_build_object('sent', false, 'note', 'no resend_api_key in vault');
+    INSERT INTO digest_log (slot_hour, user_id, email, n_items, subject, note) VALUES (p_slot, p_user_id, rcpt.email, msg.n_items, msg.subject, 'skipped: no brevo_api_key in vault');
+    RETURN jsonb_build_object('sent', false, 'note', 'no brevo_api_key in vault');
   END IF;
 
+  -- Brevo transactional API: https://developers.brevo.com/reference/send-transac-email
   SELECT net.http_post(
-    url     := 'https://api.resend.com/emails',
-    headers := jsonb_build_object('Authorization', 'Bearer ' || key, 'Content-Type', 'application/json'),
-    body    := jsonb_build_object('from', coalesce(cfg ->> 'from', 'MiMic Lab Manager <onboarding@resend.dev>'),
-                                  'to', jsonb_build_array(rcpt.email), 'subject', msg.subject, 'html', msg.html),
+    url     := 'https://api.brevo.com/v3/smtp/email',
+    headers := jsonb_build_object('api-key', key, 'Content-Type', 'application/json', 'Accept', 'application/json'),
+    body    := jsonb_build_object(
+                 'sender',      jsonb_build_object('name', coalesce(cfg ->> 'from_name', 'MiMic Lab Manager'),
+                                                   'email', coalesce(cfg ->> 'from_email', 'mimiclab.polimi@gmail.com')),
+                 'to',          jsonb_build_array(jsonb_build_object('email', rcpt.email, 'name', rcpt.name)),
+                 'replyTo',     jsonb_build_object('email', coalesce(cfg ->> 'reply_to', 'marco.rasponi@polimi.it')),
+                 'subject',     msg.subject,
+                 'htmlContent', msg.html,
+                 'tags',        jsonb_build_array('lab-digest', 'slot-' || p_slot)),
     timeout_milliseconds := 15000
   ) INTO req;
   INSERT INTO digest_log (slot_hour, user_id, email, n_items, subject, request_id, note) VALUES (p_slot, p_user_id, rcpt.email, msg.n_items, msg.subject, req, 'sent');
@@ -393,7 +409,7 @@ SELECT
   (SELECT count(*) = 1 FROM information_schema.columns WHERE table_name = 'lab_users' AND column_name = 'digest_opt_out') AS column_ok,
   (SELECT value ? 'hours' FROM app_settings WHERE key = 'digest')                                                      AS settings_ok,
   (SELECT count(*) = 1 FROM cron.job WHERE jobname = 'mimic-digest')                                                   AS cron_ok,
-  (SELECT count(*) = 1 FROM vault.decrypted_secrets WHERE name = 'resend_api_key')                                     AS key_in_vault;
+  (SELECT count(*) = 1 FROM vault.decrypted_secrets WHERE name = 'brevo_api_key')                                      AS key_in_vault;
 
 SELECT name, email, is_manager, is_pi, is_admin, cardinality(instrument_ids) AS n_instruments FROM digest_recipients() ORDER BY is_manager DESC, name;
 
@@ -401,5 +417,5 @@ SELECT name, email, is_manager, is_pi, is_admin, cardinality(instrument_ids) AS 
 -- app's Admin button, or run these here with the SQL Editor's role):
 --   SELECT * FROM digest_build('<your lab_users.id>', 7);                 -- preview
 --   SELECT digest_send_one('<your lab_users.id>', 7);                      -- sends for real
---   SELECT id, status_code, content::text FROM net._http_response ORDER BY id DESC LIMIT 3;  -- Resend answer
+--   SELECT id, status_code, content::text FROM net._http_response ORDER BY id DESC LIMIT 3;  -- Brevo answer: 201 {"messageId": …}
 --   SELECT * FROM digest_log ORDER BY id DESC LIMIT 10;

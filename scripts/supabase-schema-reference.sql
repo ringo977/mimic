@@ -130,11 +130,12 @@
 --      then supabase-2026-11-affiliations-thlab-attic.sql (affiliations Th-Lab,
 --        ATTiC in the CHECK — externals, = MSc permissions)
 --      then supabase-2026-11-email-digest.sql (e-mail recap at 07/13/19 Rome via
---        pg_cron 'mimic-digest' + pg_net → Resend: lab_users.digest_opt_out,
+--        pg_cron 'mimic-digest' + pg_net → Brevo: lab_users.digest_opt_out,
 --        app_settings 'digest', digest_log, digest_* functions,
 --        set_my_digest_opt_out / digest_preview_me / digest_send_me RPCs.
---        Needs pg_cron + pg_net enabled and the Resend key in Vault as
---        'resend_api_key': SELECT vault.create_secret('re_…', 'resend_api_key'))
+--        Needs pg_cron + pg_net enabled and the Brevo key in Vault as
+--        'brevo_api_key': SELECT vault.create_secret('xkeysib-…', 'brevo_api_key');
+--        sender mimiclab.polimi@gmail.com verified on Brevo — no DNS needed)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
 --        answers "permission denied" despite correct RLS. Restores the old
