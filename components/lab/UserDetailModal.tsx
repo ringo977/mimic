@@ -13,7 +13,7 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
   users: LabUser[];
   projects: Project[];
   certifications: Certification[];
-  /** Needed to work out which certifications a Researcher may grant (own instruments). */
+  /** Needed to work out which certifications a Post-Doc / Researcher may grant (own instruments). */
   instruments?: Instrument[];
   showSensitive?: boolean;
   onClose: () => void;
@@ -21,8 +21,8 @@ export default function UserDetailModal({ user: u, users, projects, certificatio
   /**
    * Lets the viewer grant trainings / certifications from this card. Trainings:
    * staff (Researcher, Lab Manager, Project Manager, PI, Admin). Certifications:
-   * LM / PM / PI / Admin any; Researcher only for their own instruments.
-   * Server: protect_lab_user_fields v3 with lab_can_grant_training v3 / lab_can_grant_certification v3.
+   * LM / PM / PI / Admin any; Post-Doc / Researcher only for their own instruments.
+   * Server: protect_lab_user_fields v3 with lab_can_grant_training v3 / lab_can_grant_certification v4.
    */
   grant?: { actor: LabUser; onUpdate: (u: LabUser) => void };
 }) {

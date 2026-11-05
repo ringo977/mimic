@@ -603,7 +603,7 @@ function UsersTab() {
                 const ok = mayGrantCert(c.id);
                 return (
                   <button key={c.id} type="button" onClick={() => toggleCert(c.id)} disabled={!ok}
-                    title={ok ? undefined : 'Granted by Lab Manager, Project Manager, PI, Admin — or the Researcher responsible for the instrument'}
+                    title={ok ? undefined : 'Granted by Lab Manager, Project Manager, PI, Admin — or the Post-Doc / Researcher responsible for the instrument'}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-medium font-manrope transition-all ${form.certifications.includes(c.id) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} ${ok ? '' : 'opacity-50 cursor-not-allowed'}`}>
                     {c.name}
                   </button>
@@ -849,7 +849,7 @@ function CertificationsTab() {
                     const has = u.certifications.includes(c.id);
                     return (
                       <td key={c.id} className="px-1.5 py-2 text-center">
-                        <button onClick={() => toggleUserCert(u.id, c.id)} disabled={!mayGrantCert(c.id)} title={mayGrantCert(c.id) ? undefined : 'Granted by Lab Manager, Project Manager, PI, Admin — or the Researcher responsible for the instrument'}
+                        <button onClick={() => toggleUserCert(u.id, c.id)} disabled={!mayGrantCert(c.id)} title={mayGrantCert(c.id) ? undefined : 'Granted by Lab Manager, Project Manager, PI, Admin — or the Post-Doc / Researcher responsible for the instrument'}
                           className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-all disabled:opacity-40 disabled:cursor-not-allowed ${has ? 'bg-green-100 text-green-600 hover:bg-green-200' : 'bg-gray-100 text-gray-300 hover:bg-gray-200'}`}>
                           {has ? <span className="text-[10px] font-bold">&#10003;</span> : <span className="text-[10px]">—</span>}
                         </button>

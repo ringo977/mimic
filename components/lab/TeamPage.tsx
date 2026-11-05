@@ -244,7 +244,7 @@ function AddStudentModal({ supervisor, anyRole, supervisors, existingEmails, onC
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`${inputCls} mt-1`} />
               </label>
             </div>
-            <p className="text-[11px] text-gray-400 font-manrope">{anyRole ? 'Visiting PhD students are registered as PhD Student with affiliation External.' : 'MSc students can book instruments and see the inventory; guests can only look.'} Trainings are granted later from their card by the staff (Researcher, Lab Manager, Project Manager, PI); certifications by Lab Manager / Project Manager / PI, or by the Researcher responsible for the instrument.</p>
+            <p className="text-[11px] text-gray-400 font-manrope">{anyRole ? 'Visiting PhD students are registered as PhD Student with affiliation External.' : 'MSc students can book instruments and see the inventory; guests can only look.'} Trainings are granted later from their card by the staff (Researcher, Lab Manager, Project Manager, PI); certifications by Lab Manager / Project Manager / PI, or by the Post-Doc / Researcher responsible for the instrument.</p>
             <div className="flex gap-2 pt-1">
               <button type="button" onClick={onClose} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-semibold font-manrope hover:bg-gray-200">Cancel</button>
               <button type="submit" className="flex-1 py-2.5 bg-[#102C53] text-white rounded-xl text-sm font-semibold font-manrope hover:bg-[#1a3d6e]">Register</button>
