@@ -19,10 +19,14 @@
 UPDATE reagents SET antibody = antibody || '{"kind":"secondary","antigen":"","clone":""}'::jsonb
  WHERE antibody IS NOT NULL AND antibody ->> 'kind' IS NULL;
 
+-- 1b. Antigen without the "Monoclonal / Polyclonal Antibody" tail (re-runnable)
+UPDATE reagents SET antibody = jsonb_set(antibody, '{antigen}', to_jsonb(trim(regexp_replace(antibody ->> 'antigen', '\s*(Mono|Poly)clo(nal|an) Antibody', '', 'gi'))))
+ WHERE antibody ->> 'kind' = 'primary' AND antibody ->> 'antigen' ~* 'clo(nal|an) antibody';
+
 -- 2. Backfill the rest
 WITH src AS (
   SELECT id, name,
-         regexp_replace(regexp_replace(name, '\s*\[[^\]]*\]\s*$', ''), '\s*\((STOCK|sample)\)', '', 'gi') AS head,
+         regexp_replace(regexp_replace(regexp_replace(name, '\s*\[[^\]]*\]\s*$', ''), '\s*\((STOCK|sample)\)', '', 'gi'), '\s*(Mono|Poly)clo(nal|an) Antibody', '', 'gi') AS head,
          coalesce((SELECT array_agg(trim(x)) FROM unnest(string_to_array(substring(name FROM '\[([^\]]+)\]\s*$'), '·')) x), '{}'::text[]) AS parts
     FROM reagents
    WHERE antibody IS NULL

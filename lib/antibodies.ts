@@ -86,7 +86,7 @@ function canonSpecies(s: string): string {
 
 const FLUOR_RE = /(Alexa\s*Fluor[™®]?\s*(?:Plus\s*)?\d{3}|AF-?\d{3}|DyLight[™®]?\s*\d{3}|CF[™®]?\s*\d{3}|Cy\s?[357](?:\.5)?|FITC|TRITC|APC(?:[-/]Cy7)?|PE(?:[-/]Cy7)?|HRP|Biotin|Texas Red|Pacific Blue|Brilliant Violet \d{3})/i;
 const cleanIso = (x: string) => x.replace(/\s*\bk$/i, '').replace(/\(H\+L\)/i, '(H+L)').trim();   // "IgG1 k" → "IgG1"
-const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').replace(/\s+/g, ' ').trim();
+const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').replace(/\s*(Mono|Poly)clo(?:nal|an) Antibody/gi, '').replace(/\s+/g, ' ').trim();   // "CD31 Monoclonal Antibody" → "CD31"
 
 /**
  * Best-effort parse of a commercial name, e.g.
