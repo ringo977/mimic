@@ -1272,7 +1272,7 @@ export interface WishlistItem {
   urgency: 'low' | 'medium' | 'high';
   requestedBy: string;
   requestedByName: string;
-  status: 'pending' | 'approved' | 'rejected' | 'ordered' | 'delivered';
+  status: 'pending' | 'deferred' | 'approved' | 'rejected' | 'ordered' | 'delivered';   // deferred = PI asked for more information
   approvedBy?: string;
   deliveredAt?: string;
   stockedToReagentId?: string;     // reagent ID if stocked
@@ -1283,6 +1283,7 @@ export interface WishlistItem {
   project: string;          // project name the purchase is for ('' on old requests)
   motivation: string;       // why it is needed
   discussedWithPi: boolean; // already agreed in a 1-to-1 / meeting
+  piComment: string;        // the PI's question when the request is deferred
 }
 
 export interface LogEntry {
@@ -1621,8 +1622,8 @@ export function getInitialCryoVials(): CryoVial[] {
 
 export function getInitialWishlist(): WishlistItem[] {
   return [
-    { id: 'w1', name: 'Anti-VE-Cadherin', type: 'antibody', catalogNumber: 'ab33168', supplier: 'Abcam', estimatedCost: 350, quantity: 1, urgency: 'high', requestedBy: 'u4', requestedByName: 'Roberta Visone', status: 'pending', notes: '', project: 'PHOENIX', motivation: 'Endothelial barrier assay', discussedWithPi: true, timestamp: new Date().toISOString() },
-    { id: 'w2', name: 'Fibronectin (Human)', type: 'reagent', catalogNumber: 'F0895', supplier: 'Sigma-Aldrich', estimatedCost: 180, quantity: 2, urgency: 'medium', requestedBy: 'u5', requestedByName: 'Alice Bianchi', status: 'approved', approvedBy: 'Marco Rasponi', notes: '', project: 'REMODEL', motivation: 'Chip coating', discussedWithPi: false, timestamp: new Date(Date.now()-86400000).toISOString() },
+    { id: 'w1', name: 'Anti-VE-Cadherin', type: 'antibody', catalogNumber: 'ab33168', supplier: 'Abcam', estimatedCost: 350, quantity: 1, urgency: 'high', requestedBy: 'u4', requestedByName: 'Roberta Visone', status: 'pending', notes: '', project: 'PHOENIX', motivation: 'Endothelial barrier assay', discussedWithPi: true, piComment: '', timestamp: new Date().toISOString() },
+    { id: 'w2', name: 'Fibronectin (Human)', type: 'reagent', catalogNumber: 'F0895', supplier: 'Sigma-Aldrich', estimatedCost: 180, quantity: 2, urgency: 'medium', requestedBy: 'u5', requestedByName: 'Alice Bianchi', status: 'approved', approvedBy: 'Marco Rasponi', notes: '', project: 'REMODEL', motivation: 'Chip coating', discussedWithPi: false, piComment: '', timestamp: new Date(Date.now()-86400000).toISOString() },
   ];
 }
 

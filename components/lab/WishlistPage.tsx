@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2, Search, MessageSquareText, FolderKanban } from 'lucide-react';
+import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2, Search, MessageSquareText, FolderKanban, HelpCircle, RotateCcw } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem } from '@/data/lab-data';
@@ -15,13 +15,15 @@ const urgencyColors = {
 
 const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700',
+  deferred: 'bg-orange-100 text-orange-700',
   approved: 'bg-green-100 text-green-700',
   rejected: 'bg-red-100 text-red-700',
   ordered: 'bg-blue-100 text-blue-700',
   delivered: 'bg-emerald-100 text-emerald-700',
 };
 
-type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'delivered';
+type FilterStatus = 'all' | 'pending' | 'deferred' | 'approved' | 'rejected' | 'ordered' | 'delivered';
+const statusLabel = (s: string) => s === 'deferred' ? 'info requested' : s;
 
 export default function WishlistPage() {
   const { user, permissions, wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
@@ -35,9 +37,12 @@ export default function WishlistPage() {
   // Approve / reject is a PI decision (canApproveOrders); placing the order and
   // stocking the delivery is procurement work, open to the Lab Manager too.
   const canHandle = permissions.canApproveOrders || permissions.canHandleOrders;
-  const canFullEdit = (w: WishlistItem) => w.status !== 'delivered' && (canHandle || (isOwn(w) && w.status === 'pending'));
+  const canFullEdit = (w: WishlistItem) => w.status !== 'delivered' && (canHandle || (isOwn(w) && (w.status === 'pending' || w.status === 'deferred')));
   const canEditPrice = (w: WishlistItem) => w.status !== 'delivered' && w.status !== 'rejected' && (canHandle || isOwn(w));
-  const canDelete = (w: WishlistItem) => user.isAdmin || user.role === 'admin' || (isOwn(w) && w.status === 'pending');
+  const canDelete = (w: WishlistItem) => user.isAdmin || user.role === 'admin' || (isOwn(w) && (w.status === 'pending' || w.status === 'deferred'));
+  // PI asks for more information before deciding: the request goes back to its owner
+  const [deferring, setDeferring] = useState<WishlistItem | null>(null);
+  const [deferText, setDeferText] = useState('');
   const priceOnly = !!editing && !canFullEdit(editing);
   const [filter, setFilter] = useState<FilterStatus>('all');
   // Who asked, which project, free text: the PI weighs 60 pending requests by person and project
@@ -86,6 +91,10 @@ export default function WishlistPage() {
     return { mine, others };
   }, [projects, user.projects]);
   const GENERAL = 'General lab';
+  const OTHER = '__other__';
+  const [projectOther, setProjectOther] = useState('');
+  const knownProjects = [...projectChoices.mine, ...projectChoices.others, GENERAL];
+  const projectValue = project === OTHER ? projectOther.trim() : project;
 
   const byStatus = filter === 'all' ? wishlist : wishlist.filter(w => w.status === filter);
   const requesters = useMemo(() => {
@@ -103,18 +112,20 @@ export default function WishlistPage() {
   const anyFilter = !!(requesterFilter || projectFilter || q);
 
   // New requests must say for which project and why; old ones may still lack it until edited
-  const formComplete = !!name && !!supplier && (priceOnly || (!!project && !!motivation.trim()));
+  const formComplete = !!name && !!supplier && (priceOnly || (!!projectValue && !!motivation.trim()));
   const handleSubmit = () => {
     if (!formComplete) return;
     if (editing) {
       updateWishlistItem(priceOnly
         ? { ...editing, estimatedCost }
-        : { ...editing, name, type, catalogNumber, supplier, estimatedCost, quantity, urgency, notes, project, motivation: motivation.trim(), discussedWithPi });
+        : { ...editing, name, type, catalogNumber, supplier, estimatedCost, quantity, urgency, notes, project: projectValue, motivation: motivation.trim(), discussedWithPi,
+            // answering the PI's question puts the request back in the queue
+            ...(editing.status === 'deferred' && isOwn(editing) ? { status: 'pending' as const } : {}) });
       setEditing(null);
     } else {
       addWishlistItem({
         name, type, catalogNumber, supplier, estimatedCost, quantity, urgency,
-        requestedBy: user.id, requestedByName: user.name, notes, project, motivation: motivation.trim(), discussedWithPi,
+        requestedBy: user.id, requestedByName: user.name, notes, project: projectValue, motivation: motivation.trim(), discussedWithPi, piComment: '',
       });
     }
     setShowAdd(false);
@@ -125,7 +136,8 @@ export default function WishlistPage() {
     setEditing(w);
     setName(w.name); setType(w.type); setCatalogNumber(w.catalogNumber); setSupplier(w.supplier);
     setEstimatedCostStr(String(w.estimatedCost)); setQuantityStr(String(w.quantity)); setUrgency(w.urgency); setNotes(w.notes);
-    setProject(w.project || ''); setMotivation(w.motivation || ''); setDiscussedWithPi(!!w.discussedWithPi);
+    if (w.project && !knownProjects.includes(w.project)) { setProject(OTHER); setProjectOther(w.project); } else { setProject(w.project || ''); setProjectOther(''); }
+    setMotivation(w.motivation || ''); setDiscussedWithPi(!!w.discussedWithPi);
     setShowAdd(true);
   };
   const closeForm = () => { setShowAdd(false); setEditing(null); resetForm(); };
@@ -133,7 +145,7 @@ export default function WishlistPage() {
   const resetForm = () => {
     setName(''); setType('reagent'); setCatalogNumber(''); setSupplier('');
     setEstimatedCostStr('0'); setQuantityStr('1'); setUrgency('medium'); setNotes('');
-    setProject(projectChoices.mine[0] || ''); setMotivation(''); setDiscussedWithPi(false);
+    setProject(projectChoices.mine[0] || ''); setProjectOther(''); setMotivation(''); setDiscussedWithPi(false);
   };
 
   // Open stocking modal for a delivered item
@@ -212,7 +224,7 @@ export default function WishlistPage() {
   const totalPending = wishlist.filter(w => w.status === 'pending').reduce((sum, w) => sum + w.estimatedCost * w.quantity, 0);
   const totalApproved = wishlist.filter(w => w.status === 'approved' || w.status === 'ordered').reduce((sum, w) => sum + w.estimatedCost * w.quantity, 0);
 
-  const allFilters: FilterStatus[] = ['all', 'pending', 'approved', 'ordered', 'delivered', 'rejected'];
+  const allFilters: FilterStatus[] = ['all', 'pending', 'deferred', 'approved', 'ordered', 'delivered', 'rejected'];
 
   const stockModalItem = stockItem ? wishlist.find(w => w.id === stockItem) : null;
   const matchingReagent = stockModalItem ? reagents.find(r =>
@@ -268,7 +280,7 @@ export default function WishlistPage() {
               filter === f ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {f} {f !== 'all' && `(${wishlist.filter(w => w.status === f).length})`}
+            {statusLabel(f)} {f !== 'all' && `(${wishlist.filter(w => w.status === f).length})`}
           </button>
         ))}
       </div>
@@ -304,7 +316,7 @@ export default function WishlistPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-semibold text-gray-900 font-manrope">{item.name}</h3>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${urgencyColors[item.urgency]}`}>{item.urgency}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>{item.status}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>{statusLabel(item.status)}</span>
                   {item.project && <button onClick={() => setProjectFilter(item.project)} className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#102C53]/10 text-[#102C53] flex items-center gap-1 hover:bg-[#102C53]/20" title="Filter by this project"><FolderKanban size={10} /> {item.project}</button>}
                   {item.discussedWithPi && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 flex items-center gap-1" title="Already agreed with the PI (1-to-1 / meeting)"><MessageSquareText size={10} /> discussed with PI</span>}
                 </div>
@@ -317,6 +329,12 @@ export default function WishlistPage() {
                 {item.motivation ? <p className="text-xs text-gray-700 font-manrope mt-1">{item.motivation}</p>
                  : item.status === 'pending' && <p className="text-[10px] text-amber-600 font-manrope mt-1">No motivation given{isOwn(item) ? ' — edit the request to add project and motivation' : ''}.</p>}
                 {item.notes && <p className="text-xs text-gray-500 font-manrope mt-1 italic">{item.notes}</p>}
+                {item.status === 'deferred' && item.piComment && (
+                  <div className="mt-2 p-2.5 rounded-lg bg-orange-50 border border-orange-100 text-xs font-manrope text-orange-900 flex items-start gap-2">
+                    <HelpCircle size={13} className="shrink-0 mt-0.5" />
+                    <div><span className="font-semibold">PI asks:</span> {item.piComment}{isOwn(item) && <span className="block text-[10px] text-orange-700 mt-1">Edit the request to answer (motivation, quantity, alternatives…) — saving puts it back in the queue.</span>}</div>
+                  </div>
+                )}
                 {item.approvedBy && item.status !== 'delivered' && <p className="text-[10px] text-green-600 font-manrope mt-1">Approved by {item.approvedBy}</p>}
                 {item.status === 'delivered' && (
                   <p className="text-[10px] text-emerald-600 font-manrope mt-1 flex items-center gap-1">
@@ -346,7 +364,14 @@ export default function WishlistPage() {
             </div>
 
             {/* Status actions */}
-            {permissions.canApproveOrders && item.status === 'pending' && (
+            {!permissions.canApproveOrders && isOwn(item) && item.status === 'deferred' && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <button onClick={() => openEdit(item)} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-orange-50 text-orange-700 text-xs font-medium font-manrope hover:bg-orange-100 transition-colors">
+                  <RotateCcw size={14} /> Answer &amp; resubmit
+                </button>
+              </div>
+            )}
+            {permissions.canApproveOrders && (item.status === 'pending' || item.status === 'deferred') && (
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                 <button
                   onClick={() => updateWishlistStatus(item.id, 'approved', user.name)}
@@ -354,6 +379,15 @@ export default function WishlistPage() {
                 >
                   <Check size={14} /> Approve
                 </button>
+                {item.status === 'pending' && (
+                  <button
+                    onClick={() => { setDeferring(item); setDeferText(''); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-orange-50 text-orange-700 text-xs font-medium font-manrope hover:bg-orange-100 transition-colors"
+                    title="Send the request back to the requester with a question"
+                  >
+                    <HelpCircle size={14} /> Ask for more info
+                  </button>
+                )}
                 <button
                   onClick={() => updateWishlistStatus(item.id, 'rejected', user.name)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors"
@@ -395,6 +429,12 @@ export default function WishlistPage() {
               <button onClick={closeForm} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
             </div>
 
+            {editing && editing.status === 'deferred' && editing.piComment && !priceOnly && (
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs font-manrope text-orange-900 mb-3">
+                <span className="font-semibold">PI asks:</span> {editing.piComment}
+                {isOwn(editing) && <p className="text-[10px] text-orange-700 mt-1">Update the request to answer; saving resubmits it for approval.</p>}
+              </div>
+            )}
             {priceOnly && editing && (
               <div className="bg-gray-50 rounded-xl p-3 text-xs font-manrope text-gray-600 mb-3">
                 <span className="font-semibold text-gray-900">{editing.name}</span> · {editing.supplier} · {editing.catalogNumber} · Qty {editing.quantity} · <span className="capitalize">{editing.status}</span>
@@ -454,8 +494,9 @@ export default function WishlistPage() {
                     {projectChoices.mine.length > 0 && <optgroup label="My projects">{projectChoices.mine.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>}
                     {projectChoices.others.length > 0 && <optgroup label="Other projects">{projectChoices.others.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>}
                     <option value={GENERAL}>{GENERAL}</option>
-                    {project && ![...projectChoices.mine, ...projectChoices.others, GENERAL].includes(project) && <option value={project}>{project}</option>}
+                    <option value={OTHER}>Other…</option>
                   </select>
+                  {project === OTHER && <input value={projectOther} onChange={e => setProjectOther(e.target.value)} placeholder="Specify the project / funding *" autoFocus className="mt-1.5 w-full px-3 py-2 border border-orange-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />}
                 </div>
                 <label className="flex items-start gap-2 mt-6 cursor-pointer">
                   <input type="checkbox" checked={discussedWithPi} onChange={e => setDiscussedWithPi(e.target.checked)} className="mt-0.5 accent-[#102C53]" />
@@ -471,9 +512,26 @@ export default function WishlistPage() {
                 <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Link to the product page, alternative suppliers, quote reference…" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
               </div>}
               <button onClick={handleSubmit} disabled={!formComplete} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40">
-                {editing ? 'Save changes' : 'Submit Request'}
+                {editing ? (editing.status === 'deferred' && isOwn(editing) && !priceOnly ? 'Save & resubmit' : 'Save changes') : 'Submit Request'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ask-for-more-info Modal */}
+      {deferring && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-bold text-gray-900 font-manrope">Ask for more information</h2>
+              <button onClick={() => setDeferring(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-gray-500 font-manrope mb-3"><span className="font-semibold text-gray-900">{deferring.name}</span> · {deferring.requestedByName}. The request leaves the approval queue until {deferring.requestedByName.split(' ')[0]} answers and resubmits it.</p>
+            <textarea value={deferText} onChange={e => setDeferText(e.target.value)} rows={3} autoFocus placeholder="e.g. Do we still have the 500 µL vial from May? Is a smaller pack enough for WP3?" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
+            <button onClick={() => { updateWishlistStatus(deferring.id, 'deferred', undefined, { piComment: deferText.trim() }); setDeferring(null); }} disabled={!deferText.trim()} className="mt-3 w-full py-3 bg-orange-600 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-orange-700 transition-colors disabled:opacity-40 flex items-center justify-center gap-2">
+              <HelpCircle size={15} /> Send question
+            </button>
           </div>
         </div>
       )}

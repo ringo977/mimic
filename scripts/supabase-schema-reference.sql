@@ -95,7 +95,7 @@
 --      then supabase-2026-10-wishlist-roles.sql  (lab_can v4: approve_orders is
 --        role admin/pi only — the Admin flag no longer grants it — and the new
 --        handle_orders for the MiMic lab_manager; is_lab_order_handler();
---        protect_wishlist_status v2 lets handlers do approved→ordered→delivered;
+--        protect_wishlist_status v2 (v3 in 2026-11-wishlist-deferred) lets handlers do approved→ordered→delivered;
 --        wishlist_items_update v3)
 --      then supabase-2026-10-lab-assistant.sql   (affiliation Biomech; every
 --        non-MiMic member = MiMic msc server-side: lab_can v5, is_lab_admin v3
@@ -145,6 +145,8 @@
 --        antigen, clone; backfill of primaries and dyes from the same suffixes).
 --      then supabase-2026-11-wishlist-motivation.sql (wishlist_items.project /
 --        motivation / discussed_with_pi; digest_build shows them).
+--      then supabase-2026-11-wishlist-deferred.sql (status 'deferred' + pi_comment;
+--        protect_wishlist_status v3: requester may resubmit deferred → pending).
 --        sender mimiclab.polimi@gmail.com verified on Brevo — no DNS needed)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
@@ -400,7 +402,8 @@ CREATE TABLE IF NOT EXISTS wishlist_items (
   timestamp                   text NOT NULL DEFAULT ''::text,
   project                     text NOT NULL DEFAULT ''::text,     -- 2026-11-wishlist-motivation.sql
   motivation                  text NOT NULL DEFAULT ''::text,     -- 2026-11-wishlist-motivation.sql
-  discussed_with_pi           boolean NOT NULL DEFAULT false      -- 2026-11-wishlist-motivation.sql
+  discussed_with_pi           boolean NOT NULL DEFAULT false,     -- 2026-11-wishlist-motivation.sql
+  pi_comment                  text NOT NULL DEFAULT ''::text      -- 2026-11-wishlist-deferred.sql: PI question (status 'deferred')
 );
 
 CREATE TABLE IF NOT EXISTS log_entries (
