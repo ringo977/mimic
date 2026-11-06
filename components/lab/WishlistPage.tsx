@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2, Search, MessageSquareText, FolderKanban } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem } from '@/data/lab-data';
@@ -25,7 +25,7 @@ type FilterStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'ordered' | 'd
 
 export default function WishlistPage() {
   const { user, permissions, wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
-    storageUnits, reagents, addNewReagent, addReagentStock } = useLabContext();
+    storageUnits, reagents, addNewReagent, addReagentStock, projects, users } = useLabContext();
   const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   // Editing an existing request: full edit for own pending items (or approvers),
@@ -40,6 +40,10 @@ export default function WishlistPage() {
   const canDelete = (w: WishlistItem) => user.isAdmin || user.role === 'admin' || (isOwn(w) && w.status === 'pending');
   const priceOnly = !!editing && !canFullEdit(editing);
   const [filter, setFilter] = useState<FilterStatus>('all');
+  // Who asked, which project, free text: the PI weighs 60 pending requests by person and project
+  const [requesterFilter, setRequesterFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   // Stock modal state
   const [stockItem, setStockItem] = useState<string | null>(null);
@@ -71,20 +75,46 @@ export default function WishlistPage() {
   const quantity = quantityStr === '' ? 0 : Number(quantityStr);
   const [urgency, setUrgency] = useState<'low' | 'medium' | 'high'>('medium');
   const [notes, setNotes] = useState('');
+  const [project, setProject] = useState('');
+  const [motivation, setMotivation] = useState('');
+  const [discussedWithPi, setDiscussedWithPi] = useState(false);
+  // Project choices: the requester's own projects first, then the other active ones, then "General lab"
+  const projectChoices = useMemo(() => {
+    const active = projects.filter(p => p.status === 'active');
+    const mine = active.filter(p => user.projects.includes(p.id)).map(p => p.name);
+    const others = active.filter(p => !user.projects.includes(p.id)).map(p => p.name).sort((a, b) => a.localeCompare(b));
+    return { mine, others };
+  }, [projects, user.projects]);
+  const GENERAL = 'General lab';
 
-  const filtered = filter === 'all' ? wishlist : wishlist.filter(w => w.status === filter);
+  const byStatus = filter === 'all' ? wishlist : wishlist.filter(w => w.status === filter);
+  const requesters = useMemo(() => {
+    const m = new Map<string, { name: string; n: number; pending: number }>();
+    wishlist.forEach(w => { const e = m.get(w.requestedBy) ?? { name: w.requestedByName, n: 0, pending: 0 }; e.n++; if (w.status === 'pending') e.pending++; m.set(w.requestedBy, e); });
+    return Array.from(m.entries()).map(([id, e]) => ({ id, ...e })).sort((a, b) => b.pending - a.pending || a.name.localeCompare(b.name));
+  }, [wishlist]);
+  const projectsInList = useMemo(() => Array.from(new Set(wishlist.map(w => w.project).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [wishlist]);
+  const q = search.trim().toLowerCase();
+  const filtered = byStatus.filter(w =>
+    (!requesterFilter || w.requestedBy === requesterFilter)
+    && (!projectFilter || (projectFilter === '—' ? !w.project : w.project === projectFilter))
+    && (!q || [w.name, w.supplier, w.catalogNumber, w.requestedByName, w.project, w.motivation, w.notes].some(x => (x || '').toLowerCase().includes(q))));
+  const pendingShown = filtered.filter(w => w.status === 'pending');
+  const anyFilter = !!(requesterFilter || projectFilter || q);
 
+  // New requests must say for which project and why; old ones may still lack it until edited
+  const formComplete = !!name && !!supplier && (priceOnly || (!!project && !!motivation.trim()));
   const handleSubmit = () => {
-    if (!name || !supplier) return;
+    if (!formComplete) return;
     if (editing) {
       updateWishlistItem(priceOnly
         ? { ...editing, estimatedCost }
-        : { ...editing, name, type, catalogNumber, supplier, estimatedCost, quantity, urgency, notes });
+        : { ...editing, name, type, catalogNumber, supplier, estimatedCost, quantity, urgency, notes, project, motivation: motivation.trim(), discussedWithPi });
       setEditing(null);
     } else {
       addWishlistItem({
         name, type, catalogNumber, supplier, estimatedCost, quantity, urgency,
-        requestedBy: user.id, requestedByName: user.name, notes,
+        requestedBy: user.id, requestedByName: user.name, notes, project, motivation: motivation.trim(), discussedWithPi,
       });
     }
     setShowAdd(false);
@@ -95,6 +125,7 @@ export default function WishlistPage() {
     setEditing(w);
     setName(w.name); setType(w.type); setCatalogNumber(w.catalogNumber); setSupplier(w.supplier);
     setEstimatedCostStr(String(w.estimatedCost)); setQuantityStr(String(w.quantity)); setUrgency(w.urgency); setNotes(w.notes);
+    setProject(w.project || ''); setMotivation(w.motivation || ''); setDiscussedWithPi(!!w.discussedWithPi);
     setShowAdd(true);
   };
   const closeForm = () => { setShowAdd(false); setEditing(null); resetForm(); };
@@ -102,6 +133,7 @@ export default function WishlistPage() {
   const resetForm = () => {
     setName(''); setType('reagent'); setCatalogNumber(''); setSupplier('');
     setEstimatedCostStr('0'); setQuantityStr('1'); setUrgency('medium'); setNotes('');
+    setProject(projectChoices.mine[0] || ''); setMotivation(''); setDiscussedWithPi(false);
   };
 
   // Open stocking modal for a delivered item
@@ -172,8 +204,8 @@ export default function WishlistPage() {
   };
 
   const exportCSV = () => {
-    const headers = ['Name', 'Type', 'Catalog #', 'Supplier', 'Est. Cost (€)', 'Qty', 'Urgency', 'Requested By', 'Status', 'Notes'];
-    const rows = wishlist.map(w => [w.name, w.type, w.catalogNumber, w.supplier, w.estimatedCost, w.quantity, w.urgency, w.requestedByName, w.status, w.notes]);
+    const headers = ['Name', 'Type', 'Catalog #', 'Supplier', 'Est. Cost (€)', 'Qty', 'Urgency', 'Requested By', 'Project', 'Motivation', 'Discussed with PI', 'Status', 'Notes', 'Requested on'];
+    const rows = filtered.map(w => [w.name, w.type, w.catalogNumber, w.supplier, w.estimatedCost, w.quantity, w.urgency, w.requestedByName, w.project, w.motivation, w.discussedWithPi ? 'Yes' : 'No', w.status, w.notes, w.timestamp.slice(0, 10)]);
     downloadCSV(headers, rows, 'wishlist');
   };
 
@@ -199,7 +231,7 @@ export default function WishlistPage() {
             </button>
           )}
           {permissions.canRequestOrders && (
-            <button onClick={() => setShowAdd(true)} className="flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-xs font-medium font-manrope hover:bg-[#1a3d6e] transition-colors">
+            <button onClick={() => { if (!project) setProject(projectChoices.mine[0] || ''); setShowAdd(true); }} className="flex items-center gap-1.5 px-4 py-2 bg-[#102C53] text-white rounded-xl text-xs font-medium font-manrope hover:bg-[#1a3d6e] transition-colors">
               <Plus size={14} /> New Request
             </button>
           )}
@@ -241,6 +273,25 @@ export default function WishlistPage() {
         ))}
       </div>
 
+      {/* Requester / project / text */}
+      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-white border border-gray-100">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={13} className="absolute left-2.5 top-2.5 text-gray-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, supplier, catalog #, requester, project, motivation…" className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+        </div>
+        <select value={requesterFilter} onChange={e => setRequesterFilter(e.target.value)} className="px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-manrope bg-white max-w-[220px]" aria-label="Requester">
+          <option value="">All requesters ({requesters.length})</option>
+          {requesters.map(r => <option key={r.id} value={r.id}>{r.name}{r.pending ? ` · ${r.pending} pending` : ''} ({r.n})</option>)}
+        </select>
+        <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} className="px-2.5 py-2 rounded-lg border border-gray-200 text-xs font-manrope bg-white max-w-[200px]" aria-label="Project">
+          <option value="">All projects</option>
+          {projectsInList.map(p => <option key={p} value={p}>{p}</option>)}
+          {wishlist.some(w => !w.project) && <option value="—">No project set</option>}
+        </select>
+        {anyFilter && <button onClick={() => { setRequesterFilter(''); setProjectFilter(''); setSearch(''); }} className="text-[11px] text-gray-500 hover:text-gray-800 font-manrope underline">clear</button>}
+        <span className="ml-auto text-[11px] text-gray-400 font-manrope">{filtered.length} shown{pendingShown.length ? ` · ${pendingShown.length} pending · €${pendingShown.reduce((s, w) => s + w.estimatedCost * w.quantity, 0).toFixed(0)}` : ''}</span>
+      </div>
+
       {/* Items List */}
       <div className="space-y-3">
         {filtered.length === 0 && (
@@ -254,13 +305,17 @@ export default function WishlistPage() {
                   <h3 className="text-sm font-semibold text-gray-900 font-manrope">{item.name}</h3>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${urgencyColors[item.urgency]}`}>{item.urgency}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>{item.status}</span>
+                  {item.project && <button onClick={() => setProjectFilter(item.project)} className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#102C53]/10 text-[#102C53] flex items-center gap-1 hover:bg-[#102C53]/20" title="Filter by this project"><FolderKanban size={10} /> {item.project}</button>}
+                  {item.discussedWithPi && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 flex items-center gap-1" title="Already agreed with the PI (1-to-1 / meeting)"><MessageSquareText size={10} /> discussed with PI</span>}
                 </div>
                 <p className="text-xs text-gray-500 font-manrope mt-1">
                   {item.supplier} &middot; {item.catalogNumber} &middot; Qty: {item.quantity}
                 </p>
                 <p className="text-xs text-gray-400 font-manrope mt-0.5">
-                  Requested by {item.requestedByName} &middot; {formatDateTime(item.timestamp)}
+                  Requested by <button onClick={() => setRequesterFilter(item.requestedBy)} className="hover:underline hover:text-gray-700" title="Filter by this requester">{item.requestedByName}</button> &middot; {formatDateTime(item.timestamp)}
                 </p>
+                {item.motivation ? <p className="text-xs text-gray-700 font-manrope mt-1">{item.motivation}</p>
+                 : item.status === 'pending' && <p className="text-[10px] text-amber-600 font-manrope mt-1">No motivation given{isOwn(item) ? ' — edit the request to add project and motivation' : ''}.</p>}
                 {item.notes && <p className="text-xs text-gray-500 font-manrope mt-1 italic">{item.notes}</p>}
                 {item.approvedBy && item.status !== 'delivered' && <p className="text-[10px] text-green-600 font-manrope mt-1">Approved by {item.approvedBy}</p>}
                 {item.status === 'delivered' && (
@@ -391,11 +446,31 @@ export default function WishlistPage() {
                   <input type="number" min={1} value={quantityStr} onChange={e => setQuantityStr(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
                 </div>}
               </div>
+              {!priceOnly && <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Project <span className="text-red-500">*</span></label>
+                  <select value={project} onChange={e => setProject(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none">
+                    <option value="">— choose —</option>
+                    {projectChoices.mine.length > 0 && <optgroup label="My projects">{projectChoices.mine.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>}
+                    {projectChoices.others.length > 0 && <optgroup label="Other projects">{projectChoices.others.map(p => <option key={p} value={p}>{p}</option>)}</optgroup>}
+                    <option value={GENERAL}>{GENERAL}</option>
+                    {project && ![...projectChoices.mine, ...projectChoices.others, GENERAL].includes(project) && <option value={project}>{project}</option>}
+                  </select>
+                </div>
+                <label className="flex items-start gap-2 mt-6 cursor-pointer">
+                  <input type="checkbox" checked={discussedWithPi} onChange={e => setDiscussedWithPi(e.target.checked)} className="mt-0.5 accent-[#102C53]" />
+                  <span className="text-xs font-manrope text-gray-700">Already discussed with the PI<span className="block text-[10px] text-gray-400">pre-agreed in a 1-to-1 or a meeting</span></span>
+                </label>
+              </div>}
+              {!priceOnly && <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Motivation <span className="text-red-500">*</span></label>
+                <textarea value={motivation} onChange={e => setMotivation(e.target.value)} rows={2} placeholder="What is it for, and why now? e.g. endothelial barrier assays for PHOENIX WP3, current vial runs out next week" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
+              </div>}
               {!priceOnly && <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Notes</label>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Why is this needed?" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Link to the product page, alternative suppliers, quote reference…" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none resize-none" />
               </div>}
-              <button onClick={handleSubmit} disabled={!name || !supplier} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40">
+              <button onClick={handleSubmit} disabled={!formComplete} className="w-full py-3 bg-[#102C53] text-white rounded-xl font-semibold text-sm font-manrope hover:bg-[#1a3d6e] transition-colors disabled:opacity-40">
                 {editing ? 'Save changes' : 'Submit Request'}
               </button>
             </div>

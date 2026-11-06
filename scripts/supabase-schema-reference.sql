@@ -143,6 +143,8 @@
 --        name suffix — only on an existing inventory, harmless on a fresh one),
 --        then supabase-2026-11-antibodies-primaries.sql (kind primary/secondary/dye/facs,
 --        antigen, clone; backfill of primaries and dyes from the same suffixes).
+--      then supabase-2026-11-wishlist-motivation.sql (wishlist_items.project /
+--        motivation / discussed_with_pi; digest_build shows them).
 --        sender mimiclab.polimi@gmail.com verified on Brevo — no DNS needed)
 --      then supabase-2026-09-data-api-grants.sql (LAST. A project created after
 --        30 May 2026 grants nothing on new public tables, so the Data API
@@ -395,7 +397,10 @@ CREATE TABLE IF NOT EXISTS wishlist_items (
   stocked_to_reagent_id       text,
   stocked_to_storage_unit_id  text,
   notes                       text NOT NULL DEFAULT ''::text,
-  timestamp                   text NOT NULL DEFAULT ''::text
+  timestamp                   text NOT NULL DEFAULT ''::text,
+  project                     text NOT NULL DEFAULT ''::text,     -- 2026-11-wishlist-motivation.sql
+  motivation                  text NOT NULL DEFAULT ''::text,     -- 2026-11-wishlist-motivation.sql
+  discussed_with_pi           boolean NOT NULL DEFAULT false      -- 2026-11-wishlist-motivation.sql
 );
 
 CREATE TABLE IF NOT EXISTS log_entries (

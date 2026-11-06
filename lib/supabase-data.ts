@@ -587,6 +587,7 @@ export async function fetchWishlist(): Promise<WishlistItem[] | null> {
     status: string; approved_by: string | null; delivered_at: string | null;
     stocked_to_reagent_id: string | null; stocked_to_storage_unit_id: string | null;
     notes: string; timestamp: string;
+    project: string | null; motivation: string | null; discussed_with_pi: boolean | null;
   }>('wishlist_items', 'timestamp');
   if (!rows) return null;
   return rows.map(r => ({
@@ -601,6 +602,7 @@ export async function fetchWishlist(): Promise<WishlistItem[] | null> {
     stockedToReagentId: r.stocked_to_reagent_id ?? undefined,
     stockedToStorageUnitId: r.stocked_to_storage_unit_id ?? undefined,
     notes: r.notes, timestamp: r.timestamp,
+    project: r.project ?? '', motivation: r.motivation ?? '', discussedWithPi: !!r.discussed_with_pi,
   }));
 }
 
@@ -614,6 +616,7 @@ export async function upsertWishlistItem(w: WishlistItem, mode: 'insert' | 'upda
     stocked_to_reagent_id: w.stockedToReagentId ?? null,
     stocked_to_storage_unit_id: w.stockedToStorageUnitId ?? null,
     notes: w.notes, timestamp: w.timestamp,
+    project: w.project ?? '', motivation: w.motivation ?? '', discussed_with_pi: !!w.discussedWithPi,
   });
 }
 

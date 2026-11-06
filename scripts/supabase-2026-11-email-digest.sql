@@ -241,11 +241,15 @@ BEGIN
     --    Every pending request is actionable and counts, until it is decided;
     --    the ones arrived since the previous recap are flagged "new" and listed first.
     SELECT count(*), count(*) FILTER (WHERE digest_ts(w.timestamp) >= since),
-           string_agg(format('<li>%s<b>%s</b> ×%s — %s%s · asked by %s%s</li>',
+           string_agg(format('<li>%s<b>%s</b> ×%s — %s%s · asked by %s%s%s%s%s</li>',
              CASE WHEN digest_ts(w.timestamp) >= since THEN '<span style="color:#fff;background:#b45309;border-radius:4px;padding:0 5px;font-size:11px;margin-right:6px">new</span>' ELSE '' END,
              digest_h(w.name), w.quantity, digest_h(w.supplier),
              CASE WHEN w.estimated_cost > 0 THEN format(' · ~%s €', w.estimated_cost) ELSE '' END, digest_h(w.requested_by_name),
-             CASE WHEN w.urgency = 'high' THEN ' <b style="color:#b91c1c">urgent</b>' ELSE '' END),
+             CASE WHEN w.urgency = 'high' THEN ' <b style="color:#b91c1c">urgent</b>' ELSE '' END,
+             -- 2026-11-wishlist-motivation.sql: project, "discussed with PI", motivation
+             CASE WHEN coalesce(w.project, '') <> '' THEN format(' · <span style="color:#102C53">%s</span>', digest_h(w.project)) ELSE '' END,
+             CASE WHEN w.discussed_with_pi THEN ' · <span style="color:#6d28d9">discussed with PI</span>' ELSE '' END,
+             CASE WHEN coalesce(w.motivation, '') <> '' THEN format('<br><span style="color:#6b7280;font-size:12px">%s</span>', digest_h(w.motivation)) ELSE '' END),
              '' ORDER BY (digest_ts(w.timestamp) >= since) DESC, w.timestamp DESC)
       INTO n_book, n_auth, sec
       FROM wishlist_items w WHERE w.status = 'pending';

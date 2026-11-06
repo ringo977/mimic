@@ -1279,6 +1279,10 @@ export interface WishlistItem {
   stockedToStorageUnitId?: string;  // storage unit ID if stocked
   notes: string;
   timestamp: string;
+  // 2026-11: what the PI needs to weigh necessity and urgency
+  project: string;          // project name the purchase is for ('' on old requests)
+  motivation: string;       // why it is needed
+  discussedWithPi: boolean; // already agreed in a 1-to-1 / meeting
 }
 
 export interface LogEntry {
@@ -1617,8 +1621,8 @@ export function getInitialCryoVials(): CryoVial[] {
 
 export function getInitialWishlist(): WishlistItem[] {
   return [
-    { id: 'w1', name: 'Anti-VE-Cadherin', type: 'antibody', catalogNumber: 'ab33168', supplier: 'Abcam', estimatedCost: 350, quantity: 1, urgency: 'high', requestedBy: 'u4', requestedByName: 'Roberta Visone', status: 'pending', notes: 'Endothelial barrier assay', timestamp: new Date().toISOString() },
-    { id: 'w2', name: 'Fibronectin (Human)', type: 'reagent', catalogNumber: 'F0895', supplier: 'Sigma-Aldrich', estimatedCost: 180, quantity: 2, urgency: 'medium', requestedBy: 'u5', requestedByName: 'Alice Bianchi', status: 'approved', approvedBy: 'Marco Rasponi', notes: 'Chip coating', timestamp: new Date(Date.now()-86400000).toISOString() },
+    { id: 'w1', name: 'Anti-VE-Cadherin', type: 'antibody', catalogNumber: 'ab33168', supplier: 'Abcam', estimatedCost: 350, quantity: 1, urgency: 'high', requestedBy: 'u4', requestedByName: 'Roberta Visone', status: 'pending', notes: '', project: 'PHOENIX', motivation: 'Endothelial barrier assay', discussedWithPi: true, timestamp: new Date().toISOString() },
+    { id: 'w2', name: 'Fibronectin (Human)', type: 'reagent', catalogNumber: 'F0895', supplier: 'Sigma-Aldrich', estimatedCost: 180, quantity: 2, urgency: 'medium', requestedBy: 'u5', requestedByName: 'Alice Bianchi', status: 'approved', approvedBy: 'Marco Rasponi', notes: '', project: 'REMODEL', motivation: 'Chip coating', discussedWithPi: false, timestamp: new Date(Date.now()-86400000).toISOString() },
   ];
 }
 
