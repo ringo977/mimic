@@ -81,7 +81,7 @@ interface LabContextType {
   removeCryoVial: (id: string) => void;
   wishlist: WishlistItem[];
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => void;
-  updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId' | 'piComment'>>) => void;
+  updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId' | 'piComment' | 'approvedBy'>>) => void;
   /** Edit the content of a request (name, price, quantity…) — requester on own items, or an approver. */
   updateWishlistItem: (w: WishlistItem) => void;
   /** Delete a request — requester on own pending items, or an admin. */
@@ -499,10 +499,10 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
     addLogEntry({ userId: user.id, userName: user.name, action: `Requested ${item.name}`, category: 'wishlist', details: `${item.supplier} ${item.catalogNumber}` });
   }, [user, addLogEntry, track]);
 
-  const updateWishlistStatus = useCallback((id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId' | 'piComment'>>) => {
+  const updateWishlistStatus = useCallback((id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId' | 'piComment' | 'approvedBy'>>) => {
     setWishlist(prev => {
       const updated = prev.map(w => w.id === id ? {
-        ...w, status, approvedBy: approvedBy || w.approvedBy,
+        ...w, status, approvedBy: extra && 'approvedBy' in extra ? extra.approvedBy : (approvedBy || w.approvedBy),
         deliveredAt: status === 'delivered' ? new Date().toISOString() : w.deliveredAt,
         ...(extra || {}),
       } : w);

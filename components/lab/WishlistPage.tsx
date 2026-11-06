@@ -389,10 +389,17 @@ export default function WishlistPage() {
                   </button>
                 )}
                 <button
-                  onClick={() => updateWishlistStatus(item.id, 'rejected', user.name)}
+                  onClick={() => confirmDelete('Reject this request?', `"${item.name}" (${item.requestedByName}) will be marked as rejected. You can reopen it later from the Rejected list.`, () => updateWishlistStatus(item.id, 'rejected', user.name), 'Reject')}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors"
                 >
                   <XCircle size={14} /> Reject
+                </button>
+              </div>
+            )}
+            {permissions.canApproveOrders && item.status === 'rejected' && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <button onClick={() => updateWishlistStatus(item.id, 'pending', undefined, { approvedBy: undefined })} className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-gray-50 text-gray-700 text-xs font-medium font-manrope hover:bg-gray-100 transition-colors" title="Put the request back among the pending ones">
+                  <RotateCcw size={14} /> Reopen (back to pending)
                 </button>
               </div>
             )}
