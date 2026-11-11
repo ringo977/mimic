@@ -567,6 +567,7 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const [category, setCategory] = useState<string>('All');
   const [preset, setPreset] = useState<RangePreset>('open');
   const [onlyBooked, setOnlyBooked] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(false);   // show only the user's own bookings
   const [modal, setModal] = useState<ModalState | null>(null);
   const isMobile = useMediaQuery('(max-width: 640px)');
   const { favoriteInstrumentIds, setCurrentPage } = useLabContext();
@@ -584,7 +585,8 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const hourMarks = Array.from({ length: span + 1 }, (_, i) => rangeStart + i);
   const pct = (h: number) => `${((h - rangeStart) / span) * 100}%`;
 
-  const dayBookings = useMemo(() => bookings.filter(b => b.date === ds), [bookings, ds]);
+  const dayBookings = useMemo(() => bookings.filter(b => b.date === ds && (!onlyMine || b.userId === user.id)), [bookings, ds, onlyMine, user.id]);
+  const myDayCount = useMemo(() => bookings.filter(b => b.date === ds && b.userId === user.id).length, [bookings, ds, user.id]);
   const bookedIds = useMemo(() => new Set(dayBookings.map(b => b.instrumentId)), [dayBookings]);
 
   // Categories present among the instruments, in the canonical order
@@ -665,7 +667,16 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
             {c === '★' ? <><Star size={12} fill={category === '★' ? 'currentColor' : 'none'} /> Favourites{favoriteInstrumentIds.length ? ` (${favoriteInstrumentIds.length})` : ''}</> : c === 'All' ? 'All categories' : c}
           </button>
         ))}
-        <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500 font-manrope whitespace-nowrap cursor-pointer pl-2">
+        <button
+          onClick={() => setOnlyMine(v => !v)}
+          aria-pressed={onlyMine}
+          title={onlyMine ? 'Showing only your bookings — click to show everyone' : 'Show only your bookings'}
+          className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all border ${onlyMine ? 'bg-[#102C53] text-white border-transparent' : 'bg-white text-[#102C53] border-[#102C53]/40 hover:bg-[#102C53]/5'}`}
+        >
+          <span className={`w-3 h-3 rounded-sm shrink-0 ${onlyMine ? 'bg-white/90' : 'bg-gray-400 ring-2 ring-inset ring-white'}`} />
+          Your bookings{myDayCount ? ` (${myDayCount})` : ''}
+        </button>
+        <label className="flex items-center gap-1.5 text-[11px] text-gray-500 font-manrope whitespace-nowrap cursor-pointer pl-2">
           <input type="checkbox" checked={onlyBooked} onChange={e => setOnlyBooked(e.target.checked)} className="rounded" /> Only booked
         </label>
       </div>
@@ -755,7 +766,9 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
       </div>
 
       <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#102C53] ring-2 ring-inset ring-white/90" /> Your bookings</span>
+        <button type="button" onClick={() => setOnlyMine(v => !v)} aria-pressed={onlyMine} className={`flex items-center gap-1 rounded px-1 -mx-1 hover:bg-gray-100 ${onlyMine ? 'text-[#102C53] font-semibold' : ''}`} title="Your bookings have a white inner border · click to show only yours">
+          <span className="w-3 h-3 rounded-sm bg-gray-400 ring-2 ring-inset ring-white" /> Your bookings (white border){onlyMine ? ' · only yours shown' : ''}
+        </button>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 2px, transparent 2px 4px)' }} /> Pending authorization</span>
         <span className="flex items-center gap-1"><span className="w-0.5 h-3 bg-red-500" /> Now</span>
@@ -774,6 +787,7 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   const { updateBooking, canManageBookingsOf } = useLabContext();
   const [weekOffset, setWeekOffset] = useState(0);
   const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
+  const [onlyMine, setOnlyMine] = useState(false);   // show only the user's own bookings
   const [preset, setPreset] = useState<RangePreset>('open');
   const [modal, setModal] = useState<ModalState | null>(null);
   const [drag, setDragState] = useState<DragState | null>(null);
@@ -818,7 +832,8 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   const gridHeight = (rangeEnd - rangeStart) * HOUR_PX;
 
   const showAll = activeInstruments.size === 0;
-  const visibleBookings = bookings.filter(b => showAll || activeInstruments.has(b.instrumentId));
+  const visibleBookings = bookings.filter(b => (showAll || activeInstruments.has(b.instrumentId)) && (!onlyMine || b.userId === user.id));
+  const myCount = useMemo(() => bookings.filter(b => b.userId === user.id && days.some(d => localDateStr(d) === b.date)).length, [bookings, user.id, days]);
 
   const slotStep = bookingSettings.slotMinutes / 60;
   const minH = bookingSettings.openStartHour;
@@ -979,8 +994,18 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
       <p className="text-xs text-gray-500 font-manrope mb-3">{weekRangeLabel}</p>
 
       {/* Instrument filter */}
-      {filterInstruments.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
+      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
+          <button
+            onClick={() => setOnlyMine(v => !v)}
+            aria-pressed={onlyMine}
+            title={onlyMine ? 'Showing only your bookings — click to show everyone' : 'Show only your bookings'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all border ${onlyMine ? 'bg-[#102C53] text-white border-transparent' : 'bg-white text-[#102C53] border-[#102C53]/40 hover:bg-[#102C53]/5'}`}
+          >
+            <span className={`w-3 h-3 rounded-sm shrink-0 ${onlyMine ? 'bg-white/90' : 'bg-gray-400 ring-2 ring-inset ring-white'}`} />
+            Your bookings{myCount ? ` (${myCount})` : ''}
+          </button>
+          <span className="w-px bg-gray-200 my-1 shrink-0" />
+          {filterInstruments.length > 0 && <>
           <button
             onClick={() => setActiveInstruments(new Set())}
             className={`px-3 py-1.5 rounded-full text-xs font-medium font-manrope whitespace-nowrap transition-all ${showAll ? 'bg-[#102C53] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
@@ -1001,8 +1026,8 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
               </button>
             );
           })}
-        </div>
-      )}
+          </>}
+      </div>
 
       {/* Time-grid week view */}
       <div className="overflow-x-auto">
@@ -1136,7 +1161,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
         </div>
       )}
       <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-500 font-manrope flex-wrap">
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#102C53] ring-2 ring-inset ring-white/90" /> Your bookings</span>
+        <button type="button" onClick={() => setOnlyMine(v => !v)} aria-pressed={onlyMine} className={`flex items-center gap-1 rounded px-1 -mx-1 hover:bg-gray-100 ${onlyMine ? 'text-[#102C53] font-semibold' : ''}`} title="Your bookings have a white inner border · click to show only yours">
+          <span className="w-3 h-3 rounded-sm bg-gray-400 ring-2 ring-inset ring-white" /> Your bookings (white border){onlyMine ? ' · only yours shown' : ''}
+        </button>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" /> Color = instrument</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-200" /> Outside working hours</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-400" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,0.5) 0 2px, transparent 2px 4px)' }} /> Pending authorization</span>
