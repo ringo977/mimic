@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 import Card from '@/components/ui/Card';
 import ClickToLoadMap from '@/components/ClickToLoadMap';
-import { MapPin, Mail, GraduationCap, Briefcase, FileText, Users, ExternalLink } from 'lucide-react';
-import { APPLICATIONS_EMAIL, CONTACT_EMAIL } from '@/lib/site-contacts';
+import { MapPin, GraduationCap, Briefcase, FileText, Users, ExternalLink } from 'lucide-react';
+import { APPLICATIONS_EMAIL } from '@/lib/site-contacts';
 
 export const metadata: Metadata = {
   title: 'Contact & Join Us | MiMic Lab',
@@ -262,47 +262,24 @@ export default function ContactPage() {
             Find Us
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto mb-10">
-            <Card>
-              <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 bg-polimi-bright-blue/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <MapPin className="text-polimi-bright-blue" size={24} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg text-polimi-blue-heritage mb-2">
-                    Lab Address
-                  </h3>
-                  <p className="text-gray-700 text-sm">
-                    MiMic Lab<br />
-                    Department of Electronics, Information and Bioengineering<br />
-                    Politecnico di Milano<br />
-                    Building 21<br />
-                    Via Camillo Golgi 39<br />
-                    20133 Milano, Italy
-                  </p>
-                </div>
+          <div className="max-w-xl mx-auto mb-10">
+            <Card className="text-center">
+              <div className="w-14 h-14 bg-polimi-bright-blue/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="text-polimi-bright-blue" size={28} />
               </div>
-            </Card>
-
-            <Card>
-              <div className="flex items-start space-x-4">
-                <div className="w-12 h-12 bg-polimi-bright-blue/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Mail className="text-polimi-bright-blue" size={24} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-lg text-polimi-blue-heritage mb-2">
-                    Email
-                  </h3>
-                  <p className="text-gray-700 text-sm">
-                    <a href={`mailto:${CONTACT_EMAIL}`} className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
-                      {CONTACT_EMAIL}
-                    </a>
-                  </p>
-                </div>
-              </div>
+              <h3 className="font-semibold text-lg text-polimi-blue-heritage mb-3">
+                Lab Address
+              </h3>
+              <address className="not-italic text-gray-700 text-sm leading-relaxed">
+                <span className="block font-semibold text-polimi-blue-heritage">MiMic Lab</span>
+                Department of Electronics, Information and Bioengineering<br />
+                Politecnico di Milano<br />
+                Building 21, Via Camillo Golgi 39<br />
+                20133 Milano, Italy
+              </address>
             </Card>
           </div>
-          
+
           <div className="w-full h-96 bg-polimi-gray rounded-xl overflow-hidden max-w-5xl mx-auto">
             {/* Google Maps loads only after an explicit click (GDPR: no
                 third-party cookies without consent) */}
