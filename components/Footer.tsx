@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import FooterLinks from './FooterLinks';
 import { siteBasePath } from '@/lib/site-base-path';
-import { CONTACT_EMAIL, LINKEDIN_URL } from '@/lib/site-contacts';
+import { LINKEDIN_URL } from '@/lib/site-contacts';
 
 const quickLinks = [
   { href: '/', label: 'Home' },
@@ -38,8 +38,7 @@ export default function Footer() {
                 height={1010}
                 loading="lazy"
                 decoding="async"
-                className="max-w-full h-auto"
-                style={{ maxHeight: '240px' }}
+                className="block w-auto h-auto max-w-full max-h-[240px] object-contain" 
               />
             </div>
             <p className="text-sm text-white/80 leading-relaxed font-manrope">
@@ -79,14 +78,6 @@ export default function Footer() {
               <p>Building 21</p>
               <p>Via Camillo Golgi 39</p>
               <p>20133 Milano, Italy</p>
-              <p>
-                <a 
-                  href={`mailto:${CONTACT_EMAIL}`}
-                  className="hover:text-polimi-bright-blue transition-colors"
-                >
-                  {CONTACT_EMAIL}
-                </a>
-              </p>
             </address>
             <div className="mt-4">
               <a
