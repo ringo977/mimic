@@ -116,8 +116,8 @@ export default function ContactPage() {
               <p className="text-gray-700 text-sm mb-4">
                 We welcome master students to conduct their thesis research in our lab.
                 For general inquiries, contact us at{' '}
-                <a href={`mailto:${CONTACT_EMAIL}`} className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
-                  {CONTACT_EMAIL}
+                <a href={`mailto:${APPLICATIONS_EMAIL}`} className="text-polimi-bright-blue hover:text-polimi-alpha-blue font-medium">
+                  {APPLICATIONS_EMAIL}
                 </a>.
                 If you are a Politecnico di Milano student, we invite you to fill out our{' '}
                 <a
