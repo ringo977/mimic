@@ -86,7 +86,11 @@ function canonSpecies(s: string): string {
 
 const FLUOR_RE = /(Alexa\s*Fluor[™®]?\s*(?:Plus\s*)?\d{3}|AF-?\d{3}|DyLight[™®]?\s*\d{3}|CF[™®]?\s*\d{3}|Cy\s?[357](?:\.5)?|FITC|TRITC|APC(?:[-/]Cy7)?|PE(?:[-/]Cy7)?|HRP|Biotin|Texas Red|Pacific Blue|Brilliant Violet \d{3})/i;
 const cleanIso = (x: string) => x.replace(/\s*\bk$/i, '').replace(/\(H\+L\)/i, '(H+L)').trim();   // "IgG1 k" → "IgG1"
-const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').replace(/\s*(Mono|Poly)clo(?:nal|an) Antibody/gi, '').replace(/\s+/g, ' ').trim();   // "CD31 Monoclonal Antibody" → "CD31"
+const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').replace(/\s*(Mono|Poly)clo(?:nal|an) Antibody/gi, '').replace(/\s+/g, ' ').trim().replace(/\s+antibody$/i, '');   // "CD31 Monoclonal Antibody" → "CD31", "CXCR6 Antibody" → "CXCR6"
+
+// "<antigen> (<clone>) <host> [mAb]" at the end of a name without the lab suffix. The clone must
+// look like one (no spaces, a digit: C51, D21H3, 1A4), and never Human: that is a reactivity, not a host.
+const TAIL_RE = /^(.+?)\s*\(([A-Za-z0-9./-]*\d[A-Za-z0-9./-]*)\)\s*(?:XP®?\s*)?(Mouse|Rabbit|Rat|Chicken|Goat|Donkey|Sheep|Guinea Pig|Hamster)(?:\s+(?:mAb|pAb|antibody))?\s*$/i;
 
 /**
  * Split the lab suffix "[Host · Ig · clone …]". The separator is meant to be
@@ -109,6 +113,7 @@ function splitSuffix(inner: string): string[] {
  *   "N-cadherin [Mouse · IgG1 k · AF-647 · clone D4]"                                                    → conjugated primary
  *   "Phalloidin 546 [N/A · N/A · AF-546]", "DAPI", "Hoechst 33342"                                       → dye
  *   "APC anti-human CD34 [FACS · APC · clone 581]"                                                        → facs
+ *   "CD163 [OTI2G12_Mouse_IgG1]", "Keratin 8/18 (C51) Mouse"                                             → primary
  * Returns null when nothing is recognised.
  */
 export function parseAntibody(name: string): AntibodyInfo | null {
@@ -144,10 +149,18 @@ export function parseAntibody(name: string): AntibodyInfo | null {
     if (!host && !isotype && !fluor) return null;
     return { kind: 'secondary', host, target: antiSpecies, isotype: cleanIso(isotype), fluorophore: fluor ? normalizeFluorophore(fluor) : '', antigen: '', clone: '' };
   }
-  // Primary: "[Host · Ig · clone …]" suffix, or at least a species in it
-  if (parts.length > 0 && SPECIES.includes(canonSpecies(parts[0]))) {
-    return { kind: 'primary', host: canonSpecies(parts[0]), target: '', isotype: cleanIso(partIso), fluorophore: partFluor ? normalizeFluorophore(partFluor) : '', antigen: head.replace(/^anti-\s?/i, ''), clone: partClone };
+  // Primary: "[Host · Ig · clone …]" suffix, or at least a species somewhere in it
+  // ("[OTI2G12_Mouse_IgG1]": the clone first). A part that is neither species,
+  // Ig class nor fluorophore is taken as the clone when none is spelled out.
+  const isSpecies = (x: string) => SPECIES.includes(canonSpecies(x));
+  const partHost = parts.find(isSpecies);
+  if (partHost) {
+    const rest = parts.find(x => x && x !== partFluor && !isSpecies(x) && !/^Ig[GAMYE]/i.test(x) && !/^clone\b/i.test(x) && !/^(n\/a|facs)$/i.test(x)) || '';
+    return { kind: 'primary', host: canonSpecies(partHost), target: '', isotype: cleanIso(partIso), fluorophore: partFluor ? normalizeFluorophore(partFluor) : '', antigen: head.replace(/^anti-\s?/i, ''), clone: partClone || rest };
   }
+  // No suffix, supplier style: "Keratin 8/18 (C51) Mouse mAb" → host and clone, Ig class unknown
+  const tail = br ? null : head.match(TAIL_RE);
+  if (tail) return { kind: 'primary', host: canonSpecies(tail[3]), target: '', isotype: '', fluorophore: '', antigen: tail[1].trim().replace(/^anti-\s?/i, ''), clone: tail[2].trim() };
   return null;
 }
 /** @deprecated use parseAntibody */

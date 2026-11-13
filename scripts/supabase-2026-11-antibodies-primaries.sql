@@ -25,8 +25,10 @@ UPDATE reagents SET antibody = jsonb_set(antibody, '{antigen}', to_jsonb(trim(re
 
 -- 2. Backfill the rest
 WITH src AS (
-  SELECT id, name,
-         regexp_replace(regexp_replace(regexp_replace(name, '\s*\[[^\]]*\]\s*$', ''), '\s*\((STOCK|sample)\)', '', 'gi'), '\s*(Mono|Poly)clo(nal|an) Antibody', '', 'gi') AS head,
+  SELECT id, name, category,
+         -- "CD31 Monoclonal Antibody" → "CD31", "CXCR6 Antibody" → "CXCR6"
+         regexp_replace(trim(regexp_replace(regexp_replace(regexp_replace(name, '\s*\[[^\]]*\]\s*$', ''), '\s*\((STOCK|sample)\)', '', 'gi'), '\s*(Mono|Poly)clo(nal|an) Antibody', '', 'gi')),
+                        '\s+antibody$', '', 'i') AS head,
          -- separators: the middle dot, but also "_", ",", ";", "|", " - ", " / " and a plain space
          -- between species and Ig class ("[Rabbit_IgG]", "[Rabbit IgG]") — 13/11/2026
          coalesce((SELECT array_agg(trim(x)) FROM unnest(regexp_split_to_array(
@@ -38,20 +40,33 @@ WITH src AS (
      -- secondaries belong to supabase-2026-11-secondary-antibodies.sql (run it first)
      AND NOT (name ~* 'anti-\s?(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)\M'
               AND name ~* '\mIg[GAMYE]' AND name !~* 'anti-\s?[a-z]+(?: pig)?\s+CD\d')
-), cls AS (
+), prt AS (
   SELECT *,
          (SELECT x FROM unnest(parts) x WHERE x !~* '^clone' AND x ~* '^(alexa|AF-?\d{3}|dylight|CF\s?\d{3}|cy\s?[357]|fitc|tritc|apc|pe\M|hrp|biotin|texas red|pacific blue|brilliant violet|dapi|hoechst)' LIMIT 1) AS p_fluor,
          (SELECT regexp_replace(x, '^clone\s*', '', 'i') FROM unnest(parts) x WHERE x ~* '^clone\M' LIMIT 1)                                                     AS p_clone,
          (SELECT x FROM unnest(parts) x WHERE x ~* '^Ig[GAMYE]' LIMIT 1)                                                                                        AS p_iso,
+         -- the species may come in any position ("[OTI2G12_Mouse_IgG1]": the clone first) — 13/11/2026
+         (SELECT initcap(x) FROM unnest(parts) x WHERE x ~* '^(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)$' LIMIT 1)                                                                                AS p_host,
+         -- a part that is neither species, Ig class nor fluorophore: the clone, when none is spelled out
+         (SELECT x FROM unnest(parts) x WHERE x <> '' AND x !~* '^(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)$' AND x !~* '^Ig[GAMYE]' AND x !~* '^clone\M' AND x !~* '^(n/a|facs)$'
+                                          AND x !~* '^(alexa|AF-?\d{3}|dylight|CF\s?\d{3}|cy\s?[357]|fitc|tritc|apc|pe\M|hrp|biotin|texas red|pacific blue|brilliant violet|dapi|hoechst)' LIMIT 1)                                                                                         AS p_rest,
+         -- no suffix, supplier style, antibody categories only: "Keratin 8/18 (C51) Mouse mAb" → antigen, clone, host
+         -- (the clone must look like one: no spaces, a digit)
+         CASE WHEN category ILIKE '%antibod%' AND name !~ '\[[^\]]+\]\s*$' THEN
+           regexp_match(head, '^(.+?)\s*\(([A-Za-z0-9./-]*\d[A-Za-z0-9./-]*)\)\s*(?:XP®?\s*)?(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster)(?:\s+(?:mAb|pAb|antibody))?\s*$', 'i')
+         END AS tail
+    FROM src
+), cls AS (
+  SELECT *,
          CASE
            WHEN head ~* '\m(phalloidin|dapi|hoechst|draq\d|sytox|nucblue|propidium|to-pro|wga)\M' OR upper(parts[1]) = 'N/A' THEN 'dye'
            WHEN upper(parts[1]) = 'FACS' OR name ~* 'anti-\s?[a-z]+(?: pig)?\s+CD\d' THEN 'facs'
-           WHEN parts[1] ~* '^(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)$' THEN 'primary'
+           WHEN p_host IS NOT NULL OR tail IS NOT NULL THEN 'primary'
          END AS kind
-    FROM src
+    FROM prt
 ), parsed AS (
   SELECT id, kind,
-         CASE WHEN kind = 'primary' THEN initcap(parts[1]) ELSE '' END AS host,
+         CASE WHEN kind = 'primary' THEN coalesce(p_host, initcap(tail[3])) ELSE '' END AS host,
          CASE WHEN kind = 'primary' THEN regexp_replace(regexp_replace(coalesce(p_iso, ''), '\s*\mk$', '', 'i'), '\(h\+l\)', '(H+L)', 'i') ELSE '' END AS isotype,
          CASE
            WHEN kind = 'dye' AND p_fluor IS NULL AND head ~* 'phalloidin\s*\d{3}' THEN 'AF-' || substring(head FROM '(?i)phalloidin\s*(\d{3})')
@@ -68,10 +83,11 @@ WITH src AS (
            WHEN kind = 'dye' AND head ~* 'phalloidin' THEN 'F-actin'
            WHEN kind = 'dye' AND head ~* 'dapi|hoechst|draq|sytox|nucblue|propidium|to-pro' THEN 'Nuclei'
            WHEN kind = 'dye' AND head ~* '\mwga\M' THEN 'Membranes (WGA)'
-           WHEN kind = 'primary' THEN regexp_replace(head, '^anti-\s?', '', 'i')
+           WHEN kind = 'primary' THEN regexp_replace(trim(CASE WHEN p_host IS NULL THEN tail[1] ELSE head END), '^anti-\s?', '', 'i')
            ELSE head
          END AS antigen,
-         CASE WHEN kind IN ('primary', 'facs') THEN coalesce(p_clone, '') ELSE '' END AS clone
+         CASE WHEN kind = 'primary' THEN coalesce(nullif(p_clone, ''), CASE WHEN p_host IS NULL THEN trim(tail[2]) ELSE p_rest END, '')
+              WHEN kind = 'facs' THEN coalesce(p_clone, '') ELSE '' END AS clone
     FROM cls WHERE kind IS NOT NULL
 )
 UPDATE reagents r
