@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { X, Save, Wand2 } from 'lucide-react';
-import { parseAntibody, fluorophoreBand, emissionBandMeta, AntibodyInfo, AntibodyKind, antibodyKindMeta, emptyAntibody, abKind } from '@/lib/antibodies';
+import { parseAntibody, fluorophoreBand, emissionBandMeta, AntibodyInfo, AntibodyKind, antibodyKindMeta, emptyAntibody, abKind, panelStatus } from '@/lib/antibodies';
 import { useLabContext } from './LabContext';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import {
@@ -85,7 +85,10 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
     const maxStock = rawMax > 0 ? Math.max(rawMax, currentStock) : 0;
     const kind: ReagentKind = form.kind ?? 'item';
     // Antibody block: dropped when every field is empty
-    const fa = form.antibody;
+    // Nothing filled in on an antibody / dye: read it from the name, so a new
+    // order enters the IF panel without anyone having to remember the button.
+    const filled = (x?: AntibodyInfo) => !!x && [x.host, x.target, x.isotype, x.fluorophore, x.antigen, x.clone].some(v => (v || '').trim());
+    const fa = filled(form.antibody) ? form.antibody : (isAbCategory ? parseAntibody(form.name) ?? form.antibody : form.antibody);
     const abClean = fa && [fa.host, fa.target, fa.isotype, fa.fluorophore, fa.antigen, fa.clone].some(v => (v || '').trim())
       ? { kind: abKind(fa), host: fa.host.trim(), target: abKind(fa) === 'secondary' ? fa.target.trim() : '', isotype: fa.isotype.trim(), fluorophore: fa.fluorophore.trim(), antigen: abKind(fa) === 'secondary' ? '' : (fa.antigen || '').trim(), clone: abKind(fa) === 'secondary' || abKind(fa) === 'dye' ? '' : (fa.clone || '').trim() }
       : undefined;
@@ -228,6 +231,16 @@ export default function ReagentFormModal({ initial, defaultCategory, categories,
               <datalist id="ab-targets">{abOptions.targets.map(x => <option key={x} value={x} />)}</datalist>
               <datalist id="ab-isotypes">{abOptions.isotypes.map(x => <option key={x} value={x} />)}</datalist>
               <datalist id="ab-fluors">{abOptions.fluors.map(x => <option key={x} value={x} />)}</datalist>
+              {(() => {
+                const has = [ab.host, ab.target, ab.isotype, ab.fluorophore, ab.antigen, ab.clone].some(v => (v || '').trim());
+                const guess = has ? null : parseAntibody(form.name);
+                const st = panelStatus(has ? ab : guess);
+                return <p className={`text-[11px] font-manrope px-2 py-1 rounded-lg ${st.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                  {has ? st.note
+                    : guess ? `Read from the name on save. ${st.note}`
+                    : 'Not in the IF panel yet: fill in the fields below, or end the name with [Host · Ig type · clone], e.g. "MMP13 Polyclonal Antibody [Rabbit · IgG]".'}
+                </p>;
+              })()}
               <p className="text-[10px] text-gray-400 font-manrope">
                 {abBand ? `Emission band: ${emissionBandMeta[abBand].label} (${emissionBandMeta[abBand].hint}). ` : kind === 'primary' ? 'Species and Ig type let the panel builder pick a compatible secondary. ' : 'The band (blue, green, red, far-red, ultra-far-red) is worked out from the fluorophore. '}
                 {kind === 'facs' ? 'FACS conjugates are never proposed in immunofluorescence panels.' : 'Clear every field for a plain consumable.'}

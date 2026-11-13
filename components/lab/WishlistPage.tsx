@@ -6,6 +6,7 @@ import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem } from '@/data/lab-data';
 import { downloadCSV } from '@/lib/csv';
+import { parseAntibody, isAntibodyCategory, panelStatus } from '@/lib/antibodies';
 
 const urgencyColors = {
   low: 'bg-gray-100 text-gray-600',
@@ -159,7 +160,7 @@ export default function WishlistPage() {
     setSName(item.name);
     // Must be an existing sub-category (see reagentMacroCategories), otherwise
     // the new reagent is invisible in the admin tabs.
-    setSCategory(item.type === 'antibody' ? 'Primary Antibodies' : item.type === 'consumable' ? 'Plasticware' : 'Cell Culture');
+    setSCategory(item.type === 'antibody' ? (parseAntibody(item.name)?.kind === 'secondary' ? 'Secondary Antibodies' : 'Primary Antibodies') : item.type === 'consumable' ? 'Plasticware' : 'Cell Culture');
     setSSupplier(item.supplier);
     setSCatalog(item.catalogNumber);
     setSUnit('units');
@@ -191,6 +192,7 @@ export default function WishlistPage() {
       // Create new reagent from editable fields
       if (!sName) return;
       const su = storageUnits.find(s => s.id === stockUnitId);
+      const stockedAb = parseAntibody(sName);
       const newReagent: Reagent = {
         id: generateId(),
         name: sName,
@@ -204,6 +206,9 @@ export default function WishlistPage() {
         supplier: sSupplier,
         catalogNumber: sCatalog,
         alertThreshold: sAlert > 0 ? sAlert : 1,
+        // Antibodies and dyes: species / Ig / fluorophore read from the name, so
+        // a delivered order is in the IF panel straight away (when the name allows it)
+        antibody: (isAntibodyCategory(sCategory) || stockedAb?.kind === 'dye') ? stockedAb ?? undefined : undefined,
       };
       addNewReagent(newReagent);
       stockedReagentId = newReagent.id;
@@ -604,6 +609,12 @@ export default function WishlistPage() {
                       <datalist id="scat">{Array.from(new Set(reagents.map(r => r.category))).map(c => <option key={c} value={c} />)}</datalist>
                     </div>
                   </div>
+                  {isAntibodyCategory(sCategory) && (() => {
+                    const g = parseAntibody(sName); const st = panelStatus(g);
+                    return <p className={`text-[11px] font-manrope px-2 py-1 rounded-lg ${g && st.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                      {g ? st.note : 'For the IF panel, end the name with [Host · Ig type · clone], e.g. "MMP13 Polyclonal Antibody [Rabbit · IgG]" — or add the details later from Stock → Edit.'}
+                    </p>;
+                  })()}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] font-medium text-gray-600 mb-0.5 font-manrope">Supplier</label>

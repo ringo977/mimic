@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Search, AlertTriangle, Plus, Minus, X, Package, LayoutGrid, Refrigerator, Lock, FlaskConical, Users, Pencil, History, GraduationCap, QrCode, TrendingDown, Palette } from 'lucide-react';
 import AntibodyPanelModal from './AntibodyPanelModal';
-import { EMISSION_BANDS, emissionBandMeta, fluorophoreBand, antibodyMatches, antibodyOptions, AntibodyFilter, AntibodyKind, antibodyKindMeta, abKind } from '@/lib/antibodies';
+import { EMISSION_BANDS, emissionBandMeta, fluorophoreBand, antibodyMatches, antibodyOptions, AntibodyFilter, AntibodyKind, antibodyKindMeta, abKind, panelStatus, isAntibodyCategory } from '@/lib/antibodies';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import ReagentFormModal from './ReagentFormModal';
@@ -105,6 +105,9 @@ export default function ReagentsPage() {
     return ['All', ...Array.from(new Set(reagents.map(r => r.category)))];
   }, [reagents]);
 
+  // Antibodies / dyes the IF panel cannot use (no details, or a key field missing)
+  const [abMissing, setAbMissing] = useState(false);
+  const notInPanel = (r: Reagent) => (isAntibodyCategory(r.category) || !!r.antibody) && !panelStatus(r.antibody).ok;
   const abActive = !!(abFilter.kind || abFilter.host || abFilter.target || abFilter.isotype || abFilter.band);
   const filtered = useMemo(() => {
     return reagents.filter(r => {
@@ -121,11 +124,12 @@ export default function ReagentsPage() {
         || (!!ab && ((!!ab.target && `anti-${ab.target}`.toLowerCase().includes(q)) || ab.host.toLowerCase() === q || ab.isotype.toLowerCase().replace(/\s/g, '') === q.replace(/\s/g, '') || ab.fluorophore.toLowerCase().includes(q)
             || (ab.antigen || '').toLowerCase().includes(q) || (!!ab.clone && ab.clone.toLowerCase() === q.replace(/^clone\s*/, '')) || (!!band && emissionBandMeta[band].label.toLowerCase().replace('-', '') === q.replace(/[-\s]/g, ''))));
       const matchAb = !abActive || antibodyMatches(ab, abFilter);
-      return matchCat && matchKind && matchSearch && matchAb;
+      return matchCat && matchKind && matchSearch && matchAb && (!abMissing || notInPanel(r));
     });
-  }, [reagents, selectedCategory, selectedKind, search, users, abFilter, abActive]);
+  }, [reagents, selectedCategory, selectedKind, search, users, abFilter, abActive, abMissing]);
   // Antibody filter row: shown when the current category holds secondaries
   const abInScope = useMemo(() => reagents.filter(r => r.antibody && (selectedCategory === 'All' || r.category === selectedCategory)), [reagents, selectedCategory]);
+  const abMissingInScope = useMemo(() => reagents.filter(r => notInPanel(r) && (selectedCategory === 'All' || r.category === selectedCategory)).length, [reagents, selectedCategory]);
   const abOpts = useMemo(() => antibodyOptions(abInScope.map(r => r.antibody)), [abInScope]);
 
   const modalReagent = modal ? reagents.find(r => r.id === modal.reagentId) : null;
@@ -233,7 +237,7 @@ export default function ReagentsPage() {
       </div>
 
       {/* Secondary antibodies: host / target / Ig type / band + panel builder */}
-      {abInScope.length > 0 && (
+      {(abInScope.length > 0 || abMissingInScope > 0) && (
         <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-white border border-gray-100">
           <span className="text-[11px] font-semibold text-gray-600 font-manrope mr-1">Antibodies</span>
           <select value={abFilter.kind ?? ''} onChange={e => setAbFilter({ ...abFilter, kind: e.target.value as AntibodyKind | '' })} className="px-2 py-1 rounded-lg border border-gray-200 text-[11px] font-manrope bg-white" aria-label="Kind">
@@ -259,6 +263,13 @@ export default function ReagentsPage() {
             })}
           </div>
           {abActive && <button onClick={() => setAbFilter({ kind: '', host: '', target: '', isotype: '', band: '' })} className="text-[10px] text-gray-500 hover:text-gray-800 font-manrope underline">clear</button>}
+          {(abMissingInScope > 0 || abMissing) && (
+            <button onClick={() => setAbMissing(!abMissing)} aria-pressed={abMissing}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium font-manrope ${abMissing ? 'bg-amber-500 border-amber-500 text-white' : 'border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100'}`}
+              title="Antibodies and dyes without species / Ig type / fluorophore: the panel builder cannot use them. Edit them to add the details.">
+              <AlertTriangle size={10} /> {abMissingInScope} not in the IF panel
+            </button>
+          )}
           <button onClick={() => setShowPanel(true)} className="ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#102C53] text-white text-[11px] font-medium font-manrope hover:bg-[#1a3d6e]" title="Pick primaries and dyes, get matching secondaries on distinct colours">
             <Palette size={12} /> Build a panel
           </button>
@@ -308,6 +319,9 @@ export default function ReagentsPage() {
                       {ab.fluorophore && <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold flex items-center gap-1" style={m ? { background: m.bg, color: m.text } : { background: '#f3f4f6', color: '#374151' }} title={m ? `${m.label} · ${m.hint}` : undefined}>
                         {m && <span className="w-2 h-2 rounded-full" style={{ background: m.color }} />}{ab.fluorophore}
                       </span>}
+                      {notInPanel(r) && (canEdit(r)
+                        ? <button onClick={() => setEditForm({ reagent: r })} className="px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium hover:bg-amber-100" title={`${panelStatus(r.antibody).note} Click to add the details.`}>not in IF panel</button>
+                        : <span className="px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium" title={panelStatus(r.antibody).note}>not in IF panel</span>)}
                     </h3>
                     <p className="text-[10px] text-gray-400 font-manrope mt-0.5 truncate" title={r.name}>{r.name.replace(/\s*\[[^\]]*\]\s*$/, '')}</p>
                     <p className="text-[10px] text-gray-400 font-mono">{r.supplier} &middot; {r.catalogNumber}</p>
@@ -316,6 +330,9 @@ export default function ReagentsPage() {
                 <h3 className="text-sm font-semibold text-gray-900 font-manrope truncate flex items-center gap-1.5">
                   <KindBadge kind={r.kind} open={r.openToStudents} />
                   <span className="truncate">{r.name}</span>
+                  <span className="shrink-0">{notInPanel(r) && (canEdit(r)
+                        ? <button onClick={() => setEditForm({ reagent: r })} className="px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium hover:bg-amber-100" title={`${panelStatus(r.antibody).note} Click to add the details.`}>not in IF panel</button>
+                        : <span className="px-1.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium" title={panelStatus(r.antibody).note}>not in IF panel</span>)}</span>
                 </h3>
                 <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.supplier} &middot; {r.catalogNumber}</p>
                 </>}

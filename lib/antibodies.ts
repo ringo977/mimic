@@ -89,6 +89,20 @@ const cleanIso = (x: string) => x.replace(/\s*\bk$/i, '').replace(/\(H\+L\)/i, '
 const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').replace(/\s*(Mono|Poly)clo(?:nal|an) Antibody/gi, '').replace(/\s+/g, ' ').trim();   // "CD31 Monoclonal Antibody" → "CD31"
 
 /**
+ * Split the lab suffix "[Host · Ig · clone …]". The separator is meant to be
+ * the middle dot, but people also type "_", ",", ";", "|", " - ", " / " or
+ * just a space ("[Rabbit_IgG]", "[Rabbit IgG]"). Not split: "/", "-" and "."
+ * without spaces, which occur inside clone and dye names (JC/70A, DECMA-1, 9.2.27, AF-488, N/A).
+ */
+function splitSuffix(inner: string): string[] {
+  const parts = inner.split(/\s*[·•∙‧・_,;|]\s*|\s+[-–/]\s+/).map(x => x.trim());
+  const first = (parts[0] || '').toLowerCase();
+  const sp = SPECIES.find(x => first.startsWith(x.toLowerCase() + ' '));
+  if (sp) parts.splice(0, 1, parts[0].slice(0, sp.length), parts[0].slice(sp.length).trim());   // "Rabbit IgG" → Rabbit, IgG
+  return parts;
+}
+
+/**
  * Best-effort parse of a commercial name, e.g.
  *   "Goat anti-Mouse IgG1 Cross-Adsorbed Secondary Antibody, Alexa Fluor™ 488 [Goat · IgG1 k · AF-488]"   → secondary
  *   "Alfa Smooth Muscle Actin (aSMA) [Mouse · IgG2a k · clone 1A4]"                                     → primary
@@ -100,7 +114,7 @@ const cleanAntigen = (x: string) => x.replace(/\s*\((STOCK|sample)\)/gi, '').rep
 export function parseAntibody(name: string): AntibodyInfo | null {
   const n = name.replace(/\s+/g, ' ').trim();
   const br = n.match(/\[([^\]]+)\]\s*$/);
-  const parts = br ? br[1].split('·').map(x => x.trim()) : [];
+  const parts = br ? splitSuffix(br[1]) : [];
   const head = cleanAntigen(br ? n.slice(0, br.index) : n);
   const partFluor = parts.find(x => FLUOR_RE.test(x) && !/^clone/i.test(x)) || '';
   const partClone = (parts.find(x => /^clone\b/i.test(x)) || '').replace(/^clone\s*/i, '');
@@ -138,6 +152,31 @@ export function parseAntibody(name: string): AntibodyInfo | null {
 }
 /** @deprecated use parseAntibody */
 export const parseSecondaryAntibody = parseAntibody;
+
+/** Stock categories whose items are expected to carry antibody data (and so to show up in the IF panel). */
+export const isAntibodyCategory = (category: string | undefined | null) => /antibod/i.test(category || '');
+
+/**
+ * What the IF panel builder can do with an item. `missing` lists the fields
+ * without which it is left out (or cannot be matched to a secondary).
+ *  - primary:   needs the host species (or a conjugate with a known band)
+ *  - secondary: needs the target species and a fluorophore with a known band
+ *  - dye:       needs a fluorophore with a known band
+ *  - FACS:      never proposed, by design
+ */
+export function panelStatus(ab: AntibodyInfo | null | undefined): { ok: boolean; missing: string[]; note: string } {
+  if (!ab) return { ok: false, missing: ['antibody details'], note: 'No antibody details: not in the IF panel.' };
+  const k = abKind(ab); const band = fluorophoreBand(ab.fluorophore);
+  const missing: string[] = [];
+  if (k === 'facs') return { ok: true, missing, note: 'FACS conjugate: left out of IF panels on purpose.' };
+  if (k === 'primary') { if (!ab.host && !band) missing.push('host species'); }
+  else if (k === 'secondary') { if (!ab.target) missing.push('target species (anti-…)'); if (!band) missing.push(ab.fluorophore ? 'a fluorophore with a known colour' : 'fluorophore'); }
+  else if (!band) missing.push(ab.fluorophore ? 'a fluorophore with a known colour' : 'fluorophore');
+  if (missing.length) return { ok: false, missing, note: `Not usable in the IF panel: missing ${missing.join(' and ')}.` };
+  const what = k === 'primary' ? `primary${ab.host ? ` (${[ab.host, ab.isotype].filter(Boolean).join(' ')})` : ''}${band ? `, conjugated ${ab.fluorophore}` : ''}`
+    : k === 'secondary' ? `secondary (${antibodyShortLabel(ab)})` : `dye (${ab.fluorophore})`;
+  return { ok: true, missing, note: `In the IF panel as ${what}.` };
+}
 
 /** Empty record of a given kind (form default). */
 export const emptyAntibody = (kind: AntibodyKind = 'secondary'): AntibodyInfo => ({ kind, host: '', target: '', isotype: '', fluorophore: '', antigen: '', clone: '' });

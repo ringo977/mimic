@@ -27,9 +27,17 @@ UPDATE reagents SET antibody = jsonb_set(antibody, '{antigen}', to_jsonb(trim(re
 WITH src AS (
   SELECT id, name,
          regexp_replace(regexp_replace(regexp_replace(name, '\s*\[[^\]]*\]\s*$', ''), '\s*\((STOCK|sample)\)', '', 'gi'), '\s*(Mono|Poly)clo(nal|an) Antibody', '', 'gi') AS head,
-         coalesce((SELECT array_agg(trim(x)) FROM unnest(string_to_array(substring(name FROM '\[([^\]]+)\]\s*$'), '·')) x), '{}'::text[]) AS parts
+         -- separators: the middle dot, but also "_", ",", ";", "|", " - ", " / " and a plain space
+         -- between species and Ig class ("[Rabbit_IgG]", "[Rabbit IgG]") — 13/11/2026
+         coalesce((SELECT array_agg(trim(x)) FROM unnest(regexp_split_to_array(
+           regexp_replace(substring(name FROM '\[([^\]]+)\]\s*$'),
+                          '^\s*(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)\s+(Ig)', '\1·\2', 'i'),
+           '\s*[·•∙‧・_,;|]\s*|\s+[-–/]\s+')) x), '{}'::text[]) AS parts
     FROM reagents
    WHERE antibody IS NULL
+     -- secondaries belong to supabase-2026-11-secondary-antibodies.sql (run it first)
+     AND NOT (name ~* 'anti-\s?(mouse|rabbit|rat|chicken|goat|donkey|sheep|guinea pig|hamster|human|horse|bovine|llama|alpaca)\M'
+              AND name ~* '\mIg[GAMYE]' AND name !~* 'anti-\s?[a-z]+(?: pig)?\s+CD\d')
 ), cls AS (
   SELECT *,
          (SELECT x FROM unnest(parts) x WHERE x !~* '^clone' AND x ~* '^(alexa|AF-?\d{3}|dylight|CF\s?\d{3}|cy\s?[357]|fitc|tritc|apc|pe\M|hrp|biotin|texas red|pacific blue|brilliant violet|dapi|hoechst)' LIMIT 1) AS p_fluor,
@@ -82,3 +90,13 @@ SELECT antibody ->> 'kind' AS kind, antibody ->> 'antigen' AS antigen, antibody 
        antibody ->> 'clone' AS clone, antibody ->> 'fluorophore' AS fluorophore, current_stock, name
   FROM reagents WHERE antibody ->> 'kind' IN ('primary', 'dye')
  ORDER BY 1, 2;
+
+-- Last (the one the SQL Editor shows): everything in the antibody categories,
+-- with the rows the IF panel cannot use on top ("NOT in panel": nothing was
+-- recognised in the name). Fix those from the app (Stock → Edit → Antibody /
+-- dye), or correct the name suffix to "[Host · Ig · clone …]" and re-run.
+SELECT CASE WHEN antibody IS NULL THEN 'NOT in panel' ELSE antibody ->> 'kind' END AS panel,
+       name, category, antibody ->> 'host' AS host, antibody ->> 'isotype' AS isotype, antibody ->> 'fluorophore' AS fluorophore
+  FROM reagents
+ WHERE antibody IS NOT NULL OR category ILIKE '%antibod%'
+ ORDER BY (antibody IS NULL) DESC, 1, 2;

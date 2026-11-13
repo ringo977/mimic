@@ -24,7 +24,8 @@ COMMENT ON COLUMN reagents.antibody IS 'Secondary antibody: {host, target, isoty
 -- Backfill
 WITH src AS (
   SELECT id, name,
-         substring(name FROM '\[([^\]]+)\]\s*$')                              AS suffix,
+         -- other separators people type ("_", ",", ";", "|", " - ", " / ") count as the middle dot
+         regexp_replace(substring(name FROM '\[([^\]]+)\]\s*$'), '\s*[•∙‧・_,;|]\s*|\s+[-–/]\s+', ' · ', 'g') AS suffix,
          initcap(substring(name FROM '(?i)anti-\s?([A-Za-z]+(?: Pig)?)'))     AS target_raw
     FROM reagents
    WHERE antibody IS NULL
