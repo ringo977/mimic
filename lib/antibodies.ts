@@ -273,6 +273,55 @@ export function panelWarnings(slots: PanelSlot[], picked: (SecondaryAntibody | u
  * each unconjugated primary gets a compatible secondary on a free band.
  * Dyes and directly-conjugated primaries have a fixed band.
  */
+/** Same antibody for the panel: kind, species, Ig class, fluorophore, antigen and clone all equal. */
+export const antibodyKey = (ab: AntibodyInfo) => [abKind(ab), ab.host, ab.target, ab.isotype, ab.fluorophore, ab.antigen ?? '', ab.clone ?? ''].join('|').toLowerCase();
+
+export interface PanelStockItem { id: string; name: string; antibody?: AntibodyInfo; currentStock: number; unit: string; kind?: string; derivedFromId?: string; catalogNumber?: string }
+/** One line of the panel: `members` are the stock entries behind it, `backups` the stock vials. */
+export type PanelGroup<T extends PanelStockItem> = T & { ownStock: number; backupStock: number; members: T[]; backups: T[]; ambiguous: boolean };
+
+/**
+ * What the panel builder lists: one line per antibody, not per vial.
+ *  - Entries with the same antibody data are merged (the vial in use and the
+ *    spare one are often two entries with the same name; the same product may
+ *    also be entered under two names). Quantities add up, `members` keeps them.
+ *  - Not merged: same data but two different catalogue numbers (two products
+ *    against the same antigen) — both stay, flagged `ambiguous` so the caller
+ *    can show the catalogue number.
+ *  - "Stock" vials are not listed next to their aliquots: they are the backup
+ *    (an empty aliquot with a non-empty stock still counts as available).
+ *    A stock without any aliquot is listed, so nothing disappears.
+ */
+export function groupPanelStock<T extends PanelStockItem>(all: T[]): PanelGroup<T>[] {
+  const withAb = all.filter(r => r.antibody);
+  const key = (r: T) => antibodyKey(r.antibody!);
+  const cat = (r: T) => (r.catalogNumber || '').toLowerCase().replace(/[\s\-_.]/g, '');
+  const pos = (rows: T[]) => rows.reduce((n, x) => n + Math.max(0, x.currentStock), 0);
+  const split = (rows: T[]): { key: string; cat: string; members: T[]; ambiguous: boolean }[] => {
+    const byKey = new Map<string, T[]>();
+    rows.forEach(r => byKey.set(key(r), [...(byKey.get(key(r)) ?? []), r]));
+    return Array.from(byKey.entries()).flatMap(([k, g]) => {
+      const cats = Array.from(new Set(g.map(cat).filter(Boolean)));
+      if (cats.length <= 1) return [{ key: k, cat: cats[0] ?? '', members: g, ambiguous: false }];
+      const blank = g.filter(r => !cat(r));
+      return [...cats.map(c => ({ key: k, cat: c, members: g.filter(r => cat(r) === c), ambiguous: true })),
+              ...(blank.length ? [{ key: k, cat: '', members: blank, ambiguous: true }] : [])];
+    });
+  };
+  const stocks = withAb.filter(r => r.kind === 'stock');
+  const claimed = new Set<string>();
+  const build = (g: { key: string; cat: string; members: T[]; ambiguous: boolean }, withBackups: boolean): PanelGroup<T> => {
+    const members = [...g.members].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    const backups = withBackups ? stocks.filter(s => members.some(m => m.derivedFromId === s.id) || (key(s) === g.key && (!cat(s) || !g.cat || cat(s) === g.cat))) : [];
+    backups.forEach(s => claimed.add(s.id));
+    const ownStock = pos(members), backupStock = pos(backups);
+    return { ...members[0], ownStock, backupStock, currentStock: ownStock > 0 ? ownStock : backupStock, members, backups, ambiguous: g.ambiguous };
+  };
+  const shown = split(withAb.filter(r => r.kind !== 'stock')).map(g => build(g, true));
+  const lone = split(stocks.filter(s => !claimed.has(s.id))).map(g => build(g, false));
+  return [...shown, ...lone];
+}
+
 export interface PanelItem { id: string; antibody?: AntibodyInfo; currentStock: number; alertThreshold?: number }
 export interface PanelCandidate<T extends PanelItem> { item: T; fit: SecondaryFit; band: EmissionBand }
 export interface PanelEntry<T extends PanelItem> {

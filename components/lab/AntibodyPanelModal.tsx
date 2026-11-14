@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { X, Copy, Check, Plus, Minus, Search, Trash2 } from 'lucide-react';
 import { useDialogA11y } from '@/components/ui/useDialogA11y';
 import { Reagent, reagentPlaceLabel, StorageUnit, StorageBox } from '@/data/lab-data';
-import { EMISSION_BANDS, EmissionBand, emissionBandMeta, fluorophoreBand, antibodyOptions, antibodyMatches, panelWarnings, PanelSlot, antibodyShortLabel, abKind, assignPanel, panelEntryWarnings } from '@/lib/antibodies';
+import { EMISSION_BANDS, EmissionBand, emissionBandMeta, fluorophoreBand, antibodyOptions, antibodyMatches, panelWarnings, PanelSlot, antibodyShortLabel, abKind, assignPanel, panelEntryWarnings, groupPanelStock, PanelGroup } from '@/lib/antibodies';
 
 const sel = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none bg-white';
 
@@ -17,25 +17,27 @@ const sel = 'w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-m
 type Props = { reagents: Reagent[]; storageUnits: StorageUnit[]; storageBoxes: StorageBox[]; onClose: () => void };
 
 /**
- * The panel lists aliquots, not the stock vials behind them (same antibody
- * twice would only add noise). An empty aliquot still counts as available
- * when its stock is not empty; the quantity shown says so.
+ * The panel lists antibodies, not vials: entries with the same antibody data
+ * are one line (the vial in use and the spare one, or the same product typed
+ * under two names), and the stock vials stay behind their aliquots as backup
+ * — see groupPanelStock. Quantity and place cover every entry of the line.
  */
-type PanelReagent = Reagent & { ownStock: number; backupStock: number };
-const abKey = (r: Reagent) => { const a = r.antibody!; return [abKind(a), a.host, a.target, a.isotype, a.fluorophore, a.antigen ?? '', a.clone ?? ''].join('|').toLowerCase(); };
-function panelReagents(reagents: Reagent[]): PanelReagent[] {
-  const withAb = reagents.filter(r => r.antibody);
-  const nonStock = withAb.filter(r => r.kind !== 'stock');
-  const keys = new Set(nonStock.map(abKey));
-  // stocks without any aliquot are kept, so nothing disappears
-  const shown = [...nonStock, ...withAb.filter(r => r.kind === 'stock' && !keys.has(abKey(r)))];
-  return shown.map(r => {
-    const backups = withAb.filter(x => x.kind === 'stock' && x.id !== r.id && (x.id === r.derivedFromId || abKey(x) === abKey(r)));
-    const backupStock = backups.reduce((n, x) => n + Math.max(0, x.currentStock), 0);
-    return { ...r, ownStock: r.currentStock, backupStock, currentStock: r.currentStock > 0 ? r.currentStock : backupStock };
-  });
-}
-const qty = (r: PanelReagent) => r.ownStock > 0 ? `${r.ownStock} ${r.unit}` : r.backupStock > 0 ? `aliquot empty · stock ${r.backupStock} ${r.unit}` : `0 ${r.unit} (empty!)`;
+type PanelReagent = PanelGroup<Reagent>;
+const panelReagents = (reagents: Reagent[]): PanelReagent[] => groupPanelStock(reagents);
+const num = (x: number) => String(Math.round(x * 100) / 100);
+/** "7 aliquots of 10 µL", or "2 aliquots of 10 µL + 1 vials" when the entries use different units. */
+const amount = (rows: Reagent[]) => {
+  const full = rows.filter(r => r.currentStock > 0);
+  return new Set(full.map(r => r.unit)).size === 1 ? `${num(full.reduce((n, r) => n + r.currentStock, 0))} ${full[0].unit}` : full.map(r => `${num(r.currentStock)} ${r.unit}`).join(' + ');
+};
+const qty = (r: PanelReagent) => r.ownStock > 0 ? amount(r.members) : r.backupStock > 0 ? `aliquot empty · stock ${amount(r.backups)}` : `0 ${r.unit} (empty!)`;
+/** Where to find it: the entries that still have something (all of them when empty), without repeats. */
+const placeOf = (r: PanelReagent, units: StorageUnit[], boxes: StorageBox[]) => {
+  const rows = r.ownStock > 0 ? r.members.filter(m => m.currentStock > 0) : r.backupStock > 0 ? r.backups.filter(m => m.currentStock > 0) : r.members;
+  return Array.from(new Set(rows.map(m => reagentPlaceLabel(m, units, boxes)).filter(Boolean))).join(' / ');
+};
+/** Two products with the same antibody data: tell them apart by catalogue number. */
+const tag = (r: PanelReagent) => r.ambiguous ? ` · ${[r.supplier, r.catalogNumber].filter(Boolean).join(' ') || 'no cat. #'}` : '';
 
 export default function AntibodyPanelModal(props: Props) {
   const ref = useDialogA11y(true, props.onClose);
@@ -80,7 +82,7 @@ function TargetsMode({ reagents: allReagents, storageUnits, storageBoxes }: Prop
   const remove = (id: string) => { setIds(ids.filter(x => x !== id)); setOverrides(o => { const n = { ...o }; delete n[id]; return n; }); };
   const quick = (re: RegExp) => pool.find(r => re.test(r.antibody!.antigen || '') && !ids.includes(r.id));
   const nuclei = quick(/nuclei/i), actin = quick(/f-actin/i);
-  const place = (r: PanelReagent) => reagentPlaceLabel(r, storageUnits, storageBoxes);
+  const place = (r: PanelReagent) => placeOf(r, storageUnits, storageBoxes);
   const summary = entries.map(e => { const m = e.band ? emissionBandMeta[e.band].label : 'no band'; const sec = e.secondary ? ` → ${antibodyShortLabel(e.secondary.antibody!)} — ${e.secondary.supplier} ${e.secondary.catalogNumber} (${qty(e.secondary)}, ${place(e.secondary)})` : e.fixed ? '' : ' → no compatible secondary'; return `${m}: ${label(e.item)} [${[e.item.antibody!.host, e.item.antibody!.isotype, e.item.antibody!.clone ? 'clone ' + e.item.antibody!.clone : ''].filter(Boolean).join(' · ') || e.item.antibody!.fluorophore}] (${qty(e.item)}, ${place(e.item)})${sec}`; }).join('\n');
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — IF panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
@@ -93,7 +95,7 @@ function TargetsMode({ reagents: allReagents, storageUnits, storageBoxes }: Prop
         {hits.length > 0 && (
           <ul className="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
             {hits.map(r => <li key={r.id}><button onClick={() => add(r.id)} className="w-full text-left px-3 py-1.5 text-xs font-manrope hover:bg-gray-50 flex items-center justify-between gap-2">
-              <span className="truncate"><span className="font-medium text-gray-900">{r.antibody!.antigen || r.name}</span> <span className="text-gray-500">{[r.antibody!.host, r.antibody!.isotype, r.antibody!.clone ? 'clone ' + r.antibody!.clone : '', r.antibody!.fluorophore].filter(Boolean).join(' · ')}</span></span>
+              <span className="truncate"><span className="font-medium text-gray-900">{r.antibody!.antigen || r.name}</span> <span className="text-gray-500">{[r.antibody!.host, r.antibody!.isotype, r.antibody!.clone ? 'clone ' + r.antibody!.clone : '', r.antibody!.fluorophore].filter(Boolean).join(' · ')}{tag(r)}</span></span>
               <span className={`shrink-0 text-[10px] ${r.currentStock <= 0 ? 'text-red-600' : 'text-gray-400'}`}>{qty(r)}</span>
             </button></li>)}
           </ul>
@@ -117,14 +119,14 @@ function TargetsMode({ reagents: allReagents, storageUnits, storageBoxes }: Prop
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-gray-900 font-manrope truncate" title={e.item.name}>{ab.antigen || e.item.name}</p>
-                <p className="text-[10px] text-gray-500 font-manrope truncate">{[ab.host, ab.isotype, ab.clone ? 'clone ' + ab.clone : '', ab.fluorophore].filter(Boolean).join(' · ')} · {qty(e.item)} · {place(e.item)}</p>
+                <p className="text-[10px] text-gray-500 font-manrope truncate">{[ab.host, ab.isotype, ab.clone ? 'clone ' + ab.clone : '', ab.fluorophore].filter(Boolean).join(' · ')}{tag(e.item)} · {qty(e.item)} · {place(e.item)}</p>
               </div>
               <div className="min-w-0">
                 {e.fixed ? <p className="text-[10px] text-gray-500 font-manrope">{abKind(ab) === 'dye' ? 'Dye — no secondary needed.' : 'Directly conjugated — no secondary needed.'}</p>
                  : e.candidates.length === 0 ? <p className="text-[10px] text-red-600 font-manrope">No secondary in stock recognises {ab.host || '?'} {ab.isotype}.</p>
                  : <>
                     <select value={e.secondary?.id ?? ''} onChange={ev => setOverrides({ ...overrides, [e.item.id]: ev.target.value })} className={sel}>
-                      {e.candidates.map(c => <option key={c.item.id} value={c.item.id}>{antibodyShortLabel(c.item.antibody!)}{c.fit === 'generic' ? ' (generic)' : ''} · {qty(c.item)}</option>)}
+                      {e.candidates.map(c => <option key={c.item.id} value={c.item.id}>{antibodyShortLabel(c.item.antibody!)}{c.fit === 'generic' ? ' (generic)' : ''}{tag(c.item)} · {qty(c.item)}</option>)}
                     </select>
                     {e.secondary && <p className="text-[10px] text-gray-500 font-manrope mt-0.5 truncate" title={e.secondary.name}>{e.secondary.supplier} {e.secondary.catalogNumber} · {place(e.secondary)}</p>}
                    </>}
@@ -190,7 +192,7 @@ function ColoursMode({ reagents: allReagents, storageUnits, storageBoxes }: Prop
     ...slots.flatMap((s, i) => { const pr = primaryOf(s); return pr && pr.currentStock <= 0 ? [`Slot ${i + 1}: ${pr.antibody!.antigen || pr.name} is out of stock.`] : []; }),
   ];
 
-  const summary = slots.map((s, i) => { const p = picked[i]; const pr = primaryOf(s); const prTxt = pr ? `${pr.antibody!.antigen || pr.name} [${[pr.antibody!.host, pr.antibody!.isotype, pr.antibody!.clone ? 'clone ' + pr.antibody!.clone : '', pr.antibody!.fluorophore].filter(Boolean).join(' · ')}] (${qty(pr)}, ${reagentPlaceLabel(pr, storageUnits, storageBoxes)})${isFixed(s) ? '' : ' → '}` : ''; return `${emissionBandMeta[s.band].label}: ${prTxt}${isFixed(s) ? '' : p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${qty(p)}, ${reagentPlaceLabel(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
+  const summary = slots.map((s, i) => { const p = picked[i]; const pr = primaryOf(s); const prTxt = pr ? `${pr.antibody!.antigen || pr.name} [${[pr.antibody!.host, pr.antibody!.isotype, pr.antibody!.clone ? 'clone ' + pr.antibody!.clone : '', pr.antibody!.fluorophore].filter(Boolean).join(' · ')}] (${qty(pr)}, ${placeOf(pr, storageUnits, storageBoxes)})${isFixed(s) ? '' : ' → '}` : ''; return `${emissionBandMeta[s.band].label}: ${prTxt}${isFixed(s) ? '' : p ? `${antibodyShortLabel(p.antibody!)} — ${p.supplier} ${p.catalogNumber} (${qty(p)}, ${placeOf(p, storageUnits, storageBoxes)})` : s.target ? `no secondary in stock for anti-${s.target}${s.isotype ? ' ' + s.isotype : ''}` : '—'}`; }).join('\n');
   const copy = async () => { try { await navigator.clipboard.writeText(`MiMic Lab — secondary panel\n${summary}`); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* clipboard unavailable */ } };
 
   return (
@@ -249,18 +251,18 @@ function ColoursMode({ reagents: allReagents, storageUnits, storageBoxes }: Prop
                    : c.length === 0 ? <p className="text-xs text-red-600 font-manrope py-2">None in the stock list for this band.</p>
                    : (
                     <select value={p?.id ?? ''} onChange={e => setChosen({ ...chosen, [i]: e.target.value })} className={sel}>
-                      {c.map(r => <option key={r.id} value={r.id}>{antibodyShortLabel(r.antibody!)} · {qty(r)}</option>)}
+                      {c.map(r => <option key={r.id} value={r.id}>{antibodyShortLabel(r.antibody!)}{tag(r)} · {qty(r)}</option>)}
                     </select>
                   )}
-                  {p && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={p.name}>{p.supplier} {p.catalogNumber} · {reagentPlaceLabel(p, storageUnits, storageBoxes)}</p>}
+                  {p && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={p.name}>{p.supplier} {p.catalogNumber} · {placeOf(p, storageUnits, storageBoxes)}</p>}
                 </div>
                 <div>
                   <label className="block text-[10px] font-medium text-gray-500 mb-1 font-manrope">Primary / dye in stock <span className="text-gray-400">({primaryChoices(s).length})</span></label>
                   <select value={s.primaryId ?? ''} onChange={e => pickPrimary(i, e.target.value)} className={sel}>
                     <option value="">— none / any —</option>
-                    {primaryChoices(s).map(r => { const ab = r.antibody!; return <option key={r.id} value={r.id}>{ab.antigen || r.name}{abKind(ab) === 'dye' ? ` (${ab.fluorophore})` : ` · ${[ab.host, ab.isotype].filter(Boolean).join(' ')}${ab.fluorophore ? ' · ' + ab.fluorophore : ''}`} · {qty(r)}</option>; })}
+                    {primaryChoices(s).map(r => { const ab = r.antibody!; return <option key={r.id} value={r.id}>{ab.antigen || r.name}{abKind(ab) === 'dye' ? ` (${ab.fluorophore})` : ` · ${[ab.host, ab.isotype].filter(Boolean).join(' ')}${ab.fluorophore ? ' · ' + ab.fluorophore : ''}`}{tag(r)} · {qty(r)}</option>; })}
                   </select>
-                  {primaryOf(s) && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={primaryOf(s)!.name}>{primaryOf(s)!.antibody!.clone ? `clone ${primaryOf(s)!.antibody!.clone} · ` : ''}{reagentPlaceLabel(primaryOf(s)!, storageUnits, storageBoxes)}</p>}
+                  {primaryOf(s) && <p className="text-[10px] text-gray-500 font-manrope mt-1 truncate" title={primaryOf(s)!.name}>{primaryOf(s)!.antibody!.clone ? `clone ${primaryOf(s)!.antibody!.clone} · ` : ''}{placeOf(primaryOf(s)!, storageUnits, storageBoxes)}</p>}
                 </div>
               </div>
             );
