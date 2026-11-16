@@ -14,7 +14,7 @@ const AFFILIATIONS: UserAffiliation[] = USER_AFFILIATIONS;
 // Lab directory, visible to every member. Non-sensitive info only
 // (no person code — that stays in the admin panel).
 export default function TeamPage() {
-  const { user, users, projects, certifications, instruments, addUser, updateUser, permissions } = useLabContext();
+  const { user, users, projects, certifications, instruments, addUser, grantUser, permissions } = useLabContext();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'active' | 'alumni'>('active');
@@ -133,7 +133,7 @@ export default function TeamPage() {
           projects={projects}
           certifications={certifications}
           instruments={instruments}
-          grant={{ actor: user, onUpdate: (u) => { updateUser(u); setViewing(u); } }}
+          grant={{ actor: user, onUpdate: async (u) => { if (await grantUser(u)) setViewing(u); } }}
           onClose={() => setViewing(null)}
         />
       )}

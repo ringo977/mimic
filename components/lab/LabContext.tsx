@@ -9,7 +9,7 @@ import {
   defaultBookingSettings, sanitizeBookingSettings, formatTime,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
 } from '@/data/lab-data';
-import { fetchLabUsers, insertLabUser, updateLabUser, deleteLabUser, saveMyFavoriteInstruments } from '@/lib/supabase-users';
+import { fetchLabUsers, insertLabUser, updateLabUser, grantLabUserFields, deleteLabUser, saveMyFavoriteInstruments } from '@/lib/supabase-users';
 import {
   fetchInstruments, upsertInstrument, deleteInstrument,
   fetchLocations, upsertLocation, deleteLocation,
@@ -90,7 +90,9 @@ interface LabContextType {
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'timestamp'>) => void;
   users: LabUser[];
   addUser: (u: LabUser) => Promise<boolean>;
-  updateUser: (u: LabUser) => void | Promise<void>;
+  updateUser: (u: LabUser) => Promise<boolean>;
+  /** Trainings / certifications only (member card): true when the server saved it. */
+  grantUser: (u: LabUser) => Promise<boolean>;
   removeUser: (id: string) => void | Promise<void>;
   addNewReagent: (r: Reagent) => void;
   updateReagent: (r: Reagent, opts?: { keepServerStock?: boolean }) => void;
@@ -526,9 +528,20 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   const updateUser = useCallback(async (u: LabUser) => {
     const { ok, error } = await updateLabUser(u);
-    if (!ok) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return; }
+    if (!ok) { setSyncError(`User "${u.name}" was NOT saved to the server${error ? ` — ${error}` : ''}. Reload and retry.`); return false; }
     setUsers(prev => prev.map(x => x.id === u.id ? u : x));
     addLogEntry({ userId: user.id, userName: user.name, action: `Updated user ${u.name}`, category: 'auth', details: u.role });
+    return true;
+  }, [user, addLogEntry]);
+
+  // Member card: trainings and certifications only. Nothing is shown as
+  // granted until the server has accepted it.
+  const grantUser = useCallback(async (u: LabUser) => {
+    const { ok, error } = await grantLabUserFields(u);
+    if (!ok) { setSyncError(`The training / certification of "${u.name}" was NOT saved${error ? ` — ${error}` : ''}.`); return false; }
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, certifications: u.certifications, certifiedAt: u.certifiedAt, trainingMicrofabDone: u.trainingMicrofabDone, trainingMicrofabDate: u.trainingMicrofabDate, trainingBioDone: u.trainingBioDone, trainingBioDate: u.trainingBioDate } : x));
+    addLogEntry({ userId: user.id, userName: user.name, action: `Updated trainings / certifications of ${u.name}`, category: 'auth', details: u.certifications.join(', ') });
+    return true;
   }, [user, addLogEntry]);
 
   const removeUser = useCallback(async (id: string) => {
@@ -641,7 +654,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       cryoVials, addCryoVial, addCryoVials, removeCryoVial,
       wishlist, addWishlistItem, updateWishlistStatus, updateWishlistItem, removeWishlistItem,
       log, addLogEntry,
-      users, addUser, updateUser, removeUser,
+      users, addUser, updateUser, grantUser, removeUser,
       addNewReagent, updateReagent, removeReagent,
       instruments, addInstrument, updateInstrument, removeInstrument, reportError: setSyncError,
       manuals, addManual, updateManual, removeManual,

@@ -151,15 +151,56 @@ export async function insertLabUser(u: LabUser): Promise<{ user: LabUser | null;
   return { user: toLabUser(data) };
 }
 
+// An UPDATE that RLS does not let through touches 0 rows with NO error: the
+// caller must see that as a failure, not as a save (16/11/2026 — a Post-Doc
+// responsible "granted" a certification that was gone after a reload).
+const NOT_ALLOWED = 'the server did not accept the change (you may not edit this member, or your session is out of date: reload the page)';
+
 export async function updateLabUser(u: LabUser): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('lab_users')
     .update(toSupabaseRow(u))
-    .eq('id', u.id);
+    .eq('id', u.id)
+    .select('id');
 
   if (error) {
     console.error('Failed to update user:', error.message);
     return { ok: false, error: error.message };
+  }
+  if (!data || data.length === 0) {
+    console.error('User not updated: 0 rows (RLS)');
+    return { ok: false, error: NOT_ALLOWED };
+  }
+  return { ok: true };
+}
+
+/**
+ * Grant / revoke trainings and certifications from a member's card. Sends
+ * ONLY those columns: on somebody else's row the server (protect_lab_user_fields)
+ * refuses a change to anything else, and the full row built by toSupabaseRow
+ * can differ from the stored one (e.g. an abbreviation generated on the client).
+ */
+export async function grantLabUserFields(u: LabUser): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase
+    .from('lab_users')
+    .update({
+      certifications: u.certifications,
+      certified_at: u.certifiedAt && Object.keys(u.certifiedAt).length > 0 ? u.certifiedAt : null,
+      training_microfab_done: u.trainingMicrofabDone ?? false,
+      training_microfab_date: u.trainingMicrofabDate || null,
+      training_bio_done: u.trainingBioDone ?? false,
+      training_bio_date: u.trainingBioDate || null,
+    })
+    .eq('id', u.id)
+    .select('id');
+
+  if (error) {
+    console.error('Failed to grant training / certification:', error.message);
+    return { ok: false, error: error.message };
+  }
+  if (!data || data.length === 0) {
+    console.error('Training / certification not saved: 0 rows (RLS)');
+    return { ok: false, error: NOT_ALLOWED };
   }
   return { ok: true };
 }

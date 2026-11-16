@@ -132,6 +132,9 @@
 --      then supabase-2026-11-cert-responsibles-own-instruments.sql
 --        (lab_can_grant_certification v4: LM / PM / PI / Admin any certification,
 --        Post-Doc / Researcher only for the instruments they are responsible for)
+--      then supabase-2026-11-granter-responsibles.sql (lab_is_granter v3: the
+--        lab_users row is writable also by a Post-Doc / Researcher responsible of
+--        an instrument — without it their certification UPDATE touched 0 rows)
 --      then supabase-2026-11-email-digest.sql (e-mail recap at 07/13/19 Rome via
 --        pg_cron 'mimic-digest' + pg_net → Brevo: lab_users.digest_opt_out,
 --        app_settings 'digest', digest_log, digest_* functions,
