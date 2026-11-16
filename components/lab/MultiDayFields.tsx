@@ -1,6 +1,6 @@
 'use client';
 
-import { SeriesDay, SeriesMode, BookingSettings, formatDate, formatTime, addDaysStr } from '@/data/lab-data';
+import { SeriesDay, SeriesMode, BookingSettings, formatDate, formatTime, addDaysStr, closureOn } from '@/data/lab-data';
 
 /**
  * "Until" block of a booking form, for instruments with policy.multiDay
@@ -32,6 +32,14 @@ export default function MultiDayFields({ from, until, onUntil, skipWeekends, onS
 }) {
   const isSeries = days.length > 1;
   const first = days[0], last = days[days.length - 1];
+  // Days of the range left out because the Politecnico is closed (booking managers keep them)
+  const closedSkipped: string[] = [];
+  if (until && until > from) {
+    const kept = new Set(days.map(d => d.date));
+    for (let i = 0, ds = from; ds <= until && i < 400; i++, ds = addDaysStr(from, i)) {
+      if (closureOn(ds, settings) && !kept.has(ds)) closedSkipped.push(ds);
+    }
+  }
   return (
     <div className="bg-gray-50 rounded-xl p-3 space-y-2">
       <label className="block text-xs font-medium text-gray-700 font-manrope">Several days in a row — until <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -67,8 +75,13 @@ export default function MultiDayFields({ from, until, onUntil, skipWeekends, onS
           {conflictDay ? ` ${formatDate(conflictDay)} is already taken.` : ' Either every day is booked or none.'}
         </p>
       )}
+      {closedSkipped.length > 0 && (
+        <p className="text-[11px] text-red-600 font-manrope">
+          {closedSkipped.length === 1 ? `${formatDate(closedSkipped[0])} is` : `${closedSkipped.length} days (${formatDate(closedSkipped[0])} → ${formatDate(closedSkipped[closedSkipped.length - 1])}) are`} left out: the Politecnico is closed and the lab cannot be accessed.
+        </p>
+      )}
       {until && !isSeries && (
-        <p className="text-[11px] text-amber-600 font-manrope">No extra day in this range (weekends are skipped) — pick a later date or untick &ldquo;Skip weekends&rdquo;.</p>
+        <p className="text-[11px] text-amber-600 font-manrope">No extra day in this range ({closedSkipped.length > 0 ? 'closure days and weekends' : 'weekends'} are skipped) — pick a later date{skipWeekends ? <> or untick &ldquo;Skip weekends&rdquo;</> : null}.</p>
       )}
     </div>
   );

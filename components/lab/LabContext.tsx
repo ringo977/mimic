@@ -6,7 +6,7 @@ import {
   StorageUnit, StorageBox, Project, Certification, Location, BookingSettings, AbsenceSettings, CellType,
   rolePermissions, permissionsOf, effectiveRole, canRequestAbsences, isResponsibleOf,
   generateId, formatCells,
-  defaultBookingSettings, sanitizeBookingSettings, formatTime,
+  defaultBookingSettings, sanitizeBookingSettings, formatTime, ClosurePeriod, sanitizeClosures, closureLabel,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
 } from '@/data/lab-data';
 import { fetchLabUsers, insertLabUser, updateLabUser, grantLabUserFields, deleteLabUser, saveMyFavoriteInstruments } from '@/lib/supabase-users';
@@ -29,6 +29,9 @@ import {
 import { readReagentDeepLink, clearDeepLink } from '@/lib/lab-deeplink';
 
 const BOOKING_SETTINGS_KEY = 'booking_settings';
+// Closures of the Politecnico: their own key, so saving the hours (even from a
+// stale tab or an older client) can never drop them. Merged into bookingSettings.
+const CLOSURES_KEY = 'closures';
 const ABSENCE_SETTINGS_KEY = 'absence_settings';
 const CELL_TYPES_KEY = 'cell_types';
 
@@ -54,6 +57,8 @@ interface LabContextType {
   approveBooking: (id: string) => void;
   bookingSettings: BookingSettings;
   updateBookingSettings: (s: BookingSettings) => void;
+  /** Days the Politecnico is closed (Admin → Schedule). */
+  updateClosures: (periods: ClosurePeriod[]) => void;
   canManageAllBookings: boolean;
   /** Booking managers everywhere; instrument responsibles on their own instrument. */
   canManageBookingsOf: (instrumentId: string) => boolean;
@@ -228,7 +233,11 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       } catch { /* noop */ }
       const sbSettings = await fetchAppSetting<Partial<BookingSettings>>(BOOKING_SETTINGS_KEY);
       const localSettings = localData.bookingSettings as Partial<BookingSettings> | undefined;
-      setBookingSettings(sanitizeBookingSettings(sbSettings ?? localSettings ?? defaultBookingSettings));
+      const sbClosures = await fetchAppSetting<{ periods?: ClosurePeriod[] }>(CLOSURES_KEY);
+      setBookingSettings({
+        ...sanitizeBookingSettings(sbSettings ?? localSettings ?? defaultBookingSettings),
+        closures: sanitizeClosures(sbClosures ? sbClosures.periods : localSettings?.closures),
+      });
 
       // Absences (table may not exist yet if the migration wasn't run — degrade to empty)
       const sbAbsences = await fetchAbsences();
@@ -341,9 +350,18 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
 
   const updateBookingSettings = useCallback((s: BookingSettings) => {
     const clean = sanitizeBookingSettings(s);
-    setBookingSettings(clean);
-    track(upsertAppSetting(BOOKING_SETTINGS_KEY, clean), 'Booking hours');
+    // Hours only: the closures live under their own key and are not touched here
+    const hours = { openStartHour: clean.openStartHour, openEndHour: clean.openEndHour, workStartHour: clean.workStartHour, workEndHour: clean.workEndHour, slotMinutes: clean.slotMinutes };
+    setBookingSettings(prev => ({ ...clean, closures: prev.closures }));
+    track(upsertAppSetting(BOOKING_SETTINGS_KEY, hours), 'Booking hours');
     addLogEntry({ userId: user.id, userName: user.name, action: 'Updated booking hours', category: 'booking', details: `Work ${clean.workStartHour}:00-${clean.workEndHour}:00, open ${clean.openStartHour}:00-${clean.openEndHour}:00, ${clean.slotMinutes}min slots` });
+  }, [user, addLogEntry, track]);
+
+  const updateClosures = useCallback((periods: ClosurePeriod[]) => {
+    const clean = sanitizeClosures(periods);
+    setBookingSettings(prev => ({ ...prev, closures: clean }));
+    track(upsertAppSetting(CLOSURES_KEY, { periods: clean }), 'Closure days');
+    addLogEntry({ userId: user.id, userName: user.name, action: 'Updated Politecnico closure days', category: 'booking', details: clean.map(c => closureLabel(c)).join('; ') || 'none' });
   }, [user, addLogEntry, track]);
 
   // ---- Absences ----
@@ -642,7 +660,7 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
       user, permissions: permissionsOf(user), currentPage, setCurrentPage, deepLinkReagentId, consumeDeepLink,
       bookings, addBooking, updateBooking, removeBooking, approveBooking, addBookingSeries, removeBookingSeries,
       favoriteInstrumentIds, toggleFavoriteInstrument,
-      bookingSettings, updateBookingSettings,
+      bookingSettings, updateBookingSettings, updateClosures,
       canManageAllBookings,
       canManageBookingsOf: (instrumentId: string) => canManageAllBookings || isResponsibleOf(user, instruments.find(i => i.id === instrumentId)),
       absences, addAbsence, updateAbsence, removeAbsence,

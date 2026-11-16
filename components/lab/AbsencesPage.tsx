@@ -6,7 +6,7 @@ import { useLabContext } from './LabContext';
 import AbsenceStatusBadge from './AbsenceStatusBadge';
 import {
   Absence, AbsenceType, HalfDay, absenceTypeMeta, evaluateAbsenceRequest, isActiveAbsence,
-  workingDaysCovered, workingDaysOfNotice, addDaysStr, isWorkingDay,
+  workingDaysCovered, workingDaysOfNotice, addDaysStr, isWorkingDay, closureOn, ClosurePeriod,
   absenceHalfDay, absenceWorkingDays, formatWorkingDays, SW_HALF_DAY_HOURS,
   absenceRequestLabel, absenceWhenLabel,
   formatDate, formatTime, buildBookingSlots, generateAbbreviation,
@@ -83,6 +83,8 @@ export default function AbsencesPage() {
   const visibleAbsences = useMemo(() => absences.filter(isActiveAbsence), [absences]);
   const absencesOn = (dateStr: string) => visibleAbsences.filter(a => a.startDate <= dateStr && a.endDate >= dateStr);
   const inBlackout = (dateStr: string) => absenceSettings.blackoutPeriods.find(b => dateStr >= b.start && dateStr <= b.end);
+  // Days the Politecnico is closed (Admin → Schedule): shown in the calendars; the absence rules are unchanged
+  const closedOn = (dateStr: string) => closureOn(dateStr, bookingSettings);
 
   const swUsedThisMonth = useMemo(() => {
     let n = 0;
@@ -205,7 +207,7 @@ export default function AbsencesPage() {
         </div>
         {calView === 'week' && (
           <WeekHoursGrid
-            days={weekDays} today={today} absencesOn={absencesOn} inBlackout={inBlackout}
+            days={weekDays} today={today} absencesOn={absencesOn} inBlackout={inBlackout} closedOn={closedOn}
             users={users} startHour={bookingSettings.workStartHour} endHour={bookingSettings.workEndHour}
           />
         )}
@@ -219,9 +221,12 @@ export default function AbsencesPage() {
             const weekend = !isWorkingDay(ds);
             const dayAbs = inMonth ? absencesOn(ds) : [];
             const blackout = inMonth ? inBlackout(ds) : undefined;
+            const closed = inMonth ? closedOn(ds) : undefined;
             return (
-              <div key={ds} className={`min-h-[72px] p-1 ${!inMonth ? 'bg-gray-50/60' : weekend ? 'bg-gray-50' : blackout ? 'bg-red-50/60' : 'bg-white'}`}
-                title={blackout ? `Restricted period${blackout.label ? `: ${blackout.label}` : ''}` : undefined}>
+              <div key={ds} className={`min-h-[72px] p-1 ${!inMonth ? 'bg-gray-50/60' : closed ? 'bg-slate-100' : weekend ? 'bg-gray-50' : blackout ? 'bg-red-50/60' : 'bg-white'}`}
+                style={closed ? { backgroundImage: CLOSED_HATCH } : undefined}
+                title={closed ? `Politecnico closed${closed.label ? `: ${closed.label}` : ''}` : blackout ? `Restricted period${blackout.label ? `: ${blackout.label}` : ''}` : undefined}>
+                {closed && <span className="float-right text-[8px] font-semibold uppercase tracking-wide text-slate-500 font-manrope">closed</span>}
                 <p className={`text-[10px] font-semibold font-manrope mb-0.5 ${isToday ? 'inline-flex items-center justify-center w-4.5 h-4.5 px-1 rounded-full bg-[#102C53] text-white' : inMonth ? 'text-gray-500' : 'text-gray-300'}`}>{Number(ds.slice(8))}</p>
                 <div className="space-y-0.5">
                   {dayAbs.map(a => {
@@ -246,6 +251,7 @@ export default function AbsencesPage() {
             <span key={t} className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm" style={{ backgroundColor: absenceTypeMeta[t].color }} /> {absenceTypeMeta[t].label}</span>
           ))}
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-50 border border-red-200" /> Restricted period</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-slate-100 border border-slate-300" style={{ backgroundImage: CLOSED_HATCH }} /> Politecnico closed</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-200 opacity-50" /> Faded = awaiting approval</span>
         </div>
       </div>
@@ -461,10 +467,14 @@ function RequestModal({ onClose }: { onClose: () => void }) {
 // short leaves ("hours") placed on the time axis (working hours).
 // ============================================================
 const ABS_HOUR_PX = 36;
-function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, endHour }: {
+// Slate hatch laid over the days the Politecnico is closed
+const CLOSED_HATCH = 'repeating-linear-gradient(135deg, rgba(71,85,105,0.16) 0 5px, transparent 5px 11px)';
+
+function WeekHoursGrid({ days, today, absencesOn, inBlackout, closedOn, users, startHour, endHour }: {
   days: string[]; today: string;
   absencesOn: (ds: string) => Absence[];
   inBlackout: (ds: string) => { start: string; end: string; label?: string } | undefined;
+  closedOn: (ds: string) => ClosurePeriod | undefined;
   users: { id: string; abbreviation: string }[];
   startHour: number; endHour: number;
 }) {
@@ -488,9 +498,10 @@ function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, 
             const d = new Date(ds + 'T12:00:00');
             const isToday = ds === today;
             return (
-              <div key={ds} className={`flex-1 text-center py-1.5 border-l border-gray-100 ${!isWorkingDay(ds) ? 'bg-gray-100/60' : ''}`}>
+              <div key={ds} className={`flex-1 text-center py-1.5 border-l border-gray-100 ${!isWorkingDay(ds) ? 'bg-gray-100/60' : ''}`} title={closedOn(ds) ? `Politecnico closed${closedOn(ds)!.label ? `: ${closedOn(ds)!.label}` : ''}` : undefined}>
                 <p className="text-[10px] font-semibold text-gray-400 font-manrope uppercase">{d.toLocaleDateString('en', { weekday: 'short' })}</p>
                 <p className={`text-sm font-bold font-manrope ${isToday ? 'text-white bg-[#102C53] rounded-full w-6 h-6 inline-flex items-center justify-center' : 'text-gray-700'}`}>{d.getDate()}</p>
+                {closedOn(ds) && <p className="text-[8px] font-semibold uppercase tracking-wide text-slate-500 font-manrope leading-none">closed</p>}
               </div>
             );
           })}
@@ -521,7 +532,7 @@ function WeekHoursGrid({ days, today, absencesOn, inBlackout, users, startHour, 
             ))}
           </div>
           {perDay.map(({ ds, hourly }) => (
-            <div key={ds} className={`flex-1 relative border-l border-gray-100 ${!isWorkingDay(ds) ? 'bg-gray-50' : ''}`} style={{ height: gridH }}>
+            <div key={ds} className={`flex-1 relative border-l border-gray-100 ${closedOn(ds) ? 'bg-slate-100' : !isWorkingDay(ds) ? 'bg-gray-50' : ''}`} style={{ height: gridH, backgroundImage: closedOn(ds) ? CLOSED_HATCH : undefined }}>
               {hours.slice(0, -1).map(h => (
                 <div key={h} className="absolute left-0 right-0 border-t border-gray-100" style={{ top: (h - startHour) * ABS_HOUR_PX, height: ABS_HOUR_PX }} />
               ))}

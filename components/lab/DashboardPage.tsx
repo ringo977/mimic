@@ -6,7 +6,7 @@ import { useLabContext } from './LabContext';
 import AbsenceStatusBadge from './AbsenceStatusBadge';
 import {todayStr, rolePermissions, formatTime, formatDate, isWorkingHour, buildBookingSlots,
   validateBookingPolicy, slotLabel, seatsTaken, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays,
+  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, instrumentCategories, buildSeriesDays, closureOn, closureLabel, closureBookingError,
   absenceTypeMeta, absenceRequestLabel, absenceWhenLabel, isCertifiedFor, isResponsibleOf, effectiveRole } from '@/data/lab-data';
 import type { Booking, Instrument, LabUser, BookingSettings, SeriesMode, Absence } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
@@ -15,6 +15,8 @@ import MultiDayFields from './MultiDayFields';
 const INSTRUMENT_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#ef4444', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#a855f7'];
 
 function localDateStr(d: Date): string { return d.toLocaleDateString('en-CA'); }
+// Red hatch laid over the days the Politecnico is closed
+const CLOSED_HATCH = 'repeating-linear-gradient(135deg, rgba(239,68,68,0.10) 0 6px, transparent 6px 14px)';
 
 // Monday-based start of the week containing `ref`
 function startOfWeek(ref: Date): Date {
@@ -145,6 +147,8 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     if (!existing || newEnd === existing.endHour) return;
     const clash = isSlotFull(bookings, instruments.find(i => i.id === existing.instrumentId), existing.instrumentId, existing.date, existing.startHour, newEnd, existing.id);
     if (clash) { setError('No seat left: the extension overlaps existing bookings.'); return; }
+    const closed = closureOn(existing.date, bookingSettings);
+    if (closed && !canManageAllBookings && newEnd > existing.endHour + EPS) { setError(closureBookingError(existing.date, closed)); return; }
     updateBooking({ ...existing, endHour: newEnd });
     onClose();
   };
@@ -163,11 +167,15 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
   const horizon = policyAdvanceDays(policy, myGroup);
   const lastBookableDate = horizon !== undefined ? addDaysStr(todayStr, horizon) : '';
   const isPastDate = date < todayStr;
+  // Politecnico closed that day: only booking managers may book or move a booking there
+  // (an existing booking can still be shortened or cancelled). Server: enforce_closure_days.
+  const closure = closureOn(date, bookingSettings);
+  const closedForMe = !!closure && !canManageAllBookings;
   const needsApproval = !isManager && bookingNeedsApproval(policy, startHour, endHour, bookingSettings);
   // Approvers of pending bookings: booking managers and the instrument responsible.
   const canApprove = isManager || (!!inst?.responsibleUserId && inst.responsibleUserId === user.id);
   const seriesDays = !existing && policy?.multiDay
-    ? buildSeriesDays({ from: date, until: bookUntil, startHour, endHour, skipWeekends, mode: seriesMode, settings: bookingSettings })
+    ? buildSeriesDays({ from: date, until: bookUntil, startHour, endHour, skipWeekends, mode: seriesMode, settings: bookingSettings, skipClosures: !canManageAllBookings })
     : [];
   const isSeries = seriesDays.length > 1;
   // In a continuous series the end hour belongs to the LAST day, so it may be earlier than the start.
@@ -196,6 +204,9 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
     if (!instrumentId) { setError('Select an instrument.'); return; }
     if (firstEnd <= firstStart) { setError('End time must be after start time.'); return; }
     if (!isManager && isPastDate) { setError('Cannot book a date in the past.'); return; }
+    if (closure && closedForMe && !(existing && existing.date === date && startHour >= existing.startHour - EPS && endHour <= existing.endHour + EPS)) {
+      setError(closureBookingError(date, closure)); return;
+    }
     if (!isManager && !isBookableTime(policy, date, firstStart, firstEnd, todayStr, nowHour)) {
       setError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time in the past.'); return;
     }
@@ -507,6 +518,12 @@ function BookingModal({ state, onClose }: { state: ModalState; onClose: () => vo
             />
           )}
 
+          {closure && (
+            <div className="bg-red-50 border border-red-200 text-red-800 px-3 py-2 rounded-xl text-xs font-manrope">
+              <strong>Politecnico closed on {formatDate(date)}{closure.label ? ` — ${closure.label}` : ''}.</strong> The building cannot be entered{closedForMe ? ', so this day cannot be booked.' : '. As a booking manager you can still book it, for authorised access only.'}
+            </div>
+          )}
+
           {error && <div className="bg-red-50 text-red-600 px-3 py-2 rounded-xl text-xs font-manrope">{error}</div>}
 
           <div className="flex gap-2">
@@ -570,11 +587,12 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const [onlyMine, setOnlyMine] = useState(false);   // show only the user's own bookings
   const [modal, setModal] = useState<ModalState | null>(null);
   const isMobile = useMediaQuery('(max-width: 640px)');
-  const { favoriteInstrumentIds, setCurrentPage } = useLabContext();
+  const { favoriteInstrumentIds, setCurrentPage, canManageAllBookings } = useLabContext();
 
   const day = useMemo(() => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + dayOffset); return d; }, [dayOffset]);
   const ds = localDateStr(day);
   const isToday = ds === todayStr;
+  const closedDay = closureOn(ds, bookingSettings);
 
   const [rangeStart, rangeEnd] = preset === 'work'
     ? [Math.floor(bookingSettings.workStartHour), Math.ceil(bookingSettings.workEndHour)]
@@ -612,6 +630,7 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
   const slotStep = bookingSettings.slotMinutes / 60;
   const snap = (h: number) => Math.round((Math.floor(h / slotStep) * slotStep) * 100) / 100;
   const clickRow = (e: React.MouseEvent<HTMLDivElement>, inst: Instrument) => {
+    if (closedDay && !canManageAllBookings) return;   // Politecnico closed (the banner above says why)
     const r = e.currentTarget.getBoundingClientRect();
     const raw = rangeStart + ((e.clientX - r.left) / r.width) * span;
     const h = Math.min(Math.max(snap(raw), bookingSettings.openStartHour), bookingSettings.openEndHour - slotStep);
@@ -652,6 +671,11 @@ function DailyOverview({ bookings, instruments, user, bookingSettings, view, onV
         </div>
       </div>
       <p className="text-xs text-gray-500 font-manrope mb-3">{dayLabel}</p>
+      {closedDay && (
+        <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl px-3 py-2 text-xs font-manrope mb-3">
+          <strong>Politecnico closed{closedDay.label ? ` — ${closedDay.label}` : ''}.</strong> The building cannot be entered{canManageAllBookings ? '. As a booking manager you can still book, for authorised access only.' : ', so nothing can be booked on this day.'}
+        </div>
+      )}
 
       {/* Category filter */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
@@ -784,7 +808,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
   bookings: Booking[]; instruments: Instrument[]; user: LabUser; bookingSettings: BookingSettings;
   view: CalendarView; onViewChange: (v: CalendarView) => void;
 }) {
-  const { updateBooking, canManageBookingsOf } = useLabContext();
+  const { updateBooking, canManageBookingsOf, canManageAllBookings } = useLabContext();
+  // Politecnico closed: only booking managers may book or move a booking onto that day
+  const closedFor = (ds: string) => canManageAllBookings ? undefined : closureOn(ds, bookingSettings);
   const [weekOffset, setWeekOffset] = useState(0);
   const [activeInstruments, setActiveInstruments] = useState<Set<string>>(new Set()); // empty = all
   const [onlyMine, setOnlyMine] = useState(false);   // show only the user's own bookings
@@ -850,12 +876,16 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
 
   const startCreate = (e: React.PointerEvent<HTMLDivElement>, ds: string) => {
     if (e.button !== 0) return;
+    const closed = closedFor(ds);
+    if (closed) { setDropError(closureBookingError(ds, closed)); return; }
     const colTop = e.currentTarget.getBoundingClientRect().top;
     const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
     setDrag({ kind: 'create', date: ds, colTop, anchor: h, start: h, end: Math.min(h + slotStep, maxH), moved: false });
   };
   // Mobile: a plain tap opens the create form (dragging would fight with scrolling).
   const tapCreate = (e: React.MouseEvent<HTMLDivElement>, ds: string) => {
+    const closed = closedFor(ds);
+    if (closed) { setDropError(closureBookingError(ds, closed)); return; }
     const colTop = e.currentTarget.getBoundingClientRect().top;
     const h = clamp(snap(rangeStart + (e.clientY - colTop) / HOUR_PX), minH, maxH - slotStep);
     setModal({ mode: 'create', date: ds, startHour: h, endHour: Math.min(h + 1, maxH) });
@@ -939,6 +969,9 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
         const err = validateBookingPolicy({ instrument: inst, bookings, userId: b.userId, role: effectiveRole(user), date: d.date, startHour: d.start, endHour: d.end, today: todayStr, ignoreId: b.id });
         if (err) { setDropError(err); return; }
       }
+      // Closure day: a booking already there may only be shortened, nothing can be moved onto it
+      const closed = closedFor(d.date);
+      if (closed && !(d.date === b.date && d.start >= b.startHour - EPS && d.end <= b.endHour + EPS)) { setDropError(closureBookingError(d.date, closed)); return; }
       updateBooking({ ...b, date: d.date, startHour: d.start, endHour: d.end });
     };
     window.addEventListener('pointermove', onMove);
@@ -1037,10 +1070,12 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
             <div className={`${isMobile ? 'w-[40px]' : 'w-[52px]'} shrink-0`} />
             {days.map(d => {
               const isToday = localDateStr(d) === todayStr;
+              const closed = closureOn(localDateStr(d), bookingSettings);
               return (
-                <div key={d.toISOString()} className="flex-1 text-center pb-2">
+                <div key={d.toISOString()} className="flex-1 text-center pb-2" title={closed ? `Politecnico closed${closed.label ? ` — ${closed.label}` : ''}` : undefined}>
                   <p className={`text-[10px] font-semibold uppercase tracking-wide font-manrope ${isToday ? 'text-[#102C53]' : 'text-gray-400'}`}>{d.toLocaleDateString('en', { weekday: 'short' })}</p>
-                  <p className={`text-sm font-bold font-manrope inline-flex items-center justify-center w-7 h-7 rounded-full ${isToday ? 'bg-[#102C53] text-white' : 'text-gray-700'}`}>{d.getDate()}</p>
+                  <p className={`text-sm font-bold font-manrope inline-flex items-center justify-center w-7 h-7 rounded-full ${isToday ? 'bg-[#102C53] text-white' : closed ? 'text-red-500' : 'text-gray-700'}`}>{d.getDate()}</p>
+                  {closed && <p className="text-[9px] font-semibold text-red-600 font-manrope leading-none">closed</p>}
                 </div>
               );
             })}
@@ -1063,15 +1098,18 @@ function WeeklyCalendar({ bookings, instruments, user, bookingSettings, view, on
               const isToday = ds === todayStr;
               const dayLayout = layoutDayEvents(visibleBookings.filter(b => b.date === ds));
               const ghost = drag && drag.date === ds ? drag : null;
+              const closedDay = closureOn(ds, bookingSettings);
               return (
                 <div
                   key={ds}
                   data-daycol={ds}
                   onPointerDown={isMobile ? undefined : e => startCreate(e, ds)}
                   onClick={isMobile ? e => tapCreate(e, ds) : undefined}
-                  className={`flex-1 relative border-l border-gray-100 cursor-pointer ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`}
+                  className={`flex-1 relative border-l border-gray-100 ${closedDay && !canManageAllBookings ? 'cursor-not-allowed' : 'cursor-pointer'} ${isToday ? 'bg-[#102C53]/[0.02]' : ''} ${dragActive ? 'select-none' : ''}`}
                   style={{ height: gridHeight }}
+                  title={closedDay ? `Politecnico closed${closedDay.label ? ` — ${closedDay.label}` : ''}` : undefined}
                 >
+                  {closedDay && <div className="absolute inset-0 z-[1] pointer-events-none" style={{ backgroundImage: CLOSED_HATCH }} />}
                   {/* Hour bands + gridlines */}
                   {hourMarks.slice(0, -1).map(h => {
                     const working = isWorkingHour(h, bookingSettings);

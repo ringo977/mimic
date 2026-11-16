@@ -135,6 +135,11 @@
 --      then supabase-2026-11-granter-responsibles.sql (lab_is_granter v3: the
 --        lab_users row is writable also by a Post-Doc / Researcher responsible of
 --        an instrument — without it their certification UPDATE touched 0 rows)
+--      then supabase-2026-11-closure-days.sql (Politecnico closure days:
+--        app_settings 'closures' = { periods: [{start, end, label}] },
+--        lab_closure_on(date), trigger bookings_enforce_closures — no booking
+--        on a closure day except by booking managers; seeds 7–8 Dec 2026 and
+--        24 Dec 2026 – 6 Jan 2027)
 --      then supabase-2026-11-email-digest.sql (e-mail recap at 07/13/19 Rome via
 --        pg_cron 'mimic-digest' + pg_net → Brevo: lab_users.digest_opt_out,
 --        app_settings 'digest', digest_log, digest_* functions,

@@ -848,6 +848,41 @@ export interface BookingSettings {
   workStartHour: number;   // start of highlighted "working hours" band
   workEndHour: number;     // end of working hours band
   slotMinutes: 30 | 60;    // booking granularity
+  /**
+   * Days the Politecnico is closed: unlike weekends and public holidays,
+   * nobody can enter, so instruments cannot be booked (booking managers
+   * excepted, for authorised access). Stored on its own in app_settings
+   * ('closures'), merged in here by LabContext. Server: enforce_closure_days.
+   */
+  closures: ClosurePeriod[];
+}
+
+/** A closure of the Politecnico, both dates included (YYYY-MM-DD). */
+export interface ClosurePeriod { start: string; end: string; label: string }
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+export function sanitizeClosures(list: unknown): ClosurePeriod[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((c): c is ClosurePeriod => !!c && ISO_DAY.test(String(c.start)) && ISO_DAY.test(String(c.end)) && c.end >= c.start)
+    .map(c => ({ start: c.start, end: c.end, label: String(c.label ?? '').trim() }))
+    .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+}
+
+/** The closure covering a day, if any. */
+export function closureOn(dateStr: string, settings: Pick<BookingSettings, 'closures'>): ClosurePeriod | undefined {
+  return settings.closures.find(c => dateStr >= c.start && dateStr <= c.end);
+}
+
+/** "8 Dec 2026" or "24 Dec 2026 – 6 Jan 2027", with the label when there is one. */
+export function closureLabel(c: ClosurePeriod): string {
+  const span = c.start === c.end ? formatDate(c.start) : `${formatDate(c.start)} – ${formatDate(c.end)}`;
+  return c.label ? `${c.label} (${span})` : span;
+}
+
+/** Message shown when a booking is refused because of a closure. */
+export function closureBookingError(dateStr: string, c: ClosurePeriod): string {
+  return `The Politecnico is closed on ${formatDate(dateStr)}${c.label ? ` (${c.label})` : ''}: the lab cannot be accessed, so nothing can be booked.`;
 }
 
 export const defaultBookingSettings: BookingSettings = {
@@ -856,6 +891,7 @@ export const defaultBookingSettings: BookingSettings = {
   workStartHour: 9,
   workEndHour: 19,
   slotMinutes: 30,
+  closures: [],
 };
 
 // Clamp/sanitize settings loaded from storage so the UI never breaks.
@@ -870,7 +906,7 @@ export function sanitizeBookingSettings(s: Partial<BookingSettings> | null | und
   openEnd = Math.min(Math.max(openStart + 1, openEnd), 24);
   workStart = Math.min(Math.max(openStart, workStart), openEnd);
   workEnd = Math.min(Math.max(workStart, workEnd), openEnd);
-  return { openStartHour: openStart, openEndHour: openEnd, workStartHour: workStart, workEndHour: workEnd, slotMinutes: slot };
+  return { openStartHour: openStart, openEndHour: openEnd, workStartHour: workStart, workEndHour: workEnd, slotMinutes: slot, closures: sanitizeClosures(s?.closures) };
 }
 
 // Build the list of slot START hours (decimal) for a given settings range.
@@ -976,14 +1012,17 @@ export interface SeriesDay { date: string; startHour: number; endHour: number }
 export function buildSeriesDays(args: {
   from: string; until: string; startHour: number; endHour: number;
   skipWeekends: boolean; mode: SeriesMode; settings: BookingSettings;
+  /** Leave out the days the Politecnico is closed (default: yes; booking managers pass false). */
+  skipClosures?: boolean;
 }): SeriesDay[] {
-  const { from, until, startHour, endHour, skipWeekends, mode, settings } = args;
+  const { from, until, startHour, endHour, skipWeekends, mode, settings, skipClosures = true } = args;
   if (!until || until <= from) return [];
   const dates: string[] = [];
-  for (let i = 0; dates.length <= 31; i++) {
+  for (let i = 0; dates.length <= 31 && i < 400; i++) {
     const ds = addDaysStr(from, i);
     if (ds > until) break;
     if (skipWeekends && !isWorkingDay(ds)) continue;
+    if (skipClosures && closureOn(ds, settings)) continue;
     dates.push(ds);
   }
   if (dates.length < 2) return [];

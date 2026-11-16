@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useState, useMemo, useRef } from 'react';
-import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download,
+import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download, Lock,
   Snowflake, BookOpen, FolderKanban, Award, CalendarDays, ChevronLeft, ChevronRight,
   Upload, FileText, Warehouse, MapPin, ChevronUp, ChevronDown, HardDrive, UploadCloud,
   DatabaseBackup, FileArchive, AlertCircle, CheckCircle2, Loader2, Clock, Sun, Moon,
@@ -21,6 +21,7 @@ import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffil
   ReagentKind, reagentKinds, reagentKindLabel, UserGroup,
   CellType, cellTypePalette, matchCellType, cellLineColor, viewCellLineColors, cellLineAbbr,
   parseCells, formatCells,
+  ClosurePeriod,
 } from '@/data/lab-data';
 import { fetchMaintenanceLogs, upsertMaintenanceLog, deleteMaintenanceLog, deleteMaintenanceLogsForInstrument } from '@/lib/supabase-data';
 import { openManualFile } from './ManualsPage';
@@ -2582,16 +2583,30 @@ function CalendarTab() {
 // Schedule / Booking Hours Tab
 // ============================================================
 function ScheduleTab() {
-  const { bookingSettings, updateBookingSettings } = useLabContext();
+  const { bookingSettings, updateBookingSettings, updateClosures, bookings, instruments } = useLabContext();
   const [draft, setDraft] = useState<BookingSettings>(bookingSettings);
   const [saved, setSaved] = useState(false);
 
   const hourOptions = Array.from({ length: 25 }, (_, i) => i); // 0..24
   const set = (patch: Partial<BookingSettings>) => { setDraft(d => ({ ...d, ...patch })); setSaved(false); };
-  const dirty = JSON.stringify(draft) !== JSON.stringify(bookingSettings);
+  // Hours only: closures are not part of the draft (they are saved on their own, below)
+  const hoursOf = (b: BookingSettings) => JSON.stringify([b.openStartHour, b.openEndHour, b.workStartHour, b.workEndHour, b.slotMinutes]);
+  const dirty = hoursOf(draft) !== hoursOf(bookingSettings);
   const handleSave = () => { updateBookingSettings(draft); setSaved(true); };
 
   const previewSlots = buildBookingSlots(draft);
+
+  // Politecnico closures: saved on their own, as soon as one is added or removed
+  const [newClosure, setNewClosure] = useState<ClosurePeriod>({ start: '', end: '', label: '' });
+  const today = new Date().toLocaleDateString('en-CA');
+  const closures = bookingSettings.closures;
+  const closureEnd = newClosure.end || newClosure.start;   // "To" left empty = a single day
+  const closureValid = !!newClosure.start && closureEnd >= newClosure.start;
+  const addClosure = () => {
+    if (!closureValid) return;
+    updateClosures([...closures, { start: newClosure.start, end: closureEnd, label: newClosure.label.trim() }]);
+    setNewClosure({ start: '', end: '', label: '' });
+  };
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -2654,6 +2669,71 @@ function ScheduleTab() {
           </button>
           {saved && !dirty && <span className="flex items-center gap-1 text-xs text-green-600 font-manrope"><CheckCircle2 size={14} /> Saved</span>}
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-1">
+          <Lock size={16} className="text-red-600" />
+          <h2 className="text-sm font-bold text-gray-900 font-manrope">Politecnico closure days</h2>
+        </div>
+        <p className="text-xs text-gray-500 font-manrope mb-4">
+          Days on which the Politecnico is closed and <strong>nobody can enter</strong> — unlike weekends and public holidays, when the lab can still be used.
+          They are marked on every calendar and cannot be booked; only booking managers (Lab Manager, Project Manager, PI, Admin) can still book them, for authorised access.
+          Bookings already made on those days are not removed: they are listed here so you can sort them out.
+        </p>
+
+        {closures.length === 0 && <p className="text-xs text-gray-400 font-manrope mb-2">No closure defined.</p>}
+        <div className="space-y-1.5 mb-3">
+          {closures.map((c, i) => {
+            const over = c.end < today;
+            const hit = bookings.filter(b => b.date >= c.start && b.date <= c.end && b.date >= today);
+            return (
+              <div key={`${c.start}-${c.end}-${i}`} className={`rounded-lg px-3 py-1.5 border ${over ? 'bg-gray-50 border-gray-100' : 'bg-red-50/60 border-red-100'}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-manrope flex-1 ${over ? 'text-gray-400' : 'text-gray-700'}`}>
+                    {c.start === c.end ? formatDate(c.start) : `${formatDate(c.start)} → ${formatDate(c.end)}`}{c.label ? ` — ${c.label}` : ''}{over ? ' (past)' : ''}
+                  </span>
+                  <button onClick={() => updateClosures(closures.filter((_, j) => j !== i))} title="Remove this closure"
+                    className="p-1 rounded hover:bg-red-100 text-red-500"><Trash2 size={13} /></button>
+                </div>
+                {hit.length > 0 && (
+                  <div className="mt-1 text-[11px] text-amber-700 font-manrope">
+                    <p className="font-semibold">{hit.length} booking{hit.length === 1 ? '' : 's'} already on {hit.length === 1 ? 'this closure' : 'these days'}:</p>
+                    <ul className="list-disc ml-4">
+                      {[...hit].sort((a, b) => a.date.localeCompare(b.date) || a.startHour - b.startHour).slice(0, 12).map(b => (
+                        <li key={b.id}>{formatDate(b.date)} {formatTime(b.startHour)}–{formatTime(b.endHour)} · {instruments.find(x => x.id === b.instrumentId)?.name || b.instrumentId} · {b.userName}</li>
+                      ))}
+                      {hit.length > 12 && <li>… and {hit.length - 12} more</li>}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">From</label>
+            <input type="date" value={newClosure.start} onChange={e => setNewClosure(n => ({ ...n, start: e.target.value }))}
+              className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">To <span className="font-normal text-gray-400">(empty = one day)</span></label>
+            <input type="date" value={newClosure.end} min={newClosure.start} onChange={e => setNewClosure(n => ({ ...n, end: e.target.value }))}
+              className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-[10px] font-medium text-gray-500 mb-0.5 font-manrope">Label</label>
+            <input value={newClosure.label} onChange={e => setNewClosure(n => ({ ...n, label: e.target.value }))} placeholder="e.g. Christmas closure"
+              onKeyDown={e => { if (e.key === 'Enter') addClosure(); }}
+              className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs font-manrope outline-none" />
+          </div>
+          <button onClick={addClosure} disabled={!closureValid}
+            className="px-3 py-2 bg-[#102C53] text-white rounded-lg text-xs font-semibold font-manrope hover:bg-[#1a3d6e] disabled:opacity-40 disabled:cursor-not-allowed">
+            <Plus size={13} className="inline -mt-0.5" /> Add closure
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-400 font-manrope mt-2">Saved as soon as you add or remove a period.</p>
       </div>
 
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-800 font-manrope flex items-start gap-2">

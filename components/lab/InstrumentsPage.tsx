@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Clock, MapPin, Lock, Plus, X, Search, Sun, M
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import { formatTime, buildBookingSlots, isWorkingHour, validateBookingPolicy, slotLabel, seatsTaken, peakSeats, isSlotFull, slotsUsedInWeek, hoursUsedOnDay, weekStart, addDaysStr, formatDate,
-  policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, buildSeriesDays, SeriesMode, isCertifiedFor, isResponsibleOf, effectiveRole } from '@/data/lab-data';
+  closureOn, closureLabel, closureBookingError, policyCapacity, policyAdvanceDays, userGroupOf, userGroupLabel, bookingNeedsApproval, isExtraHours, isBookableTime, describeBookingPolicy, buildSeriesDays, SeriesMode, isCertifiedFor, isResponsibleOf, effectiveRole } from '@/data/lab-data';
 import { fetchBookingsForSlot } from '@/lib/supabase-data';
 import MultiDayFields from './MultiDayFields';
 
@@ -99,6 +99,10 @@ export default function InstrumentsPage() {
   const lastBookableDate = horizon !== undefined ? addDaysStr(todayStr, horizon) : '';
   const beyondHorizon = Boolean(lastBookableDate) && selectedDate > lastBookableDate;
   const canApprove = canManage || (!!instrument?.responsibleUserId && instrument.responsibleUserId === user.id);
+  // Politecnico closed: nobody can enter, so nobody books — except booking
+  // managers (authorised access). Server: trigger enforce_closure_days.
+  const closure = closureOn(selectedDate, bookingSettings);
+  const closedForMe = (ds: string) => !canManageAllBookings && !!closureOn(ds, bookingSettings);
 
   // Capacity-aware conflict: an interval is blocked only when all seats are taken.
   const hasConflict = (start: number, end: number, list: typeof bookings = dayBookings) =>
@@ -110,6 +114,7 @@ export default function InstrumentsPage() {
   // Is a given slot start no longer bookable (in the past — or, when the policy
   // allows booking a slot in progress, already ended)?
   const slotIsPast = (slotStart: number) => {
+    if (closedForMe(selectedDate)) return true;
     if (canManage) return isPastDate;
     const fs = fixedSlots?.find(s => slotStart >= s.start - EPS && slotStart < s.end - EPS);
     const end = fs ? fs.end : slotStart + step;
@@ -130,7 +135,7 @@ export default function InstrumentsPage() {
 
   // Days of the series being composed in the form (selected date → until, each with its hours), or [] for a single day
   const seriesDays = policy?.multiDay
-    ? buildSeriesDays({ from: selectedDate, until: bookUntil, startHour: bookStartHour, endHour: bookEndHour, skipWeekends, mode: seriesMode, settings: bookingSettings })
+    ? buildSeriesDays({ from: selectedDate, until: bookUntil, startHour: bookStartHour, endHour: bookEndHour, skipWeekends, mode: seriesMode, settings: bookingSettings, skipClosures: !canManageAllBookings })
     : [];
   const isSeries = seriesDays.length > 1;
   // Hours actually booked on the selected (first) day: the form's hours, or the series' first day
@@ -145,6 +150,7 @@ export default function InstrumentsPage() {
     setBookError('');
     if (firstEnd <= firstStart) { setBookError('End time must be after start time.'); return; }
     if (isPastDate) { setBookError('Cannot book a date in the past.'); return; }
+    if (closure && !canManageAllBookings) { setBookError(closureBookingError(selectedDate, closure)); return; }
     if (!canManage && !isBookableTime(policy, selectedDate, firstStart, firstEnd, todayStr, nowHour)) {
       setBookError(policy?.allowInProgress ? 'This slot has already ended.' : 'Cannot book a time slot in the past.'); return;
     }
@@ -360,7 +366,7 @@ export default function InstrumentsPage() {
           <p className="text-xs text-gray-500 font-manrope mt-0.5">{instrument ? locName(instrument) : ''} &middot; {instrument?.description}</p>
           {instrument?.manufacturer && <p className="text-[10px] text-gray-400 font-manrope">{instrument.manufacturer}{instrument.model ? ` ${instrument.model}` : ''}{instrument.serialNumber ? ` · S/N ${instrument.serialNumber}` : ''}</p>}
         </div>
-        {canBook && isCertified && !isPastDate && (
+        {canBook && isCertified && !isPastDate && !closedForMe(selectedDate) && (
           <button
             onClick={() => {
               const defaultStart = slots.find(s => !slotIsPast(s) && s >= bookingSettings.workStartHour - EPS)
@@ -426,6 +432,21 @@ export default function InstrumentsPage() {
         </div>
       </div>
 
+      {(() => {
+        // Closure banner: the selected day, or any of the 7 days of the week view
+        const hits = showWeek ? bookingSettings.closures.filter(c => c.start <= weekDays[6] && c.end >= weekDays[0]) : closure ? [closure] : [];
+        if (hits.length === 0) return null;
+        return (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-xs font-manrope">
+            <Lock size={14} className="shrink-0 mt-0.5" />
+            <span>
+              <strong>Politecnico closed: {hits.map(closureLabel).join('; ')}.</strong> Unlike weekends and public holidays, the building cannot be entered, so these days cannot be booked.
+              {canManageAllBookings && ' As a booking manager you can still book them, for authorised access only.'}
+            </span>
+          </div>
+        );
+      })()}
+
       {showMonth && instrument && (
         <MonthOverview
           month={monthCursor}
@@ -447,7 +468,7 @@ export default function InstrumentsPage() {
               total = (bookingSettings.openEndHour - bookingSettings.openStartHour) * capacity;
               taken = list.reduce((n, b) => n + (b.endHour - b.startHour), 0);
             }
-            return { count: list.length, mine, ratio: total > 0 ? Math.min(1, taken / total) : 0, pending: list.some(b => b.status === 'pending') };
+            return { count: list.length, mine, ratio: total > 0 ? Math.min(1, taken / total) : 0, pending: list.some(b => b.status === 'pending'), closed: closureOn(ds, bookingSettings)?.label };
           }}
         />
       )}
@@ -467,8 +488,9 @@ export default function InstrumentsPage() {
               key={ds}
               onClick={() => setSelectedDate(ds)}
               className={`flex flex-col items-center px-3 py-2 rounded-xl text-xs font-manrope transition-all shrink-0 ${
-                isSelected ? 'bg-[#102C53] text-white' : dIsToday ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                isSelected ? 'bg-[#102C53] text-white' : closureOn(ds, bookingSettings) ? 'bg-red-50 text-red-500 hover:bg-red-100' : dIsToday ? 'bg-blue-50 text-blue-700' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
+              title={closureOn(ds, bookingSettings) ? 'Politecnico closed' : undefined}
             >
               <span className="font-medium">{d.toLocaleDateString('en', { weekday: 'short' })}</span>
               <span className="text-lg font-bold mt-0.5">{d.getDate()}</span>
@@ -493,7 +515,7 @@ export default function InstrumentsPage() {
           const h = Math.min(Math.max(snap(raw), bookingSettings.openStartHour), bookingSettings.openEndHour - step);
           const inHorizon = !lastBookableDate || ds <= lastBookableDate;
           const past = canManage ? ds < todayStr : !isBookableTime(policy, ds, h, Math.min(h + step, bookingSettings.openEndHour), todayStr, nowHour);
-          if (past || !inHorizon) return;
+          if (past || !inHorizon || closedForMe(ds)) return;
           setSelectedDate(ds);
           openModalAt(h);
         };
@@ -518,7 +540,7 @@ export default function InstrumentsPage() {
                       <button key={ds} onClick={() => { setSelectedDate(ds); setShowWeek(false); }} className="flex-1 text-center py-2 hover:bg-gray-50" title="Open this day">
                         <p className={`text-[10px] font-semibold uppercase tracking-wide font-manrope ${dIsToday ? 'text-[#102C53]' : 'text-gray-400'}`}>{d.toLocaleDateString('en', { weekday: 'short' })}</p>
                         <p className={`text-sm font-bold font-manrope inline-flex items-center justify-center w-7 h-7 rounded-full ${dIsToday ? 'bg-[#102C53] text-white' : 'text-gray-700'}`}>{d.getDate()}</p>
-                        <p className="text-[9px] text-gray-400 font-manrope">{n > 0 ? `${n} bk` : ''}</p>
+                        <p className={`text-[9px] font-manrope ${closureOn(ds, bookingSettings) ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>{closureOn(ds, bookingSettings) ? 'closed' : n > 0 ? `${n} bk` : ''}</p>
                       </button>
                     );
                   })}
@@ -534,6 +556,7 @@ export default function InstrumentsPage() {
                     const dIsToday = ds === todayStr;
                     const beyond = Boolean(lastBookableDate) && ds > lastBookableDate;
                     const pastDay = ds < todayStr;
+                    const closed = closureOn(ds, bookingSettings);
                     // simple lanes for capacity > 1: sort by start, assign first free lane
                     const laneEnd: number[] = [];
                     const placed = list.slice().sort((a, b) => a.startHour - b.startHour).map(b => {
@@ -546,10 +569,11 @@ export default function InstrumentsPage() {
                       <div
                         key={ds}
                         onClick={e => cellClick(e, ds)}
-                        className={`flex-1 relative border-l border-gray-100 ${dIsToday ? 'bg-[#102C53]/[0.02]' : ''} ${pastDay || beyond ? 'bg-gray-50/60 cursor-default' : canBook && isCertified ? 'cursor-pointer' : ''}`}
+                        className={`flex-1 relative border-l border-gray-100 ${dIsToday ? 'bg-[#102C53]/[0.02]' : ''} ${pastDay || beyond || (closed && !canManageAllBookings) ? 'bg-gray-50/60 cursor-default' : canBook && isCertified ? 'cursor-pointer' : ''}`}
                         style={{ height: gridH }}
-                        title={beyond ? `Beyond your booking horizon (until ${formatDate(lastBookableDate)})` : undefined}
+                        title={closed ? `Politecnico closed${closed.label ? ` — ${closed.label}` : ''}` : beyond ? `Beyond your booking horizon (until ${formatDate(lastBookableDate)})` : undefined}
                       >
+                        {closed && <div className="absolute inset-0 z-[1] pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(135deg, rgba(239,68,68,0.10) 0 6px, transparent 6px 14px)' }} />}
                         {hours.slice(0, -1).map(h => (
                           <div key={h} className={`absolute left-0 right-0 border-t border-gray-100 ${isWorkingHour(h, bookingSettings) ? '' : 'bg-amber-50/50'}`} style={{ top: (h - rangeStart) * HOUR_PX, height: HOUR_PX }} />
                         ))}
@@ -866,7 +890,7 @@ function MonthOverview({ month, onMonth, selectedDate, onSelect, todayStr, lastB
   month: string; onMonth: (m: string) => void;
   selectedDate: string; onSelect: (ds: string) => void;
   todayStr: string; lastBookableDate: string;
-  dayInfo: (ds: string) => { count: number; mine: boolean; ratio: number; pending: boolean };
+  dayInfo: (ds: string) => { count: number; mine: boolean; ratio: number; pending: boolean; closed?: string };   // closed: label of the closure ('' = no label), undefined = open
 }) {
   const [y, m] = month.split('-').map(Number);
   const first = new Date(y, m - 1, 1, 12);
@@ -900,17 +924,19 @@ function MonthOverview({ month, onMonth, selectedDate, onSelect, todayStr, lastB
           const beyond = !!lastBookableDate && ds > lastBookableDate;
           const selected = ds === selectedDate;
           const today = ds === todayStr;
+          const closed = info.closed !== undefined;
           return (
             <button
               key={ds}
               onClick={() => onSelect(ds)}
               className={`relative rounded-lg py-1.5 flex flex-col items-center gap-1 text-xs font-manrope transition-colors border ${
                 selected ? 'border-[#102C53] bg-[#102C53]/5 font-semibold text-gray-900'
+                  : closed ? 'border-transparent bg-red-50 text-red-400 hover:bg-red-100'
                   : past ? 'border-transparent text-gray-300 hover:bg-gray-50'
                     : beyond ? 'border-transparent text-gray-400 hover:bg-gray-50'
                       : 'border-transparent text-gray-700 hover:bg-gray-50'
               }`}
-              title={`${ds}: ${info.count} booking${info.count === 1 ? '' : 's'}${info.mine ? ' (incl. yours)' : ''}${beyond ? ' — beyond your booking horizon' : ''}`}
+              title={`${ds}: ${info.count} booking${info.count === 1 ? '' : 's'}${info.mine ? ' (incl. yours)' : ''}${beyond ? ' — beyond your booking horizon' : ''}${closed ? ` — Politecnico closed${info.closed ? ` (${info.closed})` : ''}` : ''}`}
             >
               <span className={today ? 'text-blue-600 font-bold' : ''}>{Number(ds.slice(8))}</span>
               <span className="h-1.5 w-full max-w-[28px] rounded-full bg-gray-100 overflow-hidden">
@@ -930,6 +956,7 @@ function MonthOverview({ month, onMonth, selectedDate, onSelect, todayStr, lastB
         <span className="flex items-center gap-1"><span className="w-3 h-1.5 rounded-full bg-red-500" /> full</span>
         <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> your booking</span>
         {lastBookableDate && <span className="flex items-center gap-1"><Lock size={9} /> beyond your horizon</span>}
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-50 border border-red-200" /> Politecnico closed</span>
       </div>
     </div>
   );
