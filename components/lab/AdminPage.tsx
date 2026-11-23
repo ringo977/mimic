@@ -9,6 +9,7 @@ import { Plus, Trash2, Edit2, X, Users, FlaskConical, Microscope, Save, Download
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
 import UserDetailModal from './UserDetailModal';
+import WithdrawVialModal from './WithdrawVialModal';
 import ReagentFormModal from './ReagentFormModal';
 import HistoryPanel from './HistoryPanel';
 import { addDaysStr, validateVialPosition,todayStr, LabUser, UserRole, UserAffiliation, Reagent, Instrument, MaintenanceLog, Manual, StorageUnit, StorageUnitType, CryoVial,
@@ -1612,7 +1613,7 @@ function StorageUnitsTab() {
                     if (vialsHere.length) parts.push(`Its ${vialsHere.length} stored vial${vialsHere.length > 1 ? 's' : ''} will also be permanently deleted.`);
                     if (reagentsHere.length) parts.push(`${reagentsHere.length} reagent${reagentsHere.length > 1 ? 's' : ''} will be unlinked from it (kept in inventory).`);
                     confirmDelete('Delete Storage Unit?', parts.join(' '), () => {
-                      vialsHere.forEach(v => removeCryoVial(v.id));
+                      vialsHere.forEach(v => removeCryoVial(v.id, `Storage unit "${s.name}" deleted`));
                       reagentsHere.forEach(r => updateReagent({ ...r, storageUnitId: undefined }));
                       removeStorageUnit(s.id);
                     });
@@ -2215,7 +2216,6 @@ function CryoTab() {
   const { cryoVials, addCryoVial, removeCryoVial, user, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
   // 1×1 boxes are reagent containers: vials only go into boxes with a grid
   const storageBoxes = useMemo(() => allBoxes.filter(isCryoBox), [allBoxes]);
-  const [ConfirmDialog, confirmDelete] = useConfirm();
   const [showForm, setShowForm] = useState(false);
   // Only units that have boxes can hold vials
   const boxUnits = storageUnits.filter(s => storageBoxes.some(b => b.storageUnitId === s.id));
@@ -2228,6 +2228,7 @@ function CryoTab() {
   const formBox = formBoxes.find(b => b.id === form.boxId);
 
   const [formError, setFormError] = useState('');
+  const [withdrawing, setWithdrawing] = useState<CryoVial | null>(null);
 
   /** Selecting a box also refreshes the legacy rack/box coordinates. */
   const pickBox = (id: string) => {
@@ -2335,7 +2336,7 @@ function CryoTab() {
                 <td className="px-3 py-2 text-gray-600 font-mono">{getPositionStr(v)}</td>
                 <td className="px-3 py-2 text-gray-500">{v.userName}</td><td className="px-3 py-2 text-gray-500">{v.date}</td>
                 <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">{v.notes}</td>
-                <td className="px-3 py-2 text-right"><button onClick={() => confirmDelete('Remove Vial?', `${v.cellLine} P${v.passage} will be permanently removed.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
+                <td className="px-3 py-2 text-right"><button onClick={() => setWithdrawing(v)} title="Withdraw this vial" aria-label={`Withdraw ${v.cellLine} P${v.passage}`} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button></td>
               </tr>
             );
           })}
@@ -2370,7 +2371,14 @@ function CryoTab() {
           <button onClick={save} disabled={!form.cellLine} className="w-full py-3 bg-cyan-500 text-white rounded-xl font-semibold text-sm font-manrope hover:bg-cyan-600 disabled:opacity-40 flex items-center justify-center gap-2"><Save size={16} /> Store Vial</button>
         </div>
       </Modal>}
-      <ConfirmDialog />
+      {withdrawing && (
+        <WithdrawVialModal
+          vial={withdrawing}
+          where={`${storageUnits.find(u => u.id === withdrawing.storageUnitId)?.name || withdrawing.storageUnitId} · ${getPositionStr(withdrawing)}`}
+          onCancel={() => setWithdrawing(null)}
+          onConfirm={reason => { removeCryoVial(withdrawing.id, reason); setWithdrawing(null); }}
+        />
+      )}
     </>
   );
 }

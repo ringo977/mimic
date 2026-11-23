@@ -7,6 +7,7 @@ import {
   rolePermissions, permissionsOf, effectiveRole, canRequestAbsences, isResponsibleOf,
   generateId, formatCells,
   defaultBookingSettings, sanitizeBookingSettings, formatTime, ClosurePeriod, sanitizeClosures, closureLabel,
+  boxPositionLabel, CRYO_WITHDRAW_ACTION, cryoWithdrawDetails,
   defaultAbsenceSettings, sanitizeAbsenceSettings, absenceTypeMeta, SeriesDay,
 } from '@/data/lab-data';
 import { fetchLabUsers, insertLabUser, updateLabUser, grantLabUserFields, deleteLabUser, saveMyFavoriteInstruments } from '@/lib/supabase-users';
@@ -83,7 +84,8 @@ interface LabContextType {
   cryoVials: CryoVial[];
   addCryoVial: (v: Omit<CryoVial, 'id'>) => void;
   addCryoVials: (list: Omit<CryoVial, 'id'>[]) => void;
-  removeCryoVial: (id: string) => void;
+  /** Takes a vial out of storage; `reason` (optional) is kept in the log line of the withdrawal. */
+  removeCryoVial: (id: string, reason?: string) => void;
   wishlist: WishlistItem[];
   addWishlistItem: (item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => void;
   updateWishlistStatus: (id: string, status: WishlistItem['status'], approvedBy?: string, extra?: Partial<Pick<WishlistItem, 'stockedToReagentId' | 'stockedToStorageUnitId' | 'piComment' | 'approvedBy'>>) => void;
@@ -502,14 +504,21 @@ export function LabProvider({ user, children }: { user: LabUser; children: React
   }, [user, addLogEntry]);
   const addCryoVial = useCallback((v: Omit<CryoVial, 'id'>) => addCryoVials([v]), [addCryoVials]);
 
-  const removeCryoVial = useCallback((id: string) => {
+  const removeCryoVial = useCallback((id: string, reason?: string) => {
     setCryoVials(prev => {
       const vl = prev.find(v => v.id === id);
-      if (vl) addLogEntry({ userId: user.id, userName: user.name, action: `Withdrew vial ${vl.cellLine}`, category: 'cryo', details: `P${vl.passage}${vl.cells ? `, ${formatCells(vl.cells)} cells` : ''} — R${vl.rack} B${vl.box} (${String.fromCharCode(65 + vl.row)}${vl.col + 1})${vl.userId !== user.id ? ` — frozen by ${vl.userName}` : ''}` });
+      if (vl) {
+        // The row is deleted: this log line is what remains of the vial (see "Withdrawn vials" on the Cryo page)
+        const unit = storageUnits.find(s => s.id === vl.storageUnitId);
+        const box = vl.boxId ? storageBoxes.find(b => b.id === vl.boxId) : undefined;
+        const where = `${unit ? `${unit.name}, ` : ''}${box ? boxPositionLabel(box, vl.row, vl.col) : `R${vl.rack} B${vl.box} (${String.fromCharCode(65 + vl.row)}${vl.col + 1})`}`;
+        const info = `P${vl.passage}${vl.cells ? `, ${formatCells(vl.cells)} cells` : ''} — ${where} — frozen by ${vl.userName}${vl.date ? ` on ${vl.date}` : ''}`;
+        addLogEntry({ userId: user.id, userName: user.name, action: `${CRYO_WITHDRAW_ACTION}${vl.cellLine}`, category: 'cryo', details: cryoWithdrawDetails(info, reason) });
+      }
       return prev.filter(v => v.id !== id);
     });
     track(deleteCryoVial(id), 'Cryo vial removal');
-  }, [user, addLogEntry, track]);
+  }, [user, addLogEntry, track, storageUnits, storageBoxes]);
 
   // ---- Wishlist ----
   const addWishlistItem = useCallback((item: Omit<WishlistItem, 'id' | 'timestamp' | 'status'>) => {

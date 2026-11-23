@@ -1303,7 +1303,7 @@ function trimNum(x: number): string { return String(Math.round(x * 1000) / 1000)
 export interface WishlistItem {
   id: string;
   name: string;
-  type: 'reagent' | 'antibody' | 'consumable' | 'equipment';
+  type: 'reagent' | 'antibody' | 'consumable' | 'equipment' | 'cells';
   catalogNumber: string;
   supplier: string;
   estimatedCost: number;
@@ -1323,6 +1323,29 @@ export interface WishlistItem {
   motivation: string;       // why it is needed
   discussedWithPi: boolean; // already agreed in a 1-to-1 / meeting
   piComment: string;        // the PI's question when the request is deferred
+}
+
+/** Wishlist types, in the order of the request form. */
+export const wishlistTypeLabel: Record<WishlistItem['type'], string> = {
+  reagent: 'Reagent', antibody: 'Antibody', cells: 'Cells', consumable: 'Consumable', equipment: 'Equipment',
+};
+
+// A withdrawn vial leaves cryo_vials: what remains is its activity-log line
+// ("Withdrew vial <cell line>", details "<vial> — Reason: <note>").
+export const CRYO_WITHDRAW_ACTION = 'Withdrew vial ';
+const CRYO_REASON_MARK = ' — Reason: ';
+export function cryoWithdrawDetails(info: string, reason?: string): string {
+  const r = (reason || '').trim();
+  return r ? `${info}${CRYO_REASON_MARK}${r}` : info;
+}
+/** Splits a withdrawal log line back into cell line, vial description and reason ('' when none was given). */
+export function parseCryoWithdrawal(entry: Pick<LogEntry, 'action' | 'details'>): { cellLine: string; info: string; reason: string } {
+  const i = entry.details.indexOf(CRYO_REASON_MARK);
+  return {
+    cellLine: entry.action.slice(CRYO_WITHDRAW_ACTION.length),
+    info: i < 0 ? entry.details : entry.details.slice(0, i),
+    reason: i < 0 ? '' : entry.details.slice(i + CRYO_REASON_MARK.length),
+  };
 }
 
 export interface LogEntry {

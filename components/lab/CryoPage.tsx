@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo, useEffect, memo } from 'react';
 import { Plus, X, Trash2, Info, Search, ChevronUp, ChevronDown, CheckSquare, Boxes, History } from 'lucide-react';
+import WithdrawVialModal from './WithdrawVialModal';
+import { fetchCryoWithdrawals } from '@/lib/supabase-data';
 import { RowHistoryModal } from './HistoryPanel';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import { todayStr, formatDate, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, cellLineColor, cellLineAbbr, matchCellType, viewCellLineColors } from '@/data/lab-data';
+import { todayStr, formatDate, formatDateTime, getRowLabels, storageUnitTypes, boxesOfUnit, boxCapacity, isCryoBox, boxPositionLabel, parseCells, formatCells, StorageBox, CryoVial, LogEntry, CRYO_WITHDRAW_ACTION, parseCryoWithdrawal, cellLineColor, cellLineAbbr, matchCellType, viewCellLineColors } from '@/data/lab-data';
 
 export default function CryoPage() {
   const { user, permissions, cryoVials, addCryoVials, removeCryoVial, storageUnits, storageBoxes: allBoxes, cellTypes } = useLabContext();
-  const [ConfirmDialog, confirmDelete] = useConfirm();
 
   // Only boxes with a vial grid belong here; 1×1 boxes are reagent
   // containers ("Supplements Box") and live in the Reagents page.
@@ -26,6 +27,7 @@ export default function CryoPage() {
   const [selectedBoxId, setSelectedBoxId] = useState('');
   const [selectedVial, setSelectedVial] = useState<string | null>(null);
   const [historyVial, setHistoryVial] = useState<{ id: string; label: string } | null>(null);
+  const [withdrawing, setWithdrawing] = useState<CryoVial | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addPosition, setAddPosition] = useState<{ row: number; col: number } | null>(null);
 
@@ -625,7 +627,7 @@ export default function CryoPage() {
                   records who did it); mirrors the cryo_vials_delete policy */}
               {permissions.canManageCryo && (
                 <button
-                  onClick={() => confirmDelete('Withdraw Vial?', `${selectedVialData.cellLine} P${selectedVialData.passage} will be removed from storage.`, () => { removeCryoVial(selectedVialData.id); setSelectedVial(null); })}
+                  onClick={() => setWithdrawing(selectedVialData)}
                   className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-medium font-manrope hover:bg-red-100 transition-colors mt-4"
                 >
                   <Trash2 size={14} /> Withdraw Vial
@@ -647,6 +649,9 @@ export default function CryoPage() {
 
       {/* ============ Full Vial Inventory with Search ============ */}
       <VialInventory />
+
+      {/* ============ Vials taken out, with the note left at withdrawal ============ */}
+      <WithdrawnVials />
 
       {/* Add Vial Modal */}
       {showAddModal && targetPositions.length > 0 && (
@@ -745,8 +750,15 @@ export default function CryoPage() {
           </div>
         </div>
       )}
-      <ConfirmDialog />
       {historyVial && <RowHistoryModal table="cryo_vials" rowId={historyVial.id} label={historyVial.label} onClose={() => setHistoryVial(null)} />}
+      {withdrawing && (
+        <WithdrawVialModal
+          vial={withdrawing}
+          where={`${storageUnits.find(s => s.id === withdrawing.storageUnitId)?.name || withdrawing.storageUnitId} · ${boxPositionLabel(boxOf(withdrawing), withdrawing.row, withdrawing.col)}`}
+          onCancel={() => setWithdrawing(null)}
+          onConfirm={reason => { removeCryoVial(withdrawing.id, reason); setWithdrawing(null); setSelectedVial(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -775,6 +787,7 @@ const VialInventory = memo(function VialInventory() {
   const [sortKey, setSortKey] = useState<VialSortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
   const [limit, setLimit] = useState(INVENTORY_PAGE);
+  const [withdrawing, setWithdrawing] = useState<CryoVial | null>(null);
 
   const toggleSort = (key: VialSortKey) => {
     if (sortKey === key) { setSortAsc(!sortAsc); } else { setSortKey(key); setSortAsc(true); }
@@ -848,7 +861,7 @@ const VialInventory = memo(function VialInventory() {
             {orphanVials.length} orphaned vial{orphanVials.length > 1 ? 's' : ''} reference a storage unit that no longer exists.
           </p>
           <button
-            onClick={() => confirmDelete('Remove orphaned vials?', `${orphanVials.length} vial${orphanVials.length > 1 ? 's' : ''} whose storage unit was deleted will be permanently removed. This cannot be undone.`, () => orphanVials.forEach(v => removeCryoVial(v.id)))}
+            onClick={() => confirmDelete('Remove orphaned vials?', `${orphanVials.length} vial${orphanVials.length > 1 ? 's' : ''} whose storage unit was deleted will be permanently removed. This cannot be undone.`, () => orphanVials.forEach(v => removeCryoVial(v.id, 'Clean-up: its storage unit no longer exists')))}
             className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold font-manrope bg-amber-600 text-white hover:bg-amber-700 transition-colors"
           >
             Clean up
@@ -887,7 +900,7 @@ const VialInventory = memo(function VialInventory() {
                 {permissions.canManageCryo && (
                   <td className="px-3 py-2 text-right">
                     {canWithdraw(v) && (
-                      <button onClick={() => confirmDelete('Withdraw Vial?', `${v.cellLine} P${v.passage} will be removed from storage.`, () => removeCryoVial(v.id))} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
+                      <button onClick={() => setWithdrawing(v)} title="Withdraw this vial" aria-label={`Withdraw ${v.cellLine} P${v.passage}`} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 size={13} /></button>
                     )}
                   </td>
                 )}
@@ -910,6 +923,104 @@ const VialInventory = memo(function VialInventory() {
         </div>
       )}
       <ConfirmDialog />
+      {withdrawing && (
+        <WithdrawVialModal
+          vial={withdrawing}
+          where={`${getUnitName(withdrawing.storageUnitId).trim()} · ${getPositionStr(withdrawing)}`}
+          onCancel={() => setWithdrawing(null)}
+          onConfirm={reason => { removeCryoVial(withdrawing.id, reason); setWithdrawing(null); }}
+        />
+      )}
     </div>
   );
 });
+
+/**
+ * Vials taken out of storage, newest first, with the note left at withdrawal.
+ * A withdrawn vial no longer exists in cryo_vials: this list is read from the
+ * activity log (one line per withdrawal), on demand when the section is opened.
+ */
+function WithdrawnVials() {
+  const { log } = useLabContext();
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<LogEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(INVENTORY_PAGE);
+
+  useEffect(() => {
+    if (!open || rows) return;
+    let cancelled = false;
+    fetchCryoWithdrawals().then(r => { if (cancelled) return; if (r) setRows(r); else setFailed(true); });
+    return () => { cancelled = true; };
+  }, [open, rows]);
+
+  // Withdrawals of this session (already in the context log) come first, without a new read
+  const all = useMemo(() => {
+    const recent = log.filter(l => l.category === 'cryo' && l.action.startsWith(CRYO_WITHDRAW_ACTION));
+    const seen = new Set(recent.map(l => l.id));
+    return [...recent, ...(rows || []).filter(l => !seen.has(l.id))]
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .map(l => ({ ...l, ...parseCryoWithdrawal(l) }));
+  }, [log, rows]);
+  const q = search.trim().toLowerCase();
+  const filtered = q ? all.filter(l => [l.cellLine, l.info, l.reason, l.userName].some(x => x.toLowerCase().includes(q))) : all;
+  const shown = filtered.slice(0, limit);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <button onClick={() => setOpen(o => !o)} aria-expanded={open}
+        className="w-full p-4 flex items-center gap-2 text-left hover:bg-gray-50 transition-colors">
+        <History size={15} className="text-gray-400 shrink-0" />
+        <span className="text-sm font-semibold text-gray-900 font-manrope">Withdrawn vials</span>
+        <span className="text-[11px] text-gray-400 font-manrope flex-1">who took out which vial, when and why</span>
+        {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
+      </button>
+      {open && (
+        <>
+          <div className="px-4 pb-3 flex flex-col sm:flex-row sm:items-center gap-3 border-b border-gray-100">
+            <div className="relative flex-1 max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={search} onChange={e => { setSearch(e.target.value); setLimit(INVENTORY_PAGE); }}
+                placeholder="Search cell line, person, note..."
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-xs font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+            </div>
+            <p className="text-[11px] text-gray-400 font-manrope">
+              {!rows && !failed ? 'Loading…' : `${filtered.length} withdrawal${filtered.length !== 1 ? 's' : ''}`}
+            </p>
+          </div>
+          {failed && <p className="px-4 py-2 text-xs text-amber-700 bg-amber-50 font-manrope">Could not load the older withdrawals (connection problem): only the most recent ones are listed. Reload the page to retry.</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-manrope">
+              <thead><tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Withdrawn</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Cell Line</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Vial</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-700">By</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-gray-700">Note</th>
+              </tr></thead>
+              <tbody className="divide-y divide-gray-100">
+                {shown.map(l => (
+                  <tr key={l.id} className="hover:bg-gray-50 align-top">
+                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatDateTime(l.timestamp)}</td>
+                    <td className="px-3 py-2 font-medium text-gray-900">{l.cellLine}</td>
+                    <td className="px-3 py-2 text-gray-500">{l.info}</td>
+                    <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{l.userName}</td>
+                    <td className="px-3 py-2 text-gray-900 min-w-[160px]">{l.reason || <span className="text-gray-300">—</span>}</td>
+                  </tr>
+                ))}
+                {(rows || failed) && filtered.length === 0 && <tr><td colSpan={5} className="px-3 py-8 text-center text-gray-400">{q ? 'No withdrawal matches' : 'No vial withdrawn yet'}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {filtered.length > shown.length && (
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center gap-3 text-xs font-manrope">
+              <span className="text-gray-500">Showing {shown.length} of {filtered.length}</span>
+              <button onClick={() => setLimit(l => l + INVENTORY_PAGE * 2)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium">Show more</button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

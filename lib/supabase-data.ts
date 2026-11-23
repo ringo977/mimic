@@ -3,7 +3,7 @@ import type { AntibodyKind } from '@/lib/antibodies';
 import {
   Booking, Absence, Reagent, CryoVial, WishlistItem, LogEntry,
   Instrument, BookingPolicy, MaintenanceLog, Manual, StorageUnit, StorageBox, Project, Certification, Location,
-  SeriesDay,
+  SeriesDay, CRYO_WITHDRAW_ACTION,
 } from '@/data/lab-data';
 
 // ============================================================
@@ -639,6 +639,23 @@ export async function fetchLogEntries(): Promise<LogEntry[] | null> {
     id: r.id, timestamp: r.timestamp, userId: r.user_id,
     userName: r.user_name, action: r.action,
     category: r.category as LogEntry['category'], details: r.details,
+  }));
+}
+
+/**
+ * Withdrawals of cryo vials, newest first. Read on demand and on their own:
+ * the log loaded at login is capped at 500 lines of every kind, so older
+ * withdrawals would drop out of it.
+ */
+export async function fetchCryoWithdrawals(limit = 500): Promise<LogEntry[] | null> {
+  const { data, error } = await supabase
+    .from('log_entries').select('*')
+    .eq('category', 'cryo').like('action', `${CRYO_WITHDRAW_ACTION}%`)
+    .order('timestamp', { ascending: false })
+    .limit(limit);
+  if (error) { console.error('Failed to fetch cryo withdrawals:', error.message); return null; }
+  return (data || []).map((r: { id: string; timestamp: string; user_id: string; user_name: string; action: string; details: string }) => ({
+    id: r.id, timestamp: r.timestamp, userId: r.user_id, userName: r.user_name, action: r.action, category: 'cryo' as const, details: r.details,
   }));
 }
 

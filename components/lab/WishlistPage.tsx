@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2, Search, MessageSquareText, FolderKanban, HelpCircle, RotateCcw } from 'lucide-react';
+import { Plus, X, Check, XCircle, Download, Package, Truck, Archive, Pencil, Trash2, Search, MessageSquareText, FolderKanban, HelpCircle, RotateCcw, Dna } from 'lucide-react';
 import { useLabContext } from './LabContext';
 import { useConfirm } from './ConfirmDialog';
-import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem } from '@/data/lab-data';
+import {todayStr, addDaysStr, formatDateTime, storageUnitTypes, generateId, Reagent, WishlistItem, wishlistTypeLabel } from '@/data/lab-data';
 import { downloadCSV } from '@/lib/csv';
 import { parseAntibody, isAntibodyCategory, panelStatus } from '@/lib/antibodies';
 
@@ -72,7 +72,7 @@ export default function WishlistPage() {
 
   // Form
   const [name, setName] = useState('');
-  const [type, setType] = useState<'reagent' | 'antibody' | 'consumable' | 'equipment'>('reagent');
+  const [type, setType] = useState<WishlistItem['type']>('reagent');
   const [catalogNumber, setCatalogNumber] = useState('');
   const [supplier, setSupplier] = useState('');
   const [estimatedCostStr, setEstimatedCostStr] = useState('0');
@@ -108,7 +108,7 @@ export default function WishlistPage() {
   const filtered = byStatus.filter(w =>
     (!requesterFilter || w.requestedBy === requesterFilter)
     && (!projectFilter || (projectFilter === '—' ? !w.project : w.project === projectFilter))
-    && (!q || [w.name, w.supplier, w.catalogNumber, w.requestedByName, w.project, w.motivation, w.notes].some(x => (x || '').toLowerCase().includes(q))));
+    && (!q || [w.name, w.supplier, w.catalogNumber, w.requestedByName, w.project, w.motivation, w.notes, wishlistTypeLabel[w.type]].some(x => (x || '').toLowerCase().includes(q))));
   const pendingShown = filtered.filter(w => w.status === 'pending');
   const anyFilter = !!(requesterFilter || projectFilter || q);
 
@@ -320,6 +320,7 @@ export default function WishlistPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-sm font-semibold text-gray-900 font-manrope">{item.name}</h3>
+                  {item.type === 'cells' && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-cyan-100 text-cyan-700 flex items-center gap-1" title="Cells (cell line, primary cells…)"><Dna size={10} /> Cells</span>}
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${urgencyColors[item.urgency]}`}>{item.urgency}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[item.status] || 'bg-gray-100 text-gray-600'}`}>{statusLabel(item.status)}</span>
                   {item.project && <button onClick={() => setProjectFilter(item.project)} className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-[#102C53]/10 text-[#102C53] flex items-center gap-1 hover:bg-[#102C53]/20" title="Filter by this project"><FolderKanban size={10} /> {item.project}</button>}
@@ -343,7 +344,7 @@ export default function WishlistPage() {
                 {item.approvedBy && item.status !== 'delivered' && <p className="text-[10px] text-green-600 font-manrope mt-1">Approved by {item.approvedBy}</p>}
                 {item.status === 'delivered' && (
                   <p className="text-[10px] text-emerald-600 font-manrope mt-1 flex items-center gap-1">
-                    <Package size={10} /> Delivered &amp; stocked
+                    <Package size={10} /> {item.stockedToReagentId ? <>Delivered &amp; stocked</> : 'Delivered'}
                     {item.deliveredAt && ` &middot; ${formatDateTime(item.deliveredAt)}`}
                   </p>
                 )}
@@ -418,7 +419,19 @@ export default function WishlistPage() {
                 </button>
               </div>
             )}
-            {canHandle && item.status === 'ordered' && (
+            {/* Cells do not go into the reagent stock: once here, the vials are stored from Cryo Storage */}
+            {canHandle && item.status === 'ordered' && item.type === 'cells' && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <button
+                  onClick={() => confirmDelete('Cells delivered?', `"${item.name}" will be marked as delivered. Cells are not added to the reagent stock: store the vials from Cryo Storage.`, () => updateWishlistStatus(item.id, 'delivered'), 'Delivered')}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold font-manrope hover:bg-emerald-100 transition-colors"
+                >
+                  <Check size={14} /> Mark as Delivered
+                </button>
+                <p className="text-[10px] text-gray-400 font-manrope mt-1.5 text-center">Not added to the reagent stock — store the vials from Cryo Storage.</p>
+              </div>
+            )}
+            {canHandle && item.status === 'ordered' && item.type !== 'cells' && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <button
                   onClick={() => openStockModal(item.id)}
@@ -457,16 +470,13 @@ export default function WishlistPage() {
             <div className="space-y-3">
               {!priceOnly && <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Product Name</label>
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Anti-VE-Cadherin" className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
+                <input value={name} onChange={e => setName(e.target.value)} placeholder={type === 'cells' ? 'e.g., HUVEC, pooled donors' : 'e.g., Anti-VE-Cadherin'} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none" />
               </div>}
               {!priceOnly && <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1 font-manrope">Type</label>
                   <select value={type} onChange={e => setType(e.target.value as typeof type)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-manrope focus:ring-2 focus:ring-[#4DC9FF] outline-none">
-                    <option value="reagent">Reagent</option>
-                    <option value="antibody">Antibody</option>
-                    <option value="consumable">Consumable</option>
-                    <option value="equipment">Equipment</option>
+                    {(Object.keys(wishlistTypeLabel) as WishlistItem['type'][]).map(t => <option key={t} value={t}>{wishlistTypeLabel[t]}</option>)}
                   </select>
                 </div>
                 <div>
